@@ -385,6 +385,27 @@ button.set-chip { font: inherit; line-height: 1; }
   pointer-events: none;
 }
 
+/* ── Filter bar collapse toggle ─────────────────────────────── */
+.filter-rows-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.22s ease;
+}
+.filter-rows-wrap.filters-hidden {
+  grid-template-rows: 0fr;
+}
+.filter-rows-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.filter-toggle-btn .filter-caret {
+  display: inline-block;
+  transition: transform 0.22s ease;
+}
+.filter-toggle-btn.is-collapsed .filter-caret {
+  transform: rotate(180deg);
+}
+
 /* Zero-attempt collapsed cell */
 .no-data {
   color: var(--border);

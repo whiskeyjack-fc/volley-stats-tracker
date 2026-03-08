@@ -13,6 +13,22 @@
       Chart.defaults.plugins.datalabels.display = false;
     }
   </script>
+  <script>
+    function initFilterToggle(key) {
+      var wrap = document.getElementById('filter-rows');
+      var btn  = document.getElementById('filter-toggle-btn');
+      if (!wrap || !btn) return;
+      if (localStorage.getItem(key) === '1') {
+        wrap.classList.add('filters-hidden');
+        btn.classList.add('is-collapsed');
+      }
+      btn.addEventListener('click', function () {
+        var nowHidden = wrap.classList.toggle('filters-hidden');
+        btn.classList.toggle('is-collapsed', nowHidden);
+        localStorage.setItem(key, nowHidden ? '1' : '0');
+      });
+    }
+  </script>
 </head>
 <body>
   <header>

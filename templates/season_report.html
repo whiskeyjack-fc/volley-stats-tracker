@@ -13,9 +13,10 @@
     </div>
     <div class="track-actions">
       <a href="{{ url_for('index') }}" class="btn btn-outline">← Games</a>
+      <button id="filter-toggle-btn" class="btn btn-outline btn-sm filter-toggle-btn">Filters <span class="filter-caret" aria-hidden="true">&#x25BE;</span></button>
     </div>
   </div>
-
+  <div class="filter-rows-wrap" id="filter-rows"><div class="filter-rows-inner">
   {% if all_seasons | length > 1 %}
   <div class="set-filter-bar">
     <span class="set-label">Season:</span>
@@ -45,6 +46,7 @@
       &#x229E; Split
     </button>
   </div>
+  </div></div>
 </div>
 
 {% if rows %}
@@ -645,6 +647,7 @@ if (splitBtn && SPLIT_AVAILABLE) {
     else renderNormalTables();
   });
 }
+initFilterToggle('filters_season');
 </script>
 {% endif %}
 {% endblock %}
