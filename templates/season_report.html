@@ -1,0 +1,650 @@
+{% extends "base.html" %}
+{% block title %}Season {{ season }} — VolleyStats{% endblock %}
+{% block content %}
+
+<!-- ── Sticky bar ──────────────────────────────────────────────────────── -->
+<div class="report-sticky-bar">
+  <div class="page-header">
+    <div>
+      <h1>Season: <span class="season-tag lg">{{ season }}</span></h1>
+      <small class="muted">
+        {{ games | length }} game{{ 's' if games | length != 1 else '' }}
+      </small>
+    </div>
+    <div class="track-actions">
+      <a href="{{ url_for('index') }}" class="btn btn-outline">← Games</a>
+    </div>
+  </div>
+
+  {% if all_seasons | length > 1 %}
+  <div class="set-filter-bar">
+    <span class="set-label">Season:</span>
+    {% for s in all_seasons %}
+    <a href="{{ url_for('season_report', season=s) }}"
+       class="set-chip {% if s == season %}active{% endif %}">{{ s }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div class="set-filter-bar">
+    {% if has_main or has_reserve %}
+    <span class="set-label">Type:</span>
+    <a href="{{ filter_urls.all }}" class="set-chip {% if not active_set_type %}active{% endif %}">All</a>
+    {% if has_main %}
+    <a href="{{ filter_urls.main }}" class="set-chip {% if active_set_type == 'main' %}active{% endif %}">Main</a>
+    {% endif %}
+    {% if has_reserve %}
+    <a href="{{ filter_urls.reserve }}" class="set-chip {% if active_set_type == 'reserve' %}active{% endif %}">Reserve</a>
+    {% endif %}
+    <span class="set-divider">|</span>
+    {% endif %}
+    {% set split_available = active_set_type in ('main', 'reserve') %}
+    <button id="split-toggle"
+            class="set-chip split-toggle{% if not split_available %} disabled{% endif %}"
+            {% if not split_available %}disabled{% endif %}
+            title="{% if split_available %}Split charts by set{% else %}Available for Main or Reserve filter only{% endif %}">
+      &#x229E; Split
+    </button>
+  </div>
+</div>
+
+{% if rows %}
+
+<!-- ── Charts (X-axis = games) ────────────────────────────────────────── -->
+
+<!-- Row 1: Points Made / Lost -->
+<div class="charts-row charts-row-wide">
+  <div class="chart-card" style="flex:1">
+    <div class="chart-title">Points Made / Lost per {{ 'Set' if active_split == 'sets' else 'Game' }}</div>
+    <div class="chart-body"><canvas id="pointsChart"></canvas></div>
+  </div>
+</div>
+
+<!-- Row 2: Serve + Receive -->
+<div class="charts-row charts-row-2">
+  {% for stat in ['serve', 'receive'] %}
+  <div class="dual-chart-card">
+    <div class="chart-title">{{ stat | title }}</div>
+    <div class="dual-top"><canvas id="chart-{{ stat }}-top"></canvas></div>
+    <div class="dual-sep">Quality</div>
+    <div class="dual-bottom"><canvas id="chart-{{ stat }}-qual"></canvas></div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Row 3: Attack + Block -->
+<div class="charts-row charts-row-2">
+  {% for stat in ['attack', 'block'] %}
+  <div class="chart-card">
+    <div class="chart-title">{{ stat | title }}</div>
+    <div class="chart-body"><canvas id="chart-{{ stat }}"></canvas></div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Row 4: Freeball + Fault -->
+<div class="charts-row charts-row-2">
+  <div class="dual-chart-card">
+    <div class="chart-title">Freeball</div>
+    <div class="dual-top"><canvas id="chart-freeball-top"></canvas></div>
+    <div class="dual-sep">Quality</div>
+    <div class="dual-bottom"><canvas id="chart-freeball-qual"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Fault</div>
+    <div class="chart-body"><canvas id="chart-fault"></canvas></div>
+  </div>
+</div>
+
+<!-- ── Season Stat Tables (rows = games) ──────────────────────────────── -->
+{% set abbrev = {
+  'error':'Err','1-serve':'S1','2-serve':'S2','3-serve':'S3','ace':'Ace',
+  'kill':'Kill','1-receive':'R1','2-receive':'R2','3-receive':'R3','overpass':'OvP',
+  '1-freeball':'F1','2-freeball':'F2','3-freeball':'F3','fault':'Flt'
+} %}
+<h2>Season Stats</h2>
+<div class="stat-sections-grid">
+{% for stat, results in stat_results.items() %}
+<div class="stat-section" data-stat="{{ stat }}">
+  <h3 class="stat-section-title stat-{{ stat }}">{{ stat|title }}</h3>
+  <table class="table report-table">
+    <thead>
+      <tr>
+        <th>Game</th>
+        {% for result in results %}
+        <th class="r-{{ result }}">{{ abbrev.get(result, result) }}</th>
+        {% endfor %}
+        <th class="derived-col">Tot</th>
+        <th class="derived-col">Pts±</th>
+        <th class="derived-col">Err%</th>
+        {% if stat in quality_stats %}<th class="derived-col">Qual</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for gt in rows %}
+      <tr class="game-row">
+        <td><a href="{{ url_for('report', game_id=gt.game_id) }}" class="muted">{{ gt.played_at }} vs {{ gt.opponent }}</a></td>
+        {% if gt.stats[stat].total == 0 %}
+        <td colspan="{{ results|length + (4 if stat in quality_stats else 3) }}" class="no-data">—</td>
+        {% else %}
+        {% for result in results %}
+        <td>{{ gt.stats[stat][result] }}</td>
+        {% endfor %}
+        <td class="derived-col tot-col">{{ gt.stats[stat].total }}</td>
+        <td class="derived-col raw-col {% if gt.stats[stat].raw > 0 %}pos{% elif gt.stats[stat].raw < 0 %}neg{% endif %}">
+          {% if gt.stats[stat].raw > 0 %}+{% endif %}{{ gt.stats[stat].raw }}
+        </td>
+        <td class="derived-col pct-col {% if gt.stats[stat].fault_pct > 50 %}neg{% elif gt.stats[stat].fault_pct < 20 and gt.stats[stat].total > 0 %}pos{% endif %}">
+          {{ gt.stats[stat].fault_pct }}%
+        </td>
+        {% if stat in quality_stats %}
+        <td class="derived-col qual-col">{{ gt.stats[stat].quality }}</td>
+        {% endif %}
+        {% endif %}
+      </tr>
+      {% endfor %}
+      <tr class="totals-row">
+        <td><strong>Season Total</strong></td>
+        {% for result in results %}
+        <td><strong>{{ season_totals[stat][result] }}</strong></td>
+        {% endfor %}
+        <td class="derived-col tot-col"><strong>{{ season_totals[stat].total }}</strong></td>
+        <td class="derived-col raw-col {% if season_totals[stat].raw > 0 %}pos{% elif season_totals[stat].raw < 0 %}neg{% endif %}">
+          <strong>{% if season_totals[stat].raw > 0 %}+{% endif %}{{ season_totals[stat].raw }}</strong>
+        </td>
+        <td class="derived-col pct-col">
+          <strong>{{ season_totals[stat].fault_pct }}%</strong>
+        </td>
+        {% if stat in quality_stats %}
+        <td class="derived-col qual-col"><strong>{{ season_totals[stat].quality }}</strong></td>
+        {% endif %}
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+</div>
+
+{% else %}
+<p class="empty" style="margin-top:1rem;">No stats recorded in this season yet.</p>
+{% endif %}
+
+<!-- ── Games List ─────────────────────────────────────────────────────── -->
+<h2>Games</h2>
+<table class="table">
+  <thead>
+    <tr><th>Date</th><th>Opponent</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for g in games %}
+    <tr>
+      <td>{{ g.played_at }}</td>
+      <td>{{ g.opponent }}</td>
+      <td class="actions">
+        <a class="btn btn-sm btn-outline" href="{{ url_for('report', game_id=g.id) }}">Report</a>
+        <a class="btn btn-sm btn-outline" href="{{ url_for('track', game_id=g.id) }}">Track</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if rows %}
+<!-- ── Full-screen chart focus modal ──────────────────────────────────── -->
+<div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" hidden>
+  <div class="chart-modal-card">
+    <div class="chart-modal-header">
+      <span id="chart-modal-title" class="chart-modal-title-text"></span>
+      <button id="chart-modal-close" class="chart-modal-close" title="Close">✕</button>
+    </div>
+    <div id="chart-modal-body" class="chart-modal-body"></div>
+  </div>
+</div>
+
+<script>
+const CD = {{ chart_data_all | tojson }};
+const SPLIT_AVAILABLE = {{ (active_set_type in ('main', 'reserve')) | tojson }};
+const GAME_SET_DATA = {{ game_set_data | tojson }};
+const STAT_POS      = {{ stat_positive | tojson }};
+const STAT_NEG      = {{ stat_negative | tojson }};
+const QUALITY_STATS = new Set({{ quality_stats | list | tojson }});
+
+const CAT_COLORS = {
+  serve:    { base:"59,130,246",  results:{ error:"232,81,74", "1-serve":"249,115,22", "2-serve":"245,200,66", "3-serve":"86,190,120", ace:"16,185,129" } },
+  attack:   { base:"249,115,22",  results:{ kill:"62,207,111", error:"232,81,74" } },
+  receive:  { base:"16,185,129",  results:{ error:"232,81,74", "1-receive":"249,115,22", "2-receive":"245,200,66", "3-receive":"86,190,120", overpass:"180,100,240" } },
+  block:    { base:"139,92,246",  results:{ kill:"62,207,111", error:"232,81,74" } },
+  freeball: { base:"6,182,212",   results:{ error:"232,81,74", "1-freeball":"249,115,22", "2-freeball":"245,200,66", "3-freeball":"86,190,120" } },
+  fault:    { base:"244,63,94",   results:{ fault:"244,63,94" } },
+};
+const RESULT_LABELS = {
+  error:"Error","1-serve":"S1","2-serve":"S2","3-serve":"S3",ace:"Ace",
+  kill:"Kill","1-receive":"R1","2-receive":"R2","3-receive":"R3",overpass:"OvP",
+  "1-freeball":"F1","2-freeball":"F2","3-freeball":"F3",fault:"Fault"
+};
+const STAT_RESULTS = {{ stat_results | tojson }};
+
+const xAxis  = { ticks:{color:"#8891b2",font:{size:10}}, grid:{color:"rgba(255,255,255,.05)"} };
+const yAxis  = { ticks:{color:"#8891b2",font:{size:10}}, grid:{color:"rgba(255,255,255,.07)"} };
+const legend = { labels:{color:"#8891b2",font:{size:10}} };
+const base   = { responsive:true, maintainAspectRatio:false, plugins:{ legend }, scales:{ x:xAxis, y:yAxis } };
+
+const chartRegistry  = {};
+const chartInstances = {};
+
+const splitGroupPlugin = {
+  id: "splitGroup",
+  afterDraw(chart) {
+    const groups = chart.options.splitGroups;
+    if (!groups || !groups.length) return;
+    const { ctx, scales: { x }, chartArea: { top, bottom } } = chart;
+    const totalBars = chart.data.labels.length;
+    if (!totalBars) return;
+    const step = (x.right - x.left) / totalBars;
+    ctx.save();
+    groups.forEach((g, gi) => {
+      const x0 = x.getPixelForValue(g.start) - step / 2;
+      const x1 = x.getPixelForValue(g.start + g.count - 1) + step / 2;
+      if (gi % 2 === 1) {
+        ctx.fillStyle = "rgba(255,255,255,0.04)";
+        ctx.fillRect(x0, top, x1 - x0, bottom - top);
+      }
+      if (gi > 0) {
+        ctx.strokeStyle = "rgba(136,145,178,0.3)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x0, top - 14);
+        ctx.lineTo(x0, bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.fillStyle = "#a8b4c8";
+      ctx.font = "bold 10px 'Segoe UI', system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(g.name, (x0 + x1) / 2, top - 4);
+    });
+    ctx.restore();
+  }
+};
+
+let _splitGroups = null;
+function mkChart(id, cfg) {
+  if (_splitGroups) {
+    cfg = {
+      ...cfg,
+      plugins: [...(cfg.plugins || []), splitGroupPlugin],
+      options: { ...cfg.options, splitGroups: _splitGroups, layout: { padding: { top: 18 } } },
+    };
+  }
+  chartRegistry[id] = cfg;
+  const c = new Chart(document.getElementById(id), cfg);
+  chartInstances[id] = c;
+  return c;
+}
+function destroyAllCharts() {
+  Object.values(chartInstances).forEach(c => c.destroy());
+  Object.keys(chartInstances).forEach(k => delete chartInstances[k]);
+  Object.keys(chartRegistry).forEach(k => delete chartRegistry[k]);
+}
+
+// ── Full-screen modal ─────────────────────────────────────────────────
+function cloneCfg(cfg) {
+  return { ...cfg, data: { ...cfg.data, datasets: cfg.data.datasets.map(ds => ({ ...ds })) } };
+}
+let modalCharts = [];
+function openChartModal(card) {
+  const title = card.querySelector('.chart-title').textContent.trim();
+  document.getElementById('chart-modal-title').textContent = title;
+  const body = document.getElementById('chart-modal-body');
+  body.innerHTML = '';
+  modalCharts.forEach(c => c.destroy());
+  modalCharts = [];
+  if (card.classList.contains('dual-chart-card')) {
+    const topId  = card.querySelector('.dual-top canvas').id;
+    const qualId = card.querySelector('.dual-bottom canvas').id;
+    const topWrap = Object.assign(document.createElement('div'), { className:'modal-chart-top' });
+    const tc = document.createElement('canvas'); topWrap.appendChild(tc);
+    body.appendChild(topWrap);
+    const sep = Object.assign(document.createElement('div'), { className:'dual-sep', textContent:'Quality' });
+    body.appendChild(sep);
+    const qualWrap = Object.assign(document.createElement('div'), { className:'modal-chart-qual' });
+    const qc = document.createElement('canvas'); qualWrap.appendChild(qc);
+    body.appendChild(qualWrap);
+    if (chartRegistry[topId])  modalCharts.push(new Chart(tc,  cloneCfg(chartRegistry[topId])));
+    if (chartRegistry[qualId]) modalCharts.push(new Chart(qc, cloneCfg(chartRegistry[qualId])));
+  } else {
+    const srcId = card.querySelector('canvas').id;
+    const wrap = Object.assign(document.createElement('div'), { className:'modal-chart-wrap' });
+    const c = document.createElement('canvas'); wrap.appendChild(c);
+    body.appendChild(wrap);
+    if (chartRegistry[srcId]) modalCharts.push(new Chart(c, cloneCfg(chartRegistry[srcId])));
+  }
+  document.getElementById('chart-modal').hidden = false;
+  document.body.classList.add('modal-open');
+}
+function closeChartModal() {
+  document.getElementById('chart-modal').hidden = true;
+  document.body.classList.remove('modal-open');
+  modalCharts.forEach(c => c.destroy());
+  modalCharts = [];
+  document.getElementById('chart-modal-body').innerHTML = '';
+}
+
+// ── Plugin: net total label above diverging bars ──────────────────────
+const netTotalPlugin = {
+  id: "netTotal",
+  afterDatasetsDraw(chart) {
+    const { ctx, data, scales: { x, y } } = chart;
+    const n = data.labels.length;
+    ctx.save();
+    ctx.font = "bold 11px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = "center";
+    for (let i = 0; i < n; i++) {
+      let net = 0;
+      data.datasets.forEach(ds => { if (!ds.neutral) net += (ds.data[i] || 0); });
+      const xPos  = x.getPixelForValue(i);
+      const yPos  = chart.chartArea.bottom - 5;
+      const label = net > 0 ? `+${net}` : `${net}`;
+      ctx.fillStyle = net >= 0 ? "#3ecf6f" : "#e8514a";
+      ctx.fillText(label, xPos, yPos);
+    }
+    ctx.restore();
+  }
+};
+
+// ── Chart rendering ───────────────────────────────────────────────────
+function initCharts(data) {
+  _splitGroups = data.playerGroups || null;
+
+// ── 1. Points Made / Lost ─────────────────────────────────────────────
+(function(){
+  const posColors = { "Ace":"rgba(251,191,36,.9)", "Attack Kill":"rgba(62,207,111,.85)", "Block Kill":"rgba(134,239,172,.85)" };
+  const negColors = { "Serve Err":"rgba(239,68,68,.85)", "Attack Err":"rgba(220,38,38,.85)", "Receive Err":"rgba(252,165,165,.85)", "Fault":"rgba(254,202,202,.85)" };
+  const datasets = [
+    ...Object.entries(data.points_pos).map(([lbl, vals]) => ({
+      label: lbl, data: vals, backgroundColor: posColors[lbl]||"rgba(62,207,111,.7)", stack:"s", borderWidth:0,
+    })),
+    ...Object.entries(data.points_neg).map(([lbl, vals]) => ({
+      label: lbl, data: vals, backgroundColor: negColors[lbl]||"rgba(232,81,74,.7)", stack:"s", borderWidth:0,
+    })),
+  ];
+  mkChart("pointsChart", {
+    type:"bar", plugins:[netTotalPlugin],
+    data:{ labels:data.players, datasets },
+    options:{
+      ...base,
+      plugins:{ legend:{ display:false } },
+      scales:{
+        x:{ ...xAxis, stacked:true },
+        y:{ ...yAxis, stacked:true, ticks:{ ...yAxis.ticks, callback: v => v < 0 ? -v : v } }
+      }
+    }
+  });
+})();
+
+// ── 2. Dual-panel quality charts (serve / receive / freeball) ─────────
+['serve','receive','freeball'].forEach(stat => {
+  const col = CAT_COLORS[stat];
+  const results = STAT_RESULTS[stat];
+  const barDatasets = results.map(r => ({
+    type:"bar", label: RESULT_LABELS[r]||r,
+    data: data.stat_totals[stat][r],
+    backgroundColor:`rgba(${col.results[r]||col.base},.78)`,
+    borderColor:`rgb(${col.results[r]||col.base})`,
+    borderWidth:1, stack:"s", yAxisID:"y",
+  }));
+  barDatasets.push({
+    type:"line", label:"Err%", data: data.fault_pct[stat],
+    borderColor:"rgba(232,81,74,.9)", backgroundColor:"transparent",
+    pointBackgroundColor:"rgba(232,81,74,.9)",
+    pointRadius:3, borderWidth:2, yAxisID:"yPct", tension:0.2,
+  });
+  mkChart(`chart-${stat}-top`, {
+    type:"bar",
+    data:{ labels:data.players, datasets:barDatasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales:{
+        x:{ ...xAxis, stacked:true },
+        y:{ ...yAxis, stacked:true, beginAtZero:true },
+        yPct:{ position:"right", beginAtZero:true, max:100,
+               ticks:{ color:"rgba(232,81,74,.7)", font:{size:9}, callback: v => v+"%" },
+               grid:{ drawOnChartArea:false } }
+      }
+    }
+  });
+  mkChart(`chart-${stat}-qual`, {
+    type:"bar",
+    data:{ labels:data.players, datasets:[{
+      label:"Quality", data: data.quality[stat],
+      backgroundColor:"rgba(45,185,170,.75)", borderColor:"rgb(45,185,170)", borderWidth:1,
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ top:16 } },
+      plugins:{ legend:{display:false},
+               datalabels:{ display:true, anchor:'end', align:'end',
+                 color:'#2db9aa', font:{size:9},
+                 formatter: v => v == null ? '' : v.toFixed(2) } },
+      scales:{
+        x:{ ...xAxis },
+        y:{ ...yAxis, beginAtZero:true, max:4,
+            ticks:{ color:"#8891b2", font:{size:9}, stepSize:1, callback: v => v } },
+        yPct:{ position:"right", beginAtZero:true, max:100,
+               ticks:{ color:"transparent", font:{size:9}, callback: v => v+"%" },
+               grid:{ drawOnChartArea:false }, border:{ display:false } }
+      }
+    }
+  });
+});
+
+// ── 3a. Attack ────────────────────────────────────────────────────────
+{
+  const kills  = data.stat_totals['attack']['kill'];
+  const errors = data.stat_totals['attack']['error'].map(v => -v);
+  mkChart('chart-attack', {
+    type:"bar", plugins:[netTotalPlugin],
+    data:{ labels:data.players, datasets:[
+      { label:"Kill",  data:kills,  backgroundColor:"rgba(62,207,111,.78)", borderColor:"rgb(62,207,111)",  borderWidth:1, stack:"s" },
+      { label:"Error", data:errors, backgroundColor:"rgba(232,81,74,.78)",  borderColor:"rgb(232,81,74)",   borderWidth:1, stack:"s" },
+    ]},
+    options:{ ...base, scales:{
+      x:{ ...xAxis, stacked:true },
+      y:{ ...yAxis, stacked:true, ticks:{ ...yAxis.ticks, callback: v => v < 0 ? -v : v } }
+    }}
+  });
+}
+
+// ── 3b. Block ─────────────────────────────────────────────────────────
+{
+  const kills  = data.stat_totals['block']['kill'];
+  const errors = data.stat_totals['block']['error'].map(v => -v);
+  mkChart('chart-block', {
+    type:"bar", plugins:[netTotalPlugin],
+    data:{ labels:data.players, datasets:[
+      { label:"Kill",  data:kills,  backgroundColor:"rgba(62,207,111,.78)", borderColor:"rgb(62,207,111)",  borderWidth:1, stack:"s" },
+      { label:"Error", data:errors, backgroundColor:"rgba(136,145,178,.65)", borderColor:"rgb(136,145,178)", borderWidth:1, stack:"s", neutral:true },
+    ]},
+    options:{ ...base, scales:{ x:{ ...xAxis, stacked:true }, y:{ ...yAxis, stacked:true,
+      ticks:{ ...yAxis.ticks, callback: v => v < 0 ? -v : v } } } }
+  });
+}
+
+// ── 4. Fault ──────────────────────────────────────────────────────────
+{
+  const col = CAT_COLORS['fault'];
+  const datasets = STAT_RESULTS['fault'].map(r => ({
+    label: RESULT_LABELS[r]||r, data: data.stat_totals['fault'][r],
+    backgroundColor:`rgba(${col.results[r]||col.base},.78)`,
+    borderColor:`rgb(${col.results[r]||col.base})`, borderWidth:1,
+  }));
+  mkChart('chart-fault', {
+    type:"bar",
+    data:{ labels:data.players, datasets },
+    options:{ ...base, scales:{
+      x:{ ...xAxis, stacked:true },
+      y:{ ...yAxis, stacked:true, beginAtZero:true, suggestedMax:5,
+          ticks:{ ...yAxis.ticks, stepSize:1, callback: v => Number.isInteger(v) ? v : null } }
+    }}
+  });
+}
+
+} // end initCharts
+initCharts(CD);
+
+// ── Modal wiring + expand buttons ─────────────────────────────────────
+document.getElementById('chart-modal').addEventListener('click', e => {
+  if (e.target.id === 'chart-modal') closeChartModal();
+});
+document.getElementById('chart-modal-close').addEventListener('click', closeChartModal);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChartModal(); });
+
+document.querySelectorAll('.chart-card, .dual-chart-card').forEach(card => {
+  const btn = document.createElement('button');
+  btn.className = 'chart-expand-btn';
+  btn.title = 'Focus chart';
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 5V1h4M8 1h4v4M12 8v4H8M5 12H1V8"/></svg>`;
+  btn.addEventListener('click', e => { e.stopPropagation(); openChartModal(card); });
+  card.appendChild(btn);
+});
+
+// ── Split-by-set toggle ──────────────────────────────────────────────
+function computeSplitCD() {
+  const activeGames = GAME_SET_DATA.filter(g => g.sets.length > 0);
+  const labels = [], playerGroups = [];
+  let barIdx = 0;
+  activeGames.forEach(g => {
+    g.sets.forEach(s => labels.push(s.label));
+    playerGroups.push({ name: g.label, start: barIdx, count: g.sets.length });
+    barIdx += g.sets.length;
+  });
+  function flat(getter) {
+    return activeGames.flatMap(g => g.sets.map(s => getter(s.chart_data)));
+  }
+  const stat_totals = {};
+  for (const [stat, results] of Object.entries(STAT_RESULTS)) {
+    stat_totals[stat] = {};
+    for (const r of results)
+      stat_totals[stat][r] = flat(cd => cd.stat_totals[stat]?.[r]?.[0] ?? 0);
+  }
+  const fault_pct = {};
+  for (const stat of Object.keys(CD.fault_pct))
+    fault_pct[stat] = flat(cd => cd.fault_pct[stat]?.[0] ?? 0);
+  const quality = {};
+  for (const stat of Object.keys(CD.quality))
+    quality[stat] = flat(cd => cd.quality[stat]?.[0] ?? 0);
+  const points_pos = {};
+  for (const key of Object.keys(CD.points_pos))
+    points_pos[key] = flat(cd => cd.points_pos[key]?.[0] ?? 0);
+  const points_neg = {};
+  for (const key of Object.keys(CD.points_neg))
+    points_neg[key] = flat(cd => cd.points_neg[key]?.[0] ?? 0);
+  return { players: labels, playerGroups, stat_totals, fault_pct, quality, points_pos, points_neg };
+}
+
+function renderSplitTables() {
+  document.querySelectorAll('.stat-section[data-stat]').forEach(section => {
+    const stat = section.dataset.stat;
+    const tbody = section.querySelector('tbody');
+    tbody.querySelectorAll('tr.game-row').forEach(r => { r.hidden = true; });
+    tbody.querySelectorAll('tr.split-row').forEach(r => r.remove());
+    const totalsRow = tbody.querySelector('tr.totals-row');
+    const results   = STAT_RESULTS[stat];
+    const hasQuality = QUALITY_STATS.has(stat);
+    const posSet = new Set(STAT_POS[stat] || []);
+    const negSet = new Set(STAT_NEG[stat] || []);
+    const nCols = results.length + (hasQuality ? 4 : 3);
+    GAME_SET_DATA.forEach(game => {
+      if (!game.sets.length) return;
+      // game group header row
+      const hRow = document.createElement('tr');
+      hRow.className = 'split-row split-game-header';
+      const hTd = document.createElement('td');
+      hTd.colSpan = nCols + 1;
+      const hLink = document.createElement('a');
+      hLink.href = `/games/${game.game_id}/report`;
+      hLink.className = 'muted';
+      const hStrong = document.createElement('strong');
+      hStrong.textContent = `${game.played_at} ${game.label}`;
+      hLink.appendChild(hStrong);
+      hTd.appendChild(hLink);
+      hRow.appendChild(hTd);
+      tbody.insertBefore(hRow, totalsRow);
+      // set sub-rows
+      game.sets.forEach(s => {
+        const row = document.createElement('tr');
+        row.className = 'split-row split-set-row';
+        const tdLabel = document.createElement('td');
+        tdLabel.style.paddingLeft = '1.5rem';
+        const sTag = document.createElement('span');
+        sTag.className = 'season-tag';
+        sTag.textContent = s.label;
+        tdLabel.appendChild(sTag);
+        row.appendChild(tdLabel);
+        const cd = s.chart_data;
+        const total = results.reduce((sum, r) => sum + (cd.stat_totals[stat]?.[r]?.[0] ?? 0), 0);
+        if (total === 0) {
+          const tdEmpty = document.createElement('td');
+          tdEmpty.colSpan = nCols;
+          tdEmpty.className = 'no-data';
+          tdEmpty.textContent = '\u2014';
+          row.appendChild(tdEmpty);
+        } else {
+          results.forEach(r => {
+            const td = document.createElement('td');
+            td.textContent = cd.stat_totals[stat]?.[r]?.[0] ?? 0;
+            row.appendChild(td);
+          });
+          const tdTot = document.createElement('td');
+          tdTot.className = 'derived-col tot-col';
+          tdTot.textContent = total;
+          row.appendChild(tdTot);
+          const pos = [...posSet].reduce((sum, r) => sum + (cd.stat_totals[stat]?.[r]?.[0] ?? 0), 0);
+          const neg = [...negSet].reduce((sum, r) => sum + (cd.stat_totals[stat]?.[r]?.[0] ?? 0), 0);
+          const raw = pos - neg;
+          const tdRaw = document.createElement('td');
+          tdRaw.className = `derived-col raw-col${raw > 0 ? ' pos' : raw < 0 ? ' neg' : ''}`;
+          tdRaw.textContent = raw > 0 ? `+${raw}` : `${raw}`;
+          row.appendChild(tdRaw);
+          const faultPct = cd.fault_pct[stat]?.[0] ?? 0;
+          const tdPct = document.createElement('td');
+          tdPct.className = `derived-col pct-col${faultPct > 50 ? ' neg' : (faultPct < 20 && total > 0 ? ' pos' : '')}`;
+          tdPct.textContent = `${faultPct}%`;
+          row.appendChild(tdPct);
+          if (hasQuality) {
+            const tdQual = document.createElement('td');
+            tdQual.className = 'derived-col qual-col';
+            tdQual.textContent = cd.quality[stat]?.[0] ?? 0;
+            row.appendChild(tdQual);
+          }
+        }
+        tbody.insertBefore(row, totalsRow);
+      });
+    });
+  });
+}
+
+function renderNormalTables() {
+  document.querySelectorAll('.stat-section[data-stat]').forEach(section => {
+    const tbody = section.querySelector('tbody');
+    tbody.querySelectorAll('tr.game-row').forEach(r => { r.hidden = false; });
+    tbody.querySelectorAll('tr.split-row').forEach(r => r.remove());
+  });
+}
+
+let splitActive = false;
+const splitBtn = document.getElementById('split-toggle');
+if (splitBtn && SPLIT_AVAILABLE) {
+  splitBtn.addEventListener('click', () => {
+    splitActive = !splitActive;
+    splitBtn.classList.toggle('active', splitActive);
+    destroyAllCharts();
+    initCharts(splitActive ? computeSplitCD() : CD);
+    if (splitActive) renderSplitTables();
+    else renderNormalTables();
+  });
+}
+</script>
+{% endif %}
+{% endblock %}

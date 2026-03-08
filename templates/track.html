@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Track — {{ game.team_name }} vs {{ game.opponent }}{% endblock %}
+{% block content %}
+{% set abbrev = {
+  'error':      'Err',
+  '1-serve':    'S1',  '2-serve':    'S2',  '3-serve':    'S3',  'ace':        'Ace',
+  'kill':       'Kill',
+  '1-receive':  'R1',  '2-receive':  'R2',  '3-receive':  'R3',  'overpass':   'OvP',
+  '1-freeball': 'F1',  '2-freeball': 'F2',  '3-freeball': 'F3',
+  'fault':      'Flt'
+} %}
+<div class="track-header">
+  <div>
+    <h1>{{ game.team_name }} <span class="vs">vs</span> {{ game.opponent }}</h1>
+    <small>{{ game.played_at }}</small>
+  </div>
+  <div class="track-actions">
+    <button id="undo-btn" class="btn btn-outline">↩ Last</button>
+    <a href="{{ url_for('report', game_id=game.id) }}" class="btn btn-primary">Report →</a>
+  </div>
+</div>
+
+<!-- Set bar -->
+<div class="set-bar" id="set-bar">
+  <span class="set-label">Set:</span>
+  <div id="set-tabs" class="set-tabs"></div>
+  <button class="btn btn-sm btn-outline" id="finish-set-btn" style="display:none" onclick="Tracker.finishCurrentSet()">✓ Finish</button>
+  <button class="btn btn-sm btn-primary" id="new-set-btn" onclick="Tracker.showNewSetPanel()">＋ Set</button>
+</div>
+<div class="new-set-panel hidden" id="new-set-panel">
+  <label>Number:
+    <select id="ns-number">
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+    </select>
+  </label>
+  <label>Type:
+    <select id="ns-type">
+      <option value="main">Main</option>
+      <option value="reserve">Reserve</option>
+    </select>
+  </label>
+  <button class="btn btn-sm btn-primary" onclick="Tracker.startNewSet()">Start</button>
+  <button class="btn btn-sm btn-outline" onclick="Tracker.hideNewSetPanel()">Cancel</button>
+</div>
+
+<p class="grid-hint">Click to add &nbsp;·&nbsp; Hold to remove</p>
+
+<div class="grid-wrap">
+<table class="stat-grid">
+  <thead>
+    <tr class="group-row">
+      <th class="name-col" rowspan="2">Player</th>
+      {% for stat, results in stat_results.items() %}
+      <th class="group-hdr stat-{{ stat }}" colspan="{{ results | length }}">{{ stat | title }}</th>
+      {% endfor %}
+    </tr>
+    <tr class="result-row">
+      {% for stat, results in stat_results.items() %}
+      {% for result in results %}
+      <th class="rhdr r-{{ result }} stat-{{ stat }}{% if loop.first %} group-first{% endif %}">{{ abbrev.get(result, result | title) }}</th>
+      {% endfor %}
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in players %}
+    <tr data-pid="{{ p.id }}">
+      <td class="name-col">
+        {% if p.number %}<span class="pnum">#{{ p.number }}</span>{% endif %}
+        <span class="pname">{{ p.name }}</span>
+      </td>
+      {% for stat, results in stat_results.items() %}
+      {% for result in results %}
+      <td class="stat-cell r-{{ result }} stat-{{ stat }}{% if loop.first %} group-first{% endif %}"
+          data-pid="{{ p.id }}"
+          data-stat="{{ stat }}"
+          data-result="{{ result }}">
+        <span class="cell-count" id="cnt-{{ p.id }}-{{ stat }}-{{ result }}">0</span>
+      </td>
+      {% endfor %}
+      {% endfor %}
+    </tr>
+    {% endfor %}
+
+    <!-- Opponent row -->
+    <tr class="opp-row" data-pid="opponent">
+      <td class="name-col">
+        <span class="pname opp-name">{{ game.opponent }}</span>
+        <span class="opp-badge">opp</span>
+      </td>
+      {% for stat, results in stat_results.items() %}
+      {% for result in results %}
+      <td class="stat-cell r-{{ result }} stat-{{ stat }}{% if loop.first %} group-first{% endif %}"
+          data-pid="opponent"
+          data-stat="{{ stat }}"
+          data-result="{{ result }}">
+        <span class="cell-count" id="cnt-opponent-{{ stat }}-{{ result }}">0</span>
+      </td>
+      {% endfor %}
+      {% endfor %}
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- Toast feedback -->
+<div id="toast" class="toast hidden"></div>
+
+<!-- Status bar -->
+<div class="scoreboard-bar">
+  <span id="event-count">0 events recorded</span>
+</div>
+
+<script src="{{ url_for('static', filename='js/tracker.js') }}"></script>
+<script>Tracker.init({{ game.id }});</script>
+{% endblock %}

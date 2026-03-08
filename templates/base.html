@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}VolleyStats{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script>
+    if (window.Chart && window.ChartDataLabels) {
+      Chart.register(ChartDataLabels);
+      Chart.defaults.plugins.datalabels.display = false;
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <a class="logo" href="{{ url_for('index') }}">🏐 VolleyStats</a>
+    <nav class="main-nav">
+      <a href="{{ url_for('team_list') }}">Teams</a>
+      <a href="{{ url_for('index') }}">Games</a>
+      <a href="{{ url_for('player_report') }}">Players</a>
+      <a href="{{ url_for('season_list') }}">Seasons</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

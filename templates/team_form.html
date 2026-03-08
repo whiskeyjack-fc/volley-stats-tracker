@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{% if team %}Edit Team{% else %}New Team{% endif %} — VolleyStats{% endblock %}
+{% block content %}
+<h1>{% if team %}Edit Team{% else %}New Team{% endif %}</h1>
+
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
+
+<form method="POST">
+  <section class="card">
+    <h2>Team Info</h2>
+    <div class="field-row">
+      <label>Team Name
+        <input type="text" name="team_name" required value="{{ team.name if team else '' }}"
+               placeholder="e.g. Spikemasters" />
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Roster</h2>
+    <table class="table" id="players-table">
+      <thead>
+        <tr><th style="width:80px">#</th><th>Name</th><th></th></tr>
+      </thead>
+      <tbody id="players-body">
+        {% if players %}
+          {% for p in players %}
+          <tr>
+            <td><input type="text" name="player_number" value="{{ p.number or '' }}" placeholder="#" /></td>
+            <td><input type="text" name="player_name" value="{{ p.name }}" placeholder="Player name" /></td>
+            <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td><input type="text" name="player_number" placeholder="#" /></td>
+            <td><input type="text" name="player_name" placeholder="Player name" /></td>
+            <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+    <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
+      <button type="button" class="btn btn-outline" id="add-player">+ Add Player</button>
+      <button type="button" class="btn btn-sm btn-danger" id="clear-players">Delete all players</button>
+    </div>
+  </section>
+
+  <div class="form-actions" style="gap:0.75rem">
+    <a href="{{ url_for('team_list') }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary btn-lg">
+      {% if team %}Save Changes{% else %}Create Team{% endif %}
+    </button>
+  </div>
+</form>
+
+<script>
+  document.getElementById("add-player").addEventListener("click", () => {
+    const tbody = document.getElementById("players-body");
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td><input type="text" name="player_number" placeholder="#" /></td>
+      <td><input type="text" name="player_name" placeholder="Player name" /></td>
+      <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>`;
+    tbody.appendChild(row);
+  });
+
+  document.getElementById("players-body").addEventListener("click", (e) => {
+    if (e.target.classList.contains("remove-row")) {
+      const rows = document.querySelectorAll("#players-body tr");
+      if (rows.length > 1) e.target.closest("tr").remove();
+    }
+  });
+
+  document.getElementById("clear-players").addEventListener("click", () => {
+    if (!confirm("Remove all players from the roster?")) return;
+    document.getElementById("players-body").innerHTML =
+      '<tr>' +
+      '<td><input type="text" name="player_number" placeholder="#" /></td>' +
+      '<td><input type="text" name="player_name" placeholder="Player name" /></td>' +
+      '<td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>' +
+      '</tr>';
+  });
+</script>
+{% endblock %}

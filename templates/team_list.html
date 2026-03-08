@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Club Teams — VolleyStats{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Club Teams</h1>
+  <a href="{{ url_for('new_team') }}" class="btn btn-primary">＋ New Team</a>
+</div>
+
+{% if not teams %}
+<div class="card" style="text-align:center;padding:2.5rem 1rem">
+  <p style="color:var(--gray);margin-bottom:1rem">No teams yet. Create a team to pre-fill rosters when setting up new games.</p>
+  <a href="{{ url_for('new_team') }}" class="btn btn-primary">＋ New Team</a>
+</div>
+{% else %}
+<div class="team-cards">
+  {% for t in teams %}
+  <div class="team-card-item">
+    <div class="team-card-info">
+      <span class="team-card-name">{{ t.name }}</span>
+      <span class="team-card-count">{{ team_player_counts[t.id] }} player{{ 's' if team_player_counts[t.id] != 1 else '' }}</span>
+    </div>
+    <div class="team-card-actions">
+      <a href="{{ url_for('edit_team', team_id=t.id) }}" class="btn btn-sm btn-outline">Edit</a>
+      <form method="POST" action="{{ url_for('delete_team', team_id=t.id) }}" style="display:inline"
+            onsubmit="return confirm('Delete {{ t.name|e }}? This cannot be undone.')">
+        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

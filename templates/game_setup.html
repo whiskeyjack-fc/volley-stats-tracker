@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}New Game — VolleyStats{% endblock %}
+{% block content %}
+<h1>New Game</h1>
+<form method="POST" id="setup-form">
+  <section class="card">
+    <h2>Game Info</h2>
+    <div class="field-row">
+      <label>Season
+        <select id="season-select">
+          <option value="">— Select season —</option>
+          {% for s in seasons %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+          <option value="__new__">＋ Add season…</option>
+        </select>
+        <input type="hidden" name="season" id="season-value" value="" />
+        <div id="new-season-inline" style="display:none;margin-top:0.5rem">
+          <div style="display:flex;gap:0.4rem;align-items:center">
+            <input type="text" id="new-season-input" placeholder="S25-S26" style="flex:1" />
+            <button type="button" class="btn btn-sm btn-primary" id="add-season-btn">Add</button>
+            <button type="button" class="btn btn-sm btn-outline" id="cancel-season-btn">✕</button>
+          </div>
+          <small id="season-error" style="color:var(--red);display:none">Format must be Sxx-Syy (e.g. S25-S26)</small>
+        </div>
+      </label>
+      <label>Your Team
+        <select id="team-select">
+          <option value="" data-id="">— Select team —</option>
+          {% for t in club_teams %}
+          <option value="{{ t.name }}" data-id="{{ t.id }}">{{ t.name }}</option>
+          {% endfor %}
+          <option value="__new__" data-id="">＋ Add team…</option>
+        </select>
+        <input type="hidden" name="team_name" id="team-value" value="" />
+        <div id="new-team-inline" style="display:none;margin-top:0.5rem">
+          <div style="display:flex;gap:0.4rem;align-items:center">
+            <input type="text" id="new-team-input" placeholder="e.g. Spikemasters" style="flex:1" />
+            <button type="button" class="btn btn-sm btn-primary" id="add-team-btn">Add</button>
+            <button type="button" class="btn btn-sm btn-outline" id="cancel-team-btn">✕</button>
+          </div>
+          <small id="team-error" style="color:var(--red);display:none">Team name cannot be empty</small>
+        </div>
+      </label>
+      <label>Opponent
+        <input type="text" name="opponent" required placeholder="e.g. Blockers FC" />
+      </label>
+      <label>Date
+        <input type="date" name="played_at" value="{{ today }}" />
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Your Players</h2>
+    <table class="table" id="players-table">
+      <thead>
+        <tr><th style="width:80px">#</th><th>Name</th><th></th></tr>
+      </thead>
+      <tbody id="players-body">
+        <tr>
+          <td><input type="text" name="player_number" placeholder="#" /></td>
+          <td><input type="text" name="player_name" placeholder="Player name" /></td>
+          <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
+      <button type="button" class="btn btn-outline" id="add-player">+ Add Player</button>
+      <button type="button" class="btn btn-sm btn-danger" id="clear-players">Delete all players</button>
+    </div>
+  </section>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary btn-lg">Start Tracking →</button>
+  </div>
+</form>
+
+<script>
+  // ── Player rows ──────────────────────────────────────────────
+  document.getElementById("add-player").addEventListener("click", () => {
+    const tbody = document.getElementById("players-body");
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td><input type="text" name="player_number" placeholder="#" /></td>
+      <td><input type="text" name="player_name" placeholder="Player name" /></td>
+      <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>`;
+    tbody.appendChild(row);
+  });
+
+  document.getElementById("players-body").addEventListener("click", (e) => {
+    if (e.target.classList.contains("remove-row")) {
+      const rows = document.querySelectorAll("#players-body tr");
+      if (rows.length > 1) e.target.closest("tr").remove();
+    }
+  });
+
+  document.getElementById("clear-players").addEventListener("click", () => {
+    if (!confirm("Remove all players from the list?")) return;
+    document.getElementById("players-body").innerHTML =
+      '<tr>' +
+      '<td><input type="text" name="player_number" placeholder="#" /></td>' +
+      '<td><input type="text" name="player_name" placeholder="Player name" /></td>' +
+      '<td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>' +
+      '</tr>';
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dateInput = document.querySelector('input[name="played_at"]');
+  if (!dateInput.value) dateInput.value = today;
+
+  document.getElementById('setup-form').addEventListener('submit', (e) => {
+    if (!document.getElementById('team-value').value.trim()) {
+      e.preventDefault();
+      document.getElementById('team-select').focus();
+      alert('Please select or add a team name.');
+    }
+  });
+
+  // ── Season dropdown ──────────────────────────────────────────
+  const seasonSelect     = document.getElementById('season-select');
+  const seasonValue      = document.getElementById('season-value');
+  const newSeasonInline  = document.getElementById('new-season-inline');
+  const newSeasonInput   = document.getElementById('new-season-input');
+  const addSeasonBtn     = document.getElementById('add-season-btn');
+  const cancelSeasonBtn  = document.getElementById('cancel-season-btn');
+  const seasonError      = document.getElementById('season-error');
+
+  seasonSelect.addEventListener('change', () => {
+    if (seasonSelect.value === '__new__') {
+      newSeasonInline.style.display = 'block';
+      newSeasonInput.focus();
+      seasonValue.value = '';
+    } else {
+      newSeasonInline.style.display = 'none';
+      seasonValue.value = seasonSelect.value;
+      seasonError.style.display = 'none';
+    }
+  });
+
+  addSeasonBtn.addEventListener('click', async () => {
+    const name = newSeasonInput.value.trim();
+    if (!/^S\d{2}-S\d{2}$/.test(name)) {
+      seasonError.style.display = 'block';
+      return;
+    }
+    seasonError.style.display = 'none';
+    try {
+      const res = await fetch('/api/seasons', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name})
+      });
+      if (!res.ok && res.status !== 409) {
+        const err = await res.json();
+        alert(err.error || 'Failed to add season');
+        return;
+      }
+      let opt = [...seasonSelect.options].find(o => o.value === name);
+      if (!opt) {
+        opt = new Option(name, name);
+        seasonSelect.insertBefore(opt, seasonSelect.lastElementChild);
+      }
+      seasonSelect.value = name;
+      seasonValue.value = name;
+      newSeasonInline.style.display = 'none';
+      newSeasonInput.value = '';
+    } catch (e) {
+      alert('Network error adding season');
+    }
+  });
+
+  cancelSeasonBtn.addEventListener('click', () => {
+    newSeasonInline.style.display = 'none';
+    seasonSelect.value = seasonValue.value || '';
+    newSeasonInput.value = '';
+    seasonError.style.display = 'none';
+  });
+
+  // ── Club team selector ───────────────────────────────────────
+  const teamSelect      = document.getElementById('team-select');
+  const teamValue       = document.getElementById('team-value');
+  const newTeamInline   = document.getElementById('new-team-inline');
+  const newTeamInput    = document.getElementById('new-team-input');
+  const addTeamBtn      = document.getElementById('add-team-btn');
+  const cancelTeamBtn   = document.getElementById('cancel-team-btn');
+  const teamError       = document.getElementById('team-error');
+  const playersBody     = document.getElementById('players-body');
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function emptyPlayerRow() {
+    return '<tr>' +
+      '<td><input type="text" name="player_number" placeholder="#" /></td>' +
+      '<td><input type="text" name="player_name" placeholder="Player name" /></td>' +
+      '<td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>' +
+      '</tr>';
+  }
+
+  teamSelect.addEventListener('change', async () => {
+    const selectedOpt = teamSelect.options[teamSelect.selectedIndex];
+    const teamId = selectedOpt.dataset.id;
+    if (teamSelect.value === '__new__') {
+      newTeamInline.style.display = 'block';
+      newTeamInput.focus();
+      teamValue.value = '';
+      return;
+    }
+    newTeamInline.style.display = 'none';
+    teamError.style.display = 'none';
+    teamValue.value = teamSelect.value;
+    if (!teamId) return;
+    try {
+      const res = await fetch(`/api/teams/${teamId}/players`);
+      const players = await res.json();
+      if (!players.length) return;
+      playersBody.innerHTML = '';
+      players.forEach(p => {
+        const row = document.createElement('tr');
+        row.innerHTML =
+          `<td><input type="text" name="player_number" value="${escHtml(p.number || '')}" placeholder="#" /></td>` +
+          `<td><input type="text" name="player_name" value="${escHtml(p.name)}" placeholder="Player name" /></td>` +
+          `<td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>`;
+        playersBody.appendChild(row);
+      });
+    } catch (e) {
+      console.error('Failed to fetch team players', e);
+    }
+  });
+
+  addTeamBtn.addEventListener('click', () => {
+    const name = newTeamInput.value.trim();
+    if (!name) {
+      teamError.style.display = 'block';
+      return;
+    }
+    teamError.style.display = 'none';
+    let opt = [...teamSelect.options].find(o => o.value === name);
+    if (!opt) {
+      opt = new Option(name, name);
+      opt.dataset.id = '';
+      teamSelect.insertBefore(opt, teamSelect.lastElementChild);
+    }
+    teamSelect.value = name;
+    teamValue.value = name;
+    newTeamInline.style.display = 'none';
+    newTeamInput.value = '';
+  });
+
+  cancelTeamBtn.addEventListener('click', () => {
+    newTeamInline.style.display = 'none';
+    teamSelect.value = teamValue.value || '';
+    newTeamInput.value = '';
+    teamError.style.display = 'none';
+  });
+</script>
+{% endblock %}

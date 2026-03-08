@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Edit Game — VolleyStats{% endblock %}
+{% block content %}
+<h1>Edit Game</h1>
+<form method="POST" id="edit-form">
+  <section class="card">
+    <h2>Game Info</h2>
+    <div class="field-row">
+      <label>Season
+        <input type="text" name="season" value="{{ game.season }}" placeholder="e.g. 2025-2026" list="season-list" />
+        <datalist id="season-list">
+          {% for s in existing_seasons %}<option value="{{ s }}">{% endfor %}
+        </datalist>
+      </label>
+      <label>Your Team Name
+        <input type="text" name="team_name" required value="{{ game.team_name }}" />
+      </label>
+      <label>Opponent
+        <input type="text" name="opponent" required value="{{ game.opponent }}" />
+      </label>
+      <label>Date
+        <input type="date" name="played_at" value="{{ game.played_at }}" />
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Players</h2>
+    <p class="grid-hint">Removing a player here does not delete their recorded events — they will still appear in reports.</p>
+    <table class="table" id="players-table">
+      <thead>
+        <tr><th style="width:80px">#</th><th>Name</th><th></th></tr>
+      </thead>
+      <tbody id="players-body">
+        {% for p in players %}
+        <tr>
+          <td><input type="text" name="player_number" value="{{ p.number or '' }}" placeholder="#" /></td>
+          <td><input type="text" name="player_name"   value="{{ p.name }}" placeholder="Player name" /></td>
+          <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <button type="button" class="btn btn-outline" id="add-player">+ Add Player</button>
+  </section>
+
+  <div class="form-actions" style="gap:0.75rem">
+    <a href="{{ url_for('index') }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary btn-lg">Save Changes</button>
+  </div>
+</form>
+
+<script>
+  document.getElementById("add-player").addEventListener("click", () => {
+    const tbody = document.getElementById("players-body");
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td><input type="text" name="player_number" placeholder="#" /></td>
+      <td><input type="text" name="player_name" placeholder="Player name" /></td>
+      <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>`;
+    tbody.appendChild(row);
+  });
+
+  document.getElementById("players-body").addEventListener("click", (e) => {
+    if (e.target.classList.contains("remove-row")) {
+      const rows = document.querySelectorAll("#players-body tr");
+      if (rows.length > 1) e.target.closest("tr").remove();
+    }
+  });
+</script>
+{% endblock %}
