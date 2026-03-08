@@ -998,15 +998,18 @@ def player_report():
     }
 
     # Fetch candidate games (season + game-team filters)
-    conditions = ["user_id=?"]
-    params = [current_user.id]
+    conditions = list(uparams)
+    cond_parts = []
+    if ucond:
+        cond_parts.append(ucond.lstrip(" AND "))
     if active_season:
-        conditions.append("season=?")
-        params.append(active_season)
+        cond_parts.append("season=?")
+        conditions.append(active_season)
     if active_team:
-        conditions.append("team_name=?")
-        params.append(active_team)
-    where = "WHERE " + " AND ".join(conditions)
+        cond_parts.append("team_name=?")
+        conditions.append(active_team)
+    where = ("WHERE " + " AND ".join(cond_parts)) if cond_parts else ""
+    params = conditions
     all_candidate_games = db.execute(
         f"SELECT * FROM games {where} ORDER BY played_at ASC, id ASC", params
     ).fetchall()
@@ -1191,8 +1194,9 @@ def player_report():
     player_urls.update({p["slug"]: url_for("player_report", **_base_params(player=p["slug"]))
                         for p in players_data})
 
-    if not active_player and player_chips:
-        active_player = player_chips[0]["slug"]
+    valid_slugs = {c["slug"] for c in player_chips}
+    if not active_player or active_player not in valid_slugs:
+        active_player = player_chips[0]["slug"] if player_chips else ""
 
     if active_player:
         players_data = [p for p in players_data if p["slug"] == active_player]
