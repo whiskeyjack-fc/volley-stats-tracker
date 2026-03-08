@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}User Management — VolleyStats{% endblock %}
+
+{% block content %}
+<div class="section-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <h1 style="font-size:1.3rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:0">User Management</h1>
+  <span style="font-size:0.85rem;color:var(--muted)">{{ users | length }} user{{ 's' if users | length != 1 }}</span>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+<div style="overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse;font-size:0.9rem">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Email</th>
+        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Role</th>
+        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Registered</th>
+        <th style="padding:.6rem .5rem"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:.65rem .5rem">{{ u.email }}</td>
+        <td style="padding:.65rem .5rem">
+          <span class="role-badge role-{{ u.role }}">{{ u.role }}</span>
+        </td>
+        <td style="padding:.65rem .5rem;color:var(--muted)">{{ u.created_at[:10] }}</td>
+        <td style="padding:.65rem .5rem">
+          <form method="post" action="{{ url_for('admin_set_role', user_id=u.id) }}" style="display:flex;gap:.4rem;align-items:center">
+            <select name="role" style="background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .5rem;font-size:0.85rem">
+              <option value="trainer"     {% if u.role == 'trainer'     %}selected{% endif %}>trainer</option>
+              <option value="coordinator" {% if u.role == 'coordinator' %}selected{% endif %}>coordinator</option>
+              <option value="admin"       {% if u.role == 'admin'       %}selected{% endif %}>admin</option>
+            </select>
+            <button type="submit" class="btn btn-sm">Save</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

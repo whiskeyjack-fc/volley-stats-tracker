@@ -41,9 +41,14 @@ header {
 }
 .logo { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 .logo:hover { text-decoration: none; }
-.main-nav { display: flex; gap: 1rem; }
+.main-nav { display: flex; gap: 1rem; align-items: center; }
 .main-nav a { color: var(--gray); font-size: 0.9rem; font-weight: 600; }
 .main-nav a:hover { color: var(--text); text-decoration: none; }
+.nav-user { color: var(--gray); font-size: 0.85rem; margin-left: 0.5rem; }
+.role-badge { display:inline-block; padding:.15em .5em; border-radius:999px; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.role-badge.role-trainer     { background: #1e3a5f; color: #7ab3e0; }
+.role-badge.role-coordinator { background: #1e4d2b; color: #6fcf97; }
+.role-badge.role-admin       { background: #4d1e1e; color: #e07a7a; }
 
 main { max-width: 1600px; margin: 0 auto; padding: 1rem 1.25rem; }
 
@@ -736,6 +741,32 @@ body.modal-open { overflow: hidden; }
   .stat-btn { width: 90px; font-size: 0.85rem; }
   .track-header { flex-direction: column; }
 }
+
+/* ── Auth pages ─────────────────────────────────────────────── */
+.auth-card {
+  max-width: 400px;
+  margin: 4rem auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.auth-title { font-size: 1.3rem; font-weight: 700; }
+.auth-error {
+  background: rgba(239,68,68,.15);
+  border: 1px solid var(--red);
+  border-radius: 6px;
+  color: var(--red);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.875rem;
+}
+.auth-card label { gap: 0.4rem; }
+.auth-card input[type="email"],
+.auth-card input[type="password"] { width: 100%; }
+.auth-switch { font-size: 0.875rem; color: var(--gray); text-align: center; }
 
 /* ── Stat grid ──────────────────────────────────────────────── */
 .grid-hint {

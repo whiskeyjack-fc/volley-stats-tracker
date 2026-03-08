@@ -18,18 +18,36 @@ login_manager.login_message = "Please log in to access this page."
 
 
 class User(UserMixin):
-    def __init__(self, id, email):
+    def __init__(self, id, email, role='trainer'):
         self.id = id
         self.email = email
+        self.role = role
 
 
 @login_manager.user_loader
 def load_user(user_id):
     db_conn = sqlite3.connect(DATABASE)
     db_conn.row_factory = sqlite3.Row
-    row = db_conn.execute("SELECT id, email FROM users WHERE id=?", (int(user_id),)).fetchone()
+    row = db_conn.execute("SELECT id, email, role FROM users WHERE id=?", (int(user_id),)).fetchone()
     db_conn.close()
-    return User(row["id"], row["email"]) if row else None
+    return User(row["id"], row["email"], row["role"]) if row else None
+
+
+def can_view_all():
+    """True for coordinator and admin — they see every user's data."""
+    return current_user.is_authenticated and current_user.role in ('coordinator', 'admin')
+
+
+def is_admin():
+    return current_user.is_authenticated and current_user.role == 'admin'
+
+
+def _uid_cond():
+    """Return (sql AND fragment, params) scoping queries to the current user.
+    Returns ('', []) for coordinator/admin roles who see all data."""
+    if can_view_all():
+        return "", []
+    return " AND user_id=?", [current_user.id]
 
 # ── DB helpers ───────────────────────────────────────────────────────────────
 
@@ -53,7 +71,8 @@ def init_db():
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             email         TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
-            created_at    TEXT NOT NULL
+            created_at    TEXT NOT NULL,
+            role          TEXT NOT NULL DEFAULT 'trainer'
         );
 
         CREATE TABLE IF NOT EXISTS games (
@@ -140,7 +159,8 @@ def migrate_db():
         )""",
         "INSERT OR IGNORE INTO seasons (name) SELECT DISTINCT season FROM games WHERE season != ''",
         # user accounts
-        "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'trainer')",
+        "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'trainer'",
         "ALTER TABLE games ADD COLUMN user_id INTEGER REFERENCES users(id)",
     ]:
         try:
@@ -148,6 +168,13 @@ def migrate_db():
             db.commit()
         except Exception:
             pass
+
+    # Ensure whiskeyjack.fc@gmail.com is admin
+    try:
+        db.execute("UPDATE users SET role='admin' WHERE email='whiskeyjack.fc@gmail.com'")
+        db.commit()
+    except Exception:
+        pass
 
     # Recreate club_teams with UNIQUE(user_id, name) if not already migrated
     cols = {row[1] for row in db.execute("PRAGMA table_info(club_teams)").fetchall()}
@@ -320,8 +347,8 @@ def register():
             (email, generate_password_hash(password), datetime.now(UTC).isoformat())
         )
         db.commit()
-        row = db.execute("SELECT id, email FROM users WHERE email=?", (email,)).fetchone()
-        login_user(User(row["id"], row["email"]))
+        row = db.execute("SELECT id, email, role FROM users WHERE email=?", (email,)).fetchone()
+        login_user(User(row["id"], row["email"], row["role"]))
         return redirect(url_for("index"))
     return render_template("register.html")
 
@@ -335,11 +362,11 @@ def login():
         password = request.form.get("password", "")
         db = get_db()
         row = db.execute(
-            "SELECT id, email, password_hash FROM users WHERE email=?", (email,)
+            "SELECT id, email, password_hash, role FROM users WHERE email=?", (email,)
         ).fetchone()
         if not row or not check_password_hash(row["password_hash"], password):
             return render_template("login.html", error="Invalid email or password.")
-        login_user(User(row["id"], row["email"]))
+        login_user(User(row["id"], row["email"], row["role"]))
         next_url = request.args.get("next") or ""
         if not next_url.startswith("/"):
             next_url = url_for("index")
@@ -360,24 +387,25 @@ def logout():
 def index():
     db = get_db()
     active_team = request.args.get("team", "")
+    ucond, uparams = _uid_cond()
     if active_team:
         games = db.execute(
-            "SELECT * FROM games WHERE user_id=? AND team_name=? ORDER BY played_at DESC, id DESC",
-            (current_user.id, active_team)
+            f"SELECT * FROM games WHERE team_name=?{ucond} ORDER BY played_at DESC, id DESC",
+            [active_team] + uparams
         ).fetchall()
     else:
         games = db.execute(
-            "SELECT * FROM games WHERE user_id=? ORDER BY played_at DESC, id DESC",
-            (current_user.id,)
+            f"SELECT * FROM games WHERE 1=1{ucond} ORDER BY played_at DESC, id DESC",
+            uparams
         ).fetchall()
     seasons = db.execute(
-        "SELECT DISTINCT season FROM games WHERE user_id=? AND season != '' ORDER BY season DESC",
-        (current_user.id,)
+        f"SELECT DISTINCT season FROM games WHERE season != ''{ucond} ORDER BY season DESC",
+        uparams
     ).fetchall()
     seasons = [s["season"] for s in seasons]
     teams = [r["team_name"] for r in db.execute(
-        "SELECT DISTINCT team_name FROM games WHERE user_id=? AND team_name != '' ORDER BY team_name COLLATE NOCASE",
-        (current_user.id,)
+        f"SELECT DISTINCT team_name FROM games WHERE team_name != ''{ucond} ORDER BY team_name COLLATE NOCASE",
+        uparams
     ).fetchall()]
     return render_template("index.html", games=games, seasons=seasons, teams=teams, active_team=active_team)
 
@@ -409,11 +437,12 @@ def new_game():
         db.commit()
         return redirect(url_for("track", game_id=game_id))
     db = get_db()
+    ucond, uparams = _uid_cond()
     seasons = [s["name"] for s in db.execute(
-        "SELECT name FROM seasons WHERE user_id=? ORDER BY name DESC", (current_user.id,)
+        f"SELECT name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
     ).fetchall()]
     club_teams = [dict(t) for t in db.execute(
-        "SELECT id, name FROM club_teams WHERE user_id=? ORDER BY name COLLATE NOCASE", (current_user.id,)
+        f"SELECT id, name FROM club_teams WHERE 1=1{ucond} ORDER BY name COLLATE NOCASE", uparams
     ).fetchall()]
     return render_template("game_setup.html", seasons=seasons, club_teams=club_teams)
 
@@ -422,7 +451,8 @@ def new_game():
 @login_required
 def track(game_id):
     db = get_db()
-    game    = db.execute("SELECT * FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone()
+    ucond, uparams = _uid_cond()
+    game = db.execute(f"SELECT * FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone()
     if not game:
         return "Game not found", 404
     players = db.execute("SELECT * FROM players WHERE game_id=? ORDER BY name COLLATE NOCASE", (game_id,)).fetchall()
@@ -435,7 +465,8 @@ def track(game_id):
 @login_required
 def record_event(game_id):
     db = get_db()
-    if not db.execute("SELECT id FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone():
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     data      = request.get_json()
     player_id = data.get("player_id")   # None / null = opponent
@@ -457,7 +488,8 @@ def record_event(game_id):
 def undo_event(game_id):
     """Undo the single most recent event for this game."""
     db = get_db()
-    if not db.execute("SELECT id FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone():
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     last = db.execute(
         "SELECT id FROM events WHERE game_id=? ORDER BY id DESC LIMIT 1", (game_id,)
@@ -473,7 +505,8 @@ def undo_event(game_id):
 def decrement_event(game_id):
     """Remove the most recent event matching a specific player+stat+result."""
     db = get_db()
-    if not db.execute("SELECT id FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone():
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     data      = request.get_json()
     player_id = data.get("player_id")   # None / null = opponent
@@ -501,7 +534,8 @@ def decrement_event(game_id):
 @login_required
 def live_stats(game_id):
     db = get_db()
-    if not db.execute("SELECT id FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone():
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     set_id_filter = request.args.get("set_id", type=int)
 
@@ -551,7 +585,8 @@ def live_stats(game_id):
 @login_required
 def get_sets(game_id):
     db = get_db()
-    if not db.execute("SELECT id FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone():
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     sets = db.execute(
         "SELECT * FROM sets WHERE game_id=? ORDER BY created_at", (game_id,)
@@ -563,7 +598,8 @@ def get_sets(game_id):
 @login_required
 def create_set(game_id):
     db = get_db()
-    if not db.execute("SELECT id FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone():
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     data       = request.get_json()
     set_number = int(data["set_number"])
@@ -588,7 +624,8 @@ def create_set(game_id):
 @login_required
 def delete_set(game_id, set_id):
     db = get_db()
-    if not db.execute("SELECT id FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone():
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     existing = db.execute(
         "SELECT id FROM sets WHERE id=? AND game_id=?", (set_id, game_id)
@@ -605,7 +642,8 @@ def delete_set(game_id, set_id):
 @login_required
 def finish_set(game_id, set_id):
     db = get_db()
-    if not db.execute("SELECT id FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone():
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     db.execute("UPDATE sets SET finished=1 WHERE id=? AND game_id=?", (set_id, game_id))
     db.commit()
@@ -616,7 +654,8 @@ def finish_set(game_id, set_id):
 @login_required
 def reopen_set(game_id, set_id):
     db = get_db()
-    if not db.execute("SELECT id FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone():
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     db.execute("UPDATE sets SET finished=0 WHERE id=? AND game_id=?", (set_id, game_id))
     db.commit()
@@ -628,7 +667,8 @@ def reopen_set(game_id, set_id):
 @login_required
 def report(game_id):
     db = get_db()
-    game    = db.execute("SELECT * FROM games WHERE id=? AND user_id=?", (game_id, current_user.id)).fetchone()
+    ucond, uparams = _uid_cond()
+    game    = db.execute(f"SELECT * FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone()
     if not game:
         return "Game not found", 404
     players = db.execute("SELECT * FROM players WHERE game_id=? ORDER BY name COLLATE NOCASE", (game_id,)).fetchall()
@@ -779,9 +819,10 @@ def report(game_id):
 @login_required
 def season_list():
     db = get_db()
+    ucond, uparams = _uid_cond()
     seasons = db.execute(
-        "SELECT DISTINCT season FROM games WHERE user_id=? AND season != '' ORDER BY season DESC",
-        (current_user.id,)
+        f"SELECT DISTINCT season FROM games WHERE season != ''{ucond} ORDER BY season DESC",
+        uparams
     ).fetchall()
     if seasons:
         return redirect(url_for("season_report", season=seasons[0]["season"]))
@@ -792,14 +833,15 @@ def season_list():
 @login_required
 def season_report(season):
     db = get_db()
+    ucond, uparams = _uid_cond()
     all_seasons = [s["season"] for s in db.execute(
-        "SELECT DISTINCT season FROM games WHERE user_id=? AND season != '' ORDER BY season DESC",
-        (current_user.id,)
+        f"SELECT DISTINCT season FROM games WHERE season != ''{ucond} ORDER BY season DESC",
+        uparams
     ).fetchall()]
 
     games = db.execute(
-        "SELECT * FROM games WHERE user_id=? AND season=? ORDER BY played_at ASC, id ASC",
-        (current_user.id, season)
+        f"SELECT * FROM games WHERE season=?{ucond} ORDER BY played_at ASC, id ASC",
+        [season] + uparams
     ).fetchall()
     if not games:
         return "Season not found", 404
@@ -903,17 +945,18 @@ def player_report():
     active_player    = request.args.get("player", "")
     selected_game_ids = set(int(x) for x in request.args.getlist("game") if x.isdigit())
 
+    ucond, uparams = _uid_cond()
     all_seasons = [s["season"] for s in db.execute(
-        "SELECT DISTINCT season FROM games WHERE user_id=? AND season != '' ORDER BY season DESC",
-        (current_user.id,)
+        f"SELECT DISTINCT season FROM games WHERE season != ''{ucond} ORDER BY season DESC",
+        uparams
     ).fetchall()]
     all_game_teams = [r["team_name"] for r in db.execute(
-        "SELECT DISTINCT team_name FROM games WHERE user_id=? AND team_name != '' ORDER BY team_name COLLATE NOCASE",
-        (current_user.id,)
+        f"SELECT DISTINCT team_name FROM games WHERE team_name != ''{ucond} ORDER BY team_name COLLATE NOCASE",
+        uparams
     ).fetchall()]
     all_club_teams = [dict(t) for t in db.execute(
-        "SELECT id, name FROM club_teams WHERE user_id=? ORDER BY name COLLATE NOCASE",
-        (current_user.id,)
+        f"SELECT id, name FROM club_teams WHERE 1=1{ucond} ORDER BY name COLLATE NOCASE",
+        uparams
     ).fetchall()]
 
     # Build base params dict (excludes game selection; used for chip URLs)
@@ -972,7 +1015,7 @@ def player_report():
     roster_names = None  # None = no filter
     if active_club_team:
         club_row = db.execute(
-            "SELECT id FROM club_teams WHERE name=? AND user_id=?", (active_club_team, current_user.id)
+            f"SELECT id FROM club_teams WHERE name=?{ucond}", [active_club_team] + uparams
         ).fetchone()
         if club_row:
             roster_rows = db.execute(
@@ -1205,9 +1248,13 @@ def player_report():
 
 
 @app.route("/games/<int:game_id>/export")
+@login_required
 def export_csv(game_id):
     db = get_db()
-    game    = db.execute("SELECT * FROM games WHERE id=?", (game_id,)).fetchone()
+    ucond, uparams = _uid_cond()
+    game    = db.execute(f"SELECT * FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone()
+    if not game:
+        return "Game not found", 404
     players = {p["id"]: p for p in db.execute("SELECT * FROM players WHERE game_id=?", (game_id,)).fetchall()}
     events  = db.execute("SELECT * FROM events WHERE game_id=? ORDER BY id", (game_id,)).fetchall()
 
@@ -1231,9 +1278,11 @@ def export_csv(game_id):
 
 
 @app.route("/games/<int:game_id>/edit", methods=["GET", "POST"])
+@login_required
 def edit_game(game_id):
     db = get_db()
-    game = db.execute("SELECT * FROM games WHERE id=?", (game_id,)).fetchone()
+    ucond, uparams = _uid_cond()
+    game = db.execute(f"SELECT * FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone()
     if not game:
         return "Game not found", 404
 
@@ -1265,15 +1314,20 @@ def edit_game(game_id):
         "SELECT * FROM players WHERE game_id=? ORDER BY name COLLATE NOCASE", (game_id,)
     ).fetchall()
     existing_seasons = [s["season"] for s in db.execute(
-        "SELECT DISTINCT season FROM games WHERE season != '' ORDER BY season DESC"
+        f"SELECT DISTINCT season FROM games WHERE season != ''{ucond} ORDER BY season DESC",
+        uparams
     ).fetchall()]
     return render_template("edit_game.html", game=game, players=players,
                            existing_seasons=existing_seasons)
 
 
 @app.route("/games/<int:game_id>/delete", methods=["POST"])
+@login_required
 def delete_game(game_id):
     db = get_db()
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
+        return "Game not found", 404
     db.execute("DELETE FROM events  WHERE game_id=?", (game_id,))
     db.execute("DELETE FROM players WHERE game_id=?", (game_id,))
     db.execute("DELETE FROM games   WHERE id=?",      (game_id,))
@@ -1284,9 +1338,13 @@ def delete_game(game_id):
 # ── Club Teams ───────────────────────────────────────────────────────────────
 
 @app.route("/teams")
+@login_required
 def team_list():
     db = get_db()
-    teams = db.execute("SELECT * FROM club_teams ORDER BY name COLLATE NOCASE").fetchall()
+    ucond, uparams = _uid_cond()
+    teams = db.execute(
+        f"SELECT * FROM club_teams WHERE 1=1{ucond} ORDER BY name COLLATE NOCASE", uparams
+    ).fetchall()
     team_player_counts = {}
     for t in teams:
         cnt = db.execute(
@@ -1297,6 +1355,7 @@ def team_list():
 
 
 @app.route("/teams/new", methods=["GET", "POST"])
+@login_required
 def new_team():
     if request.method == "POST":
         name = request.form.get("team_name", "").strip()
@@ -1304,7 +1363,7 @@ def new_team():
             return render_template("team_form.html", team=None, players=[], error="Team name is required.")
         db = get_db()
         try:
-            cur = db.execute("INSERT INTO club_teams (name) VALUES (?)", (name,))
+            cur = db.execute("INSERT INTO club_teams (user_id, name) VALUES (?,?)", (current_user.id, name))
             team_id = cur.lastrowid
         except sqlite3.IntegrityError:
             return render_template("team_form.html", team=None, players=[], error="A team with this name already exists.")
@@ -1323,9 +1382,11 @@ def new_team():
 
 
 @app.route("/teams/<int:team_id>/edit", methods=["GET", "POST"])
+@login_required
 def edit_team(team_id):
     db = get_db()
-    team = db.execute("SELECT * FROM club_teams WHERE id=?", (team_id,)).fetchone()
+    ucond, uparams = _uid_cond()
+    team = db.execute(f"SELECT * FROM club_teams WHERE id=?{ucond}", [team_id] + uparams).fetchone()
     if not team:
         return "Team not found", 404
     if request.method == "POST":
@@ -1358,8 +1419,12 @@ def edit_team(team_id):
 
 
 @app.route("/teams/<int:team_id>/delete", methods=["POST"])
+@login_required
 def delete_team(team_id):
     db = get_db()
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM club_teams WHERE id=?{ucond}", [team_id] + uparams).fetchone():
+        return "Team not found", 404
     db.execute("DELETE FROM club_team_players WHERE team_id=?", (team_id,))
     db.execute("DELETE FROM club_teams WHERE id=?", (team_id,))
     db.commit()
@@ -1367,8 +1432,12 @@ def delete_team(team_id):
 
 
 @app.route("/api/teams/<int:team_id>/players")
+@login_required
 def api_team_players(team_id):
     db = get_db()
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM club_teams WHERE id=?{ucond}", [team_id] + uparams).fetchone():
+        return jsonify({"error": "forbidden"}), 403
     players = db.execute(
         "SELECT name, number FROM club_team_players WHERE team_id=? ORDER BY name COLLATE NOCASE",
         (team_id,)
@@ -1377,6 +1446,7 @@ def api_team_players(team_id):
 
 
 @app.route("/api/seasons", methods=["POST"])
+@login_required
 def api_create_season():
     data = request.get_json()
     name = (data.get("name") or "").strip()
@@ -1384,12 +1454,42 @@ def api_create_season():
         return jsonify({"error": "Season name must match format Sxx-Syy (e.g. S25-S26)"}), 400
     db = get_db()
     try:
-        cur = db.execute("INSERT INTO seasons (name) VALUES (?)", (name,))
+        cur = db.execute("INSERT INTO seasons (user_id, name) VALUES (?,?)", (current_user.id, name))
         db.commit()
         return jsonify({"id": cur.lastrowid, "name": name}), 201
     except sqlite3.IntegrityError:
-        existing = db.execute("SELECT id FROM seasons WHERE name=?", (name,)).fetchone()
-        return jsonify({"id": existing["id"], "name": name}), 409
+        existing = db.execute(
+            "SELECT id FROM seasons WHERE user_id=? AND name=?", (current_user.id, name)
+        ).fetchone()
+        return jsonify({"id": existing["id"] if existing else None, "name": name}), 409
+
+
+# ── admin ─────────────────────────────────────────────────────────────────────
+
+@app.route("/admin/users")
+@login_required
+def admin_users():
+    if not is_admin():
+        return "Forbidden", 403
+    db = get_db()
+    users = db.execute(
+        "SELECT id, email, role, created_at FROM users ORDER BY email"
+    ).fetchall()
+    return render_template("admin_users.html", users=users)
+
+
+@app.route("/admin/users/<int:user_id>/role", methods=["POST"])
+@login_required
+def admin_set_role(user_id):
+    if not is_admin():
+        return "Forbidden", 403
+    new_role = request.form.get("role")
+    if new_role not in ("trainer", "coordinator", "admin"):
+        return "Invalid role", 400
+    db = get_db()
+    db.execute("UPDATE users SET role=? WHERE id=?", (new_role, user_id))
+    db.commit()
+    return redirect(url_for("admin_users"))
 
 
 # ── run ───────────────────────────────────────────────────────────────────────
