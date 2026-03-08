@@ -1492,9 +1492,11 @@ def admin_set_role(user_id):
     return redirect(url_for("admin_users"))
 
 
+# ── initialise db on startup (runs under both `python app.py` and WSGI) ───────
+init_db()
+migrate_db()
+
 # ── run ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    init_db()
-    migrate_db()
     app.run(debug=True, port=5000)
