@@ -22,7 +22,13 @@ PlayerStats/
 ├── app.py               # Flask application — routes, DB logic, stat computation
 ├── stats.db             # SQLite database (auto-created on first run)
 ├── import_data.py       # One-off script used to bulk-import historical match data
+├── deploy.sh            # Server-side deploy script (git pull + conditional pip install)
+├── .env.example         # Template for PythonAnywhere API credentials
 ├── Procfile             # Gunicorn entry point for PythonAnywhere / Render
+├── .github/
+│   ├── copilot-instructions.md
+│   └── prompts/
+│       └── deploy.prompt.md  # Copilot agent prompt — automated deploy to PythonAnywhere
 ├── templates/
 │   ├── base.html
 │   ├── index.html       # Game list / home page
@@ -86,6 +92,40 @@ Flask's auto-reloader is enabled by default, so the server restarts automaticall
 7. Click **Reload** — the app is live at `<your-username>.pythonanywhere.com`.
 
 > **Note:** PythonAnywhere's free tier stores your SQLite database on persistent disk, so no database migration is needed.
+
+## Updating the App on PythonAnywhere
+
+Deployments are fully automated via a Copilot agent prompt — including the git push.
+
+1. Copy `.env.example` to `.env` in the project root and fill in your PythonAnywhere credentials (one-time setup):
+   ```
+   PA_API_TOKEN=your_api_token_here
+   PA_USERNAME=your_username_here
+   PA_DOMAIN=your_username.pythonanywhere.com
+   ```
+   Generate your API token at **pythonanywhere.com → Account → API token**.
+
+2. In VS Code Copilot Chat, run the deploy prompt:
+   - Open the prompt picker and select **deploy** (`.github/prompts/deploy.prompt.md`)
+
+   The agent will:
+   - Commit and push any uncommitted local changes to `main`
+   - Create a temporary console on PythonAnywhere
+   - Run `deploy.sh` on the server (`git pull`, and `pip install` only if `requirements.txt` changed)
+   - Poll until the script completes
+   - Reload the web app automatically
+   - Report the outcome
+
+> **CPU seconds:** A routine deploy (no dependency changes) costs ~1–2 CPU seconds against PythonAnywhere's free tier limit of 100/day.
+
+> **Database migrations:** If `app.py` adds new tables or columns, they are applied automatically the next time the app starts (`CREATE TABLE IF NOT EXISTS` pattern). No manual migration step is needed unless a column is renamed or dropped.
+
+### First-time server setup
+Before using the deploy prompt for the first time, run these commands once in a PythonAnywhere Bash console to make the deploy script executable:
+```bash
+cd ~/PlayerStats
+chmod +x deploy.sh
+```
 
 ## Usage
 
