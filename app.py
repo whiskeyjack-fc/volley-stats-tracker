@@ -839,12 +839,25 @@ def season_report(season):
         uparams
     ).fetchall()]
 
-    games = db.execute(
+    active_team = request.args.get("team", "")
+
+    # All games in the season (for team list and set-type detection)
+    all_season_games = db.execute(
         f"SELECT * FROM games WHERE season=?{ucond} ORDER BY played_at ASC, id ASC",
         [season] + uparams
     ).fetchall()
-    if not games:
+    if not all_season_games:
         return "Season not found", 404
+
+    teams = sorted(
+        {g["team_name"] for g in all_season_games if g["team_name"]},
+        key=str.lower,
+    )
+
+    if active_team and active_team in teams:
+        games = [g for g in all_season_games if g["team_name"] == active_team]
+    else:
+        games = list(all_season_games)
 
     game_ids = [g["id"] for g in games]
     placeholders = ",".join("?" * len(game_ids))
@@ -872,10 +885,11 @@ def season_report(season):
     else:
         team_events = [e for e in all_events if e["player_id"] is not None]
 
+    team_kwarg = {"team": active_team} if active_team else {}
     filter_urls = {
-        "all":     url_for("season_report", season=season),
-        "main":    url_for("season_report", season=season, type="main"),
-        "reserve": url_for("season_report", season=season, type="reserve"),
+        "all":     url_for("season_report", season=season, **team_kwarg),
+        "main":    url_for("season_report", season=season, type="main", **team_kwarg),
+        "reserve": url_for("season_report", season=season, type="reserve", **team_kwarg),
     }
 
     rows = []
@@ -931,6 +945,8 @@ def season_report(season):
         game_set_data=game_set_data,
         stat_positive={k: list(v) for k, v in STAT_POSITIVE.items()},
         stat_negative={k: list(v) for k, v in STAT_NEGATIVE.items()},
+        teams=teams,
+        active_team=active_team,
     )
 
 

@@ -21,8 +21,19 @@
   <div class="set-filter-bar">
     <span class="set-label">Season:</span>
     {% for s in all_seasons %}
-    <a href="{{ url_for('season_report', season=s) }}"
+    <a href="{{ url_for('season_report', season=s, **({'team': active_team} if active_team else {})) }}"
        class="set-chip {% if s == season %}active{% endif %}">{{ s }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if teams | length > 1 %}
+  <div class="set-filter-bar">
+    <span class="set-label">Team:</span>
+    <a href="{{ url_for('season_report', season=season, **({'type': active_set_type} if active_set_type else {})) }}"
+       class="set-chip {% if not active_team %}active{% endif %}">All</a>
+    {% for t in teams %}
+    <a href="{{ url_for('season_report', season=season, team=t, **({'type': active_set_type} if active_set_type else {})) }}"
+       class="set-chip {% if t == active_team %}active{% endif %}">{{ t }}</a>
     {% endfor %}
   </div>
   {% endif %}
