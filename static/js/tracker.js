@@ -590,7 +590,7 @@ const Tracker = (() => {
     // Start background sync polling every 30 s
     setInterval(() => { isOnline().then(on => { if (on) flushQueue(); }); }, 30000);
 
-    RallyFlow.init();
+    RallyFlow.init(gameId);
   }
 
   function getCurrentMode() {
@@ -673,7 +673,29 @@ const RallyFlow = (() => {
   let loopStat      = null;
   let loopPid       = null;
   let editIdx       = null;
+  let lsKey         = null;  // set by init() once gameId is known
   const lineupBySet = {};  // setId (string) → Set of player ID strings
+
+  function saveLineups() {
+    if (!lsKey) return;
+    const plain = {};
+    Object.keys(lineupBySet).forEach(sid => {
+      plain[sid] = [...lineupBySet[sid]];
+    });
+    try { localStorage.setItem(lsKey, JSON.stringify(plain)); } catch (_) {}
+  }
+
+  function loadLineups() {
+    if (!lsKey) return;
+    try {
+      const raw = localStorage.getItem(lsKey);
+      if (!raw) return;
+      const plain = JSON.parse(raw);
+      Object.keys(plain).forEach(sid => {
+        lineupBySet[sid] = new Set(plain[sid]);
+      });
+    } catch (_) {}
+  }
 
   // ── Lineup helpers ────────────────────────────────────────────────────────
 
@@ -725,6 +747,7 @@ const RallyFlow = (() => {
         updateLineupButton();
         const badge = section("lineup-count-badge");
         if (badge) badge.textContent = `${lu.size} / 7`;
+        saveLineups();
       });
       grid.appendChild(tile);
     });
@@ -1213,7 +1236,9 @@ const RallyFlow = (() => {
     resetFlow();
   }
 
-  function init() {
+  function init(gameId) {
+    lsKey = gameId ? `lineup-${gameId}` : null;
+    loadLineups();
     section("flow-back-btn")?.addEventListener("click", goBack);
     section("flow-save-btn")?.addEventListener("click", saveRally);
     section("flow-discard-btn")?.addEventListener("click", discardRally);
