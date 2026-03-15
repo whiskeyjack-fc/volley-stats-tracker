@@ -337,7 +337,7 @@ const Tracker = (() => {
     const del = document.createElement("button");
     del.className = "set-chip-del";
     del.title = "Delete set";
-    del.textContent = "Ã—";
+    del.textContent = "\u00D7";
     del.addEventListener("click", (e) => { e.stopPropagation(); deleteSet(s.id); });
 
     wrap.appendChild(chip);
@@ -444,7 +444,7 @@ const Tracker = (() => {
       totalEvents = Math.max(0, totalEvents - 1);
       updateEventCount();
       flashCell(td, "cell-remove");
-      showToast("âˆ’1", "remove");
+      showToast("-1", "remove");
     }
   }
 
@@ -558,7 +558,7 @@ const Tracker = (() => {
     });
 
     document.getElementById("sync-now-btn")?.addEventListener("click", async () => {
-      showToast("Syncingâ€¦", "ok");
+      showToast("Syncing...", "ok");
       await flushQueue();
       await reloadStats();
       showToast("Synced", "ok");
@@ -597,11 +597,11 @@ const Tracker = (() => {
     if (mode === "flow") {
       gridSection.classList.add("hidden");
       flowSection.classList.remove("hidden");
-      if (btn) btn.textContent = "â˜° Grid";
+      if (btn) btn.textContent = "\u2630 Grid";
     } else {
       gridSection.classList.remove("hidden");
       flowSection.classList.add("hidden");
-      if (btn) btn.textContent = "âš¡ Flow";
+      if (btn) btn.textContent = "\u26A1 Flow";
     }
   }
 
@@ -782,7 +782,7 @@ const RallyFlow = (() => {
     if (!cont) return;
     cont.innerHTML = "";
     const lbl = section("flow-player-label");
-    if (lbl) lbl.textContent = "Who? ï¿½ " + stat;
+    if (lbl) lbl.textContent = "Who? \u2014 " + stat;
 
     const sorted = getLineupSorted(stat);
     sorted.forEach(p => {
@@ -823,7 +823,7 @@ const RallyFlow = (() => {
     if (!cont) return;
     cont.innerHTML = "";
     const lbl = section("flow-outcome-label");
-    if (lbl) lbl.textContent = "Result" + (loopStat ? " ï¿½ " + loopStat : "");
+    if (lbl) lbl.textContent = "Result" + (loopStat ? " \u2014 " + loopStat : "");
     outcomes.forEach(o => {
       const btn = document.createElement("button");
       btn.className = `flow-outcome-btn flow-outcome-${o.color}`;
