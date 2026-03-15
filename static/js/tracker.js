@@ -366,11 +366,10 @@ const Tracker = (() => {
   }
 
   function activateSet(setId, sets) {
-    const changing = currentSetId !== setId;
     currentSetId = (currentSetId === setId) ? null : setId;  // toggle off if clicking active
     renderSetBarFromSets(sets);
     reloadStats();
-    if (changing && typeof RallyFlow !== "undefined") RallyFlow.resetLineup();
+    if (typeof RallyFlow !== "undefined") RallyFlow.resetLineup();
   }
 
   function renderSetBarFromSets(sets) {
@@ -546,6 +545,7 @@ const Tracker = (() => {
     window.__incrTotal         = () => { totalEvents++; };
     window.__updateEventCount  = updateEventCount;
     window.__showToast         = showToast;
+    window.__getCurrentSetId   = () => currentSetId;
 
     document.querySelectorAll(".stat-cell").forEach(attachCellHandlers);
 
@@ -713,6 +713,10 @@ const RallyFlow = (() => {
   }
 
   function openLineupPanel() {
+    if (!window.__getCurrentSetId || !window.__getCurrentSetId()) {
+      window.__showToast("Select a set first", "warn");
+      return;
+    }
     renderLineupPanel();
     section("lineup-panel")?.classList.remove("hidden");
   }
@@ -850,6 +854,14 @@ const RallyFlow = (() => {
     const cont = section("flow-type-inner");
     if (!cont) return;
     cont.innerHTML = "";
+    if (!window.__getCurrentSetId || !window.__getCurrentSetId()) {
+      const msg = document.createElement("p");
+      msg.className = "flow-lineup-prompt";
+      msg.textContent = "Select a set from the set bar before starting a rally.";
+      cont.appendChild(msg);
+      showOnly("flow-type-picker");
+      return;
+    }
     if (currentLineup.size === 0) {
       const msg = document.createElement("p");
       msg.className = "flow-lineup-prompt";
