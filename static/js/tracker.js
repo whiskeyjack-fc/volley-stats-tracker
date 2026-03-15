@@ -616,10 +616,10 @@ const RallyFlow = (() => {
 
   const SERVE_OUTCOMES = [
     { label: "Ace", result: "ace",     color: "green"  },
-    { label: "Err", result: "error",   color: "red"    },
     { label: "S3",  result: "3-serve", color: "yellow", loop: true },
     { label: "S2",  result: "2-serve", color: "yellow", loop: true },
     { label: "S1",  result: "1-serve", color: "yellow", loop: true },
+    { label: "Err", result: "error",   color: "red"    },
   ];
 
   const RECEIVE_OPP_OUTCOMES = [
@@ -773,6 +773,27 @@ const RallyFlow = (() => {
           `<span class="trail-stat-badge trail-stat-${statColor}">${action.stat}</span>`+
           `<span class="trail-result-badge trail-result-${color}">${action.result}</span>`+
         `</div>`;
+      if (state === "confirm") {
+        const capturedIdx = idx;
+        node.classList.add("trail-node-confirm");
+        if (editIdx === capturedIdx) node.classList.add("trail-node-editing");
+        const delBtn = document.createElement("button");
+        delBtn.className = "trail-del-btn";
+        delBtn.textContent = "\u00D7";
+        delBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          rallyBuf.splice(capturedIdx, 1);
+          if (editIdx === capturedIdx) editIdx = null;
+          else if (editIdx !== null && editIdx > capturedIdx) editIdx--;
+          if (rallyBuf.length === 0) { resetFlow(); return; }
+          renderRallyTrail(); renderConfirm();
+        });
+        node.appendChild(delBtn);
+        node.addEventListener("click", () => {
+          editIdx = (editIdx === capturedIdx) ? null : capturedIdx;
+          renderRallyTrail(); renderConfirm();
+        });
+      }
       el.appendChild(node);
     });
 
@@ -1002,87 +1023,75 @@ const RallyFlow = (() => {
     if (!list) return;
     list.innerHTML = "";
 
-    rallyBuf.forEach((action, idx) => {
-      const pname = action.pid === "opponent"
-        ? (window.__oppName || "Opponent")
-        : (window.__players || []).find(p => String(p.id) === String(action.pid))?.name || "?";
+    if (editIdx !== null && rallyBuf[editIdx]) {
+      const capturedIdx = editIdx;
+      const action = rallyBuf[capturedIdx];
+      const { name, num } = getPlayerLabel(action.pid);
 
-      const item = document.createElement("div");
-      item.className = "fc-item";
+      const form = document.createElement("div");
+      form.className = "fc-edit-inline";
 
-      if (editIdx === idx) {
-        item.classList.add("fc-editing");
-        item.innerHTML = `<div class="fc-edit-heading">${pname} &middot; ${action.stat}</div>`;
+      const heading = document.createElement("div");
+      heading.className = "fc-edit-heading";
+      heading.textContent = (num ? "#" + num + " " : "") + name + " \u00B7 " + action.stat;
+      form.appendChild(heading);
 
-        // Player picker row
-        const pRow = document.createElement("div");
-        pRow.className = "fc-edit-row";
-        pRow.innerHTML = `<span class="fc-edit-sub">Player:</span>`;
-        const sorted = window.__freqSortedPlayers ? window.__freqSortedPlayers(action.stat) : (window.__players || []);
-        sorted.forEach(p => {
-          const pb = document.createElement("button");
-          pb.className = "fc-edit-btn" + (String(p.id) === String(action.pid) ? " active" : "");
-          pb.textContent = (p.number ? "#" + p.number + " " : "") + p.name;
-          pb.addEventListener("click", () => { rallyBuf[idx].pid = String(p.id); editIdx = null; renderConfirm(); });
-          pRow.appendChild(pb);
-        });
-        if (action.stat !== "serve") {
-          const pb = document.createElement("button");
-          pb.className = "fc-edit-btn" + (action.pid === "opponent" ? " active" : "");
-          pb.textContent = window.__oppName || "Opponent";
-          pb.addEventListener("click", () => { rallyBuf[idx].pid = "opponent"; editIdx = null; renderConfirm(); });
-          pRow.appendChild(pb);
-        }
-        item.appendChild(pRow);
-
-        // Outcome picker row
-        const oRow = document.createElement("div");
-        oRow.className = "fc-edit-row";
-        oRow.innerHTML = `<span class="fc-edit-sub">Result:</span>`;
-        getOutcomesFor(action.stat, action.pid).forEach(o => {
-          const ob = document.createElement("button");
-          ob.className = `fc-edit-btn fc-edit-${o.color}` + (o.result === action.result ? " active" : "");
-          ob.textContent = o.label;
-          ob.addEventListener("click", () => { rallyBuf[idx].result = o.result; editIdx = null; renderConfirm(); });
-          oRow.appendChild(ob);
-        });
-        item.appendChild(oRow);
-
-        const doneBtn = document.createElement("button");
-        doneBtn.className = "fc-edit-btn fc-edit-done";
-        doneBtn.textContent = "Done";
-        doneBtn.addEventListener("click", () => { editIdx = null; renderConfirm(); });
-        item.appendChild(doneBtn);
-
-      } else {
-        const cc = getActionColor(action.stat, action.result, action.pid);
-        item.innerHTML = `
-          <span class="fc-dot ${cc}"></span>
-          <span class="fc-action-text">${pname}
-            <span class="fc-stat">${action.stat}</span>
-            <span class="fc-result ${cc}">${action.result}</span>
-          </span>
-          <button class="fc-edit-ico" title="Edit">&#9998;</button>
-          <button class="fc-del-ico"  title="Delete">&#x2715;</button>
-        `;
-        item.querySelector(".fc-edit-ico").addEventListener("click", () => { editIdx = idx; renderConfirm(); });
-        item.querySelector(".fc-del-ico").addEventListener("click",  () => { rallyBuf.splice(idx,1); if(editIdx===idx) editIdx=null; renderConfirm(); });
+      // Player picker row
+      const pRow = document.createElement("div");
+      pRow.className = "fc-edit-row";
+      const pLabel = document.createElement("span");
+      pLabel.className = "fc-edit-sub";
+      pLabel.textContent = "Player:";
+      pRow.appendChild(pLabel);
+      const sorted = window.__freqSortedPlayers ? window.__freqSortedPlayers(action.stat) : (window.__players || []);
+      sorted.forEach(p => {
+        const pb = document.createElement("button");
+        pb.className = "fc-edit-btn" + (String(p.id) === String(action.pid) ? " active" : "");
+        pb.textContent = (p.number ? "#" + p.number + " " : "") + p.name;
+        pb.addEventListener("click", () => { rallyBuf[capturedIdx].pid = String(p.id); editIdx = null; renderRallyTrail(); renderConfirm(); });
+        pRow.appendChild(pb);
+      });
+      if (action.stat !== "serve") {
+        const pb = document.createElement("button");
+        pb.className = "fc-edit-btn" + (action.pid === "opponent" ? " active" : "");
+        pb.textContent = window.__oppName || "Opponent";
+        pb.addEventListener("click", () => { rallyBuf[capturedIdx].pid = "opponent"; editIdx = null; renderRallyTrail(); renderConfirm(); });
+        pRow.appendChild(pb);
       }
-      list.appendChild(item);
+      form.appendChild(pRow);
 
-      // Insert button after each item
+      // Outcome picker row
+      const oRow = document.createElement("div");
+      oRow.className = "fc-edit-row";
+      const oLabel = document.createElement("span");
+      oLabel.className = "fc-edit-sub";
+      oLabel.textContent = "Result:";
+      oRow.appendChild(oLabel);
+      getOutcomesFor(action.stat, action.pid).forEach(o => {
+        const ob = document.createElement("button");
+        ob.className = "fc-edit-btn fc-edit-" + o.color + (o.result === action.result ? " active" : "");
+        ob.textContent = o.label;
+        ob.addEventListener("click", () => { rallyBuf[capturedIdx].result = o.result; editIdx = null; renderRallyTrail(); renderConfirm(); });
+        oRow.appendChild(ob);
+      });
+      form.appendChild(oRow);
+
+      const doneBtn = document.createElement("button");
+      doneBtn.className = "fc-edit-btn fc-edit-done";
+      doneBtn.textContent = "Done";
+      doneBtn.addEventListener("click", () => { editIdx = null; renderRallyTrail(); renderConfirm(); });
+      form.appendChild(doneBtn);
+      list.appendChild(form);
+    } else {
+      const hint = document.createElement("p");
+      hint.className = "fc-tap-hint";
+      hint.textContent = "Tap any step above to edit or delete it.";
+      list.appendChild(hint);
+
       const addBtn = document.createElement("button");
       addBtn.className = "fc-insert-btn";
       addBtn.textContent = "+ add action";
-      addBtn.addEventListener("click", () => startInsert(idx + 1));
-      list.appendChild(addBtn);
-    });
-
-    if (rallyBuf.length === 0) {
-      const addBtn = document.createElement("button");
-      addBtn.className = "fc-insert-btn";
-      addBtn.textContent = "+ add action";
-      addBtn.addEventListener("click", () => startInsert(0));
+      addBtn.addEventListener("click", () => startInsert(rallyBuf.length));
       list.appendChild(addBtn);
     }
   }
