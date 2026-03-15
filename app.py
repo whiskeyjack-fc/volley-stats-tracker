@@ -304,6 +304,39 @@ def build_chart_data(player_stats):
     }
 
 
+def build_comparison_data(players_data, games):
+    """Build per-player aligned arrays for comparison charts (X-axis = games)."""
+    labels   = [f"vs {g['opponent']}" for g in games]
+    game_ids = [g["id"] for g in games]
+    players_out = []
+    for p in players_data:
+        gsm = {gr["game_id"]: gr["stats"] for gr in p["game_rows"]}
+        def _v(gid, stat, result):
+            s = gsm.get(gid)
+            return s[stat][result] if s else None
+        players_out.append({
+            "slug":         p["slug"],
+            "name":         p["name"],
+            "number":       p["number"],
+            "points_pos":   [
+                ((_v(g, "serve", "ace") or 0) + (_v(g, "attack", "kill") or 0) + (_v(g, "block", "kill") or 0))
+                if gsm.get(g) else None for g in game_ids
+            ],
+            "points_neg":   [
+                ((_v(g, "serve", "error") or 0) + (_v(g, "attack", "error") or 0) +
+                 (_v(g, "receive", "error") or 0) + (_v(g, "fault", "fault") or 0))
+                if gsm.get(g) else None for g in game_ids
+            ],
+            "serve_ace":    [_v(g, "serve",    "ace")                               for g in game_ids],
+            "serve_qual":   [gsm[g]["serve"].get("quality",   0) if gsm.get(g) else None for g in game_ids],
+            "attack_kill":  [_v(g, "attack",   "kill")                              for g in game_ids],
+            "attack_err":   [_v(g, "attack",   "error")                             for g in game_ids],
+            "receive_qual": [gsm[g]["receive"].get("quality", 0) if gsm.get(g) else None for g in game_ids],
+            "block_kill":   [_v(g, "block",    "kill")                              for g in game_ids],
+        })
+    return {"labels": labels, "players": players_out}
+
+
 def agg_team_stats(events):
     """Aggregate player events into per-stat totals with all derived fields."""
     stats = {}
@@ -456,7 +489,13 @@ def track(game_id):
     if not game:
         return "Game not found", 404
     players = db.execute("SELECT * FROM players WHERE game_id=? ORDER BY name COLLATE NOCASE", (game_id,)).fetchall()
-    return render_template("track.html", game=game, players=players, stat_results=STAT_RESULTS)
+    players_json = [{"id": p["id"], "name": p["name"], "number": p["number"]} for p in players]
+    return render_template("track.html", game=game, players=players, players_json=players_json, stat_results=STAT_RESULTS)
+
+
+@app.route("/api/health")
+def api_health():
+    return jsonify({"ok": True})
 
 
 # ── API ───────────────────────────────────────────────────────────────────────
@@ -958,7 +997,7 @@ def player_report():
     active_team      = request.args.get("team", "")       # game team_name filter
     active_club_team = request.args.get("club_team", "")  # club roster filter (by name)
     active_set_type  = request.args.get("type")
-    active_player    = request.args.get("player", "")
+    active_players   = request.args.getlist("player")
     selected_game_ids = set(int(x) for x in request.args.getlist("game") if x.isdigit())
 
     ucond, uparams = _uid_cond()
@@ -982,10 +1021,10 @@ def player_report():
         if active_team:      p["team"]      = active_team
         if active_club_team: p["club_team"] = active_club_team
         if active_set_type:  p["type"]      = active_set_type
-        if active_player:    p["player"]    = active_player
+        if active_players:   p["player"]    = list(active_players)
         p.update({k: v for k, v in overrides.items() if v is not None})
-        # drop keys explicitly set to ""
-        return {k: v for k, v in p.items() if v != ""}
+        # drop keys explicitly set to "" or empty list
+        return {k: v for k, v in p.items() if v != "" and v != []}
 
     def _base_params_no_games(**overrides):
         """Like _base_params but always drops `game` selections."""
@@ -1077,8 +1116,9 @@ def player_report():
         return render_template(
             "player_report.html",
             players_data=[], players_data_js=[],
-            player_chips=[], player_urls={"all": url_for("player_report", **_base_params(player=""))},
-            active_player=active_player,
+            player_chips=[], player_urls={},
+            active_players=active_players, is_comparison=False,
+            comparison_data_js=None, clear_comparison_url=None,
             all_seasons=all_seasons, all_game_teams=all_game_teams, all_club_teams=all_club_teams,
             active_season=active_season, active_team=active_team,
             active_club_team=active_club_team, active_set_type=active_set_type,
@@ -1204,29 +1244,38 @@ def player_report():
 
     players_data.sort(key=lambda p: p["name"].lower())
 
-    # Build player filter chips before narrowing to active_player
+    # Build player filter chips and toggle URLs
     player_chips = [{"name": p["name"], "number": p["number"], "slug": p["slug"]} for p in players_data]
-    player_urls  = {"all": url_for("player_report", **_base_params(player=""))}
-    player_urls.update({p["slug"]: url_for("player_report", **_base_params(player=p["slug"]))
-                        for p in players_data})
-
     valid_slugs = {c["slug"] for c in player_chips}
-    if not active_player or active_player not in valid_slugs:
-        active_player = player_chips[0]["slug"] if player_chips else ""
+    active_players = [s for s in active_players if s in valid_slugs]
+    if not active_players:
+        active_players = [player_chips[0]["slug"]] if player_chips else []
 
-    if active_player:
-        players_data = [p for p in players_data if p["slug"] == active_player]
+    # Toggle-URL per chip: add slug if absent, remove if already selected
+    def _player_toggle_url(slug):
+        new_list = sorted(set(active_players).symmetric_difference({slug}))
+        return url_for("player_report", **_base_params(player=new_list or []))
 
+    player_urls = {p["slug"]: _player_toggle_url(p["slug"]) for p in player_chips}
+
+    is_comparison = len(active_players) > 1
+    active_slugs  = set(active_players)
+    players_data_cmp = [p for p in players_data if p["slug"] in active_slugs]
+
+    if is_comparison:
+        players_data = players_data_cmp
+        comparison_data_js = build_comparison_data(players_data, games)
+    else:
+        players_data = [p for p in players_data_cmp if p["slug"] == active_players[0]] if active_players else []
+        comparison_data_js = None
+
+    clear_comparison_url = (
+        url_for("player_report", **_base_params(player=[active_players[0]]))
+        if is_comparison and active_players else None
+    )
+
+    # Split-by-set only available in single-player mode
     split_available = active_set_type in ("main", "reserve")
-    players_data_js = [
-        {
-            "slug":          p["slug"],
-            "chart_data":    p["chart_data"],
-            "game_set_data": p["game_set_data"],
-        }
-        for p in players_data
-    ]
-
     players_data_js = [
         {
             "slug":          p["slug"],
@@ -1242,7 +1291,10 @@ def player_report():
         players_data_js=players_data_js,
         player_chips=player_chips,
         player_urls=player_urls,
-        active_player=active_player,
+        active_players=active_players,
+        is_comparison=is_comparison,
+        comparison_data_js=comparison_data_js,
+        clear_comparison_url=clear_comparison_url,
         all_seasons=all_seasons,
         all_game_teams=all_game_teams,
         all_club_teams=all_club_teams,

@@ -959,3 +959,279 @@ body.modal-open { overflow: hidden; }
 .toast.remove  { background: rgba(232,81,74,.3); border-color: var(--red); }
 .toast.warn    { background: rgba(245,200,66,.2); border-color: var(--yellow); color: var(--yellow); }
 
+/* ── Sync pill ───────────────────────────────────────────────── */
+.sync-pill {
+  display: inline-block;
+  background: rgba(245,200,66,.18);
+  border: 1px solid var(--yellow);
+  color: var(--yellow);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.65rem;
+  white-space: nowrap;
+}
+
+/* ── Flow mode ───────────────────────────────────────────────── */
+#flow-section {
+  margin-bottom: 4rem;
+}
+
+.flow-breadcrumb {
+  font-size: 0.75rem;
+  color: var(--gray);
+  min-height: 1.4em;
+  margin-bottom: 0.6rem;
+  padding: 0.25rem 0;
+  word-break: break-word;
+  opacity: 0.8;
+}
+
+.flow-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.flow-step-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--gray);
+  margin-bottom: 0.75rem;
+}
+
+/* Type picker (Our Serve / Our Receive) */
+.flow-type-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.flow-type-btn {
+  flex: 1 1 140px;
+  padding: 1.1rem 0.75rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  text-align: center;
+}
+.flow-type-btn:hover { background: rgba(79,142,247,.18); border-color: var(--accent); }
+.flow-type-btn:active { transform: scale(0.96); }
+
+/* Player tiles */
+.flow-player-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.flow-player-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  padding: 0.7rem 0.6rem 0.5rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  user-select: none;
+}
+.flow-player-btn:hover  { background: rgba(79,142,247,.18); border-color: var(--accent); }
+.flow-player-btn:active { transform: scale(0.94); }
+.flow-player-opp {
+  border-color: var(--gray);
+  color: var(--gray);
+  opacity: 0.75;
+}
+.flow-player-opp:hover { border-color: var(--red); color: var(--text); opacity: 1; background: rgba(232,81,74,.12); }
+.fp-num  { font-size: 0.72rem; color: var(--gray); line-height: 1; }
+.fp-name { font-size: 0.9rem; font-weight: 700; line-height: 1.2; }
+
+/* Loop action buttons */
+.flow-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.flow-action-btn {
+  flex: 1 1 100px;
+  padding: 0.9rem 0.5rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  transition: background .12s, border-color .12s;
+}
+.flow-action-btn:active { transform: scale(0.95); }
+.flow-action-attack   { border-color: rgba(249,115,22,.5);  color: #fdba74; }
+.flow-action-block    { border-color: rgba(139,92,246,.5);  color: #c4b5fd; }
+.flow-action-freeball { border-color: rgba(6,182,212,.5);   color: #67e8f9; }
+.flow-action-fault    { border-color: rgba(244,63,94,.5);   color: #fda4af; }
+.flow-action-serve    { border-color: rgba(59,130,246,.5);  color: #93c5fd; }
+.flow-action-receive  { border-color: rgba(16,185,129,.5);  color: #6ee7b7; }
+.flow-action-btn:hover { filter: brightness(1.25); }
+
+/* Outcome buttons */
+.flow-outcome-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.flow-outcome-btn {
+  flex: 1 1 80px;
+  padding: 1rem 0.5rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  text-align: center;
+  transition: background .12s, border-color .12s;
+}
+.flow-outcome-btn:active { transform: scale(0.94); }
+.flow-outcome-green  { border-color: var(--green); color: var(--green);  background: rgba(62,207,111,.08); }
+.flow-outcome-red    { border-color: var(--red);   color: var(--red);    background: rgba(232,81,74,.08); }
+.flow-outcome-yellow { border-color: var(--yellow); color: var(--yellow); background: rgba(245,200,66,.08); }
+.flow-outcome-green:hover  { background: rgba(62,207,111,.22); }
+.flow-outcome-red:hover    { background: rgba(232,81,74,.22); }
+.flow-outcome-yellow:hover { background: rgba(245,200,66,.18); }
+
+/* Confirm screen */
+.flow-confirm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 0.75rem;
+}
+.fc-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+  min-height: 2.5rem;
+}
+.fc-item.fc-editing {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.75rem 0.25rem;
+  background: rgba(79,142,247,.06);
+  border-radius: 6px;
+}
+.fc-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--gray);
+}
+.fc-dot.fc-green  { background: var(--green); }
+.fc-dot.fc-red    { background: var(--red); }
+.fc-dot.fc-yellow { background: var(--yellow); }
+.fc-action-text {
+  flex: 1;
+  font-size: 0.9rem;
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.fc-stat   { color: var(--gray); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; }
+.fc-result { font-weight: 700; font-size: 0.88rem; }
+.fc-result.fc-green  { color: var(--green); }
+.fc-result.fc-red    { color: var(--red); }
+.fc-result.fc-yellow { color: var(--yellow); }
+.fc-edit-ico, .fc-del-ico {
+  background: transparent;
+  border: none;
+  color: var(--gray);
+  cursor: pointer;
+  padding: 0.2rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: color .12s, background .12s;
+}
+.fc-edit-ico:hover { color: var(--accent); background: rgba(79,142,247,.15); }
+.fc-del-ico:hover  { color: var(--red);    background: rgba(232,81,74,.15); }
+.fc-edit-heading { font-size: 0.85rem; font-weight: 700; color: var(--gray); }
+.fc-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  width: 100%;
+}
+.fc-edit-sub {
+  font-size: 0.72rem;
+  color: var(--gray);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  flex-shrink: 0;
+  width: 48px;
+}
+.fc-edit-btn {
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.fc-edit-btn:hover, .fc-edit-btn.active { background: rgba(79,142,247,.2); border-color: var(--accent); }
+.fc-edit-btn.fc-edit-green  { border-color: var(--green); color: var(--green); }
+.fc-edit-btn.fc-edit-red    { border-color: var(--red);   color: var(--red); }
+.fc-edit-btn.fc-edit-yellow { border-color: var(--yellow); color: var(--yellow); }
+.fc-edit-btn.fc-edit-done   { border-color: var(--accent); color: var(--accent); margin-top: 0.2rem; }
+.fc-insert-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 0.25rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: border-color .12s, color .12s;
+  margin: 0.1rem 0;
+}
+.fc-insert-btn:hover { border-color: var(--accent); color: var(--accent); }
+.flow-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+.flow-footer {
+  padding: 0.5rem 0 1rem;
+}
+
+/* Responsive flow */
+@media (max-width: 600px) {
+  .flow-type-btn { font-size: 0.95rem; padding: 0.95rem 0.5rem; }
+  .flow-player-btn { min-width: 68px; padding: 0.55rem 0.4rem; }
+  .flow-outcome-btn { font-size: 0.9rem; padding: 0.75rem 0.3rem; }
+}
+

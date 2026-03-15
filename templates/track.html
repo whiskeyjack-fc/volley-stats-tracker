@@ -15,6 +15,9 @@
     <small>{{ game.played_at }}</small>
   </div>
   <div class="track-actions">
+    <span id="sync-pill" class="sync-pill" style="display:none"></span>
+    <button id="sync-now-btn" class="btn btn-sm btn-outline" style="display:none">↑ Sync</button>
+    <button id="mode-toggle" class="btn btn-sm btn-primary">&#9889; Flow</button>
     <button id="undo-btn" class="btn btn-outline">↩ Last</button>
     <a href="{{ url_for('report', game_id=game.id) }}" class="btn btn-primary">Report →</a>
   </div>
@@ -49,6 +52,7 @@
 
 <p class="grid-hint">Click to add &nbsp;·&nbsp; Hold to remove</p>
 
+<div id="grid-section">
 <div class="grid-wrap">
 <table class="stat-grid">
   <thead>
@@ -106,6 +110,54 @@
   </tbody>
 </table>
 </div>
+</div><!-- /#grid-section -->
+
+<!-- ── Flow mode ──────────────────────────────────────────────────────────── -->
+<div id="flow-section" class="hidden">
+
+  <!-- Breadcrumb trail -->
+  <div id="flow-breadcrumb" class="flow-breadcrumb"></div>
+
+  <!-- Step: pick serve or receive -->
+  <div id="flow-type-picker" class="flow-card">
+    <div class="flow-step-label">Start rally</div>
+    <div id="flow-type-inner" class="flow-type-row"></div>
+  </div>
+
+  <!-- Step: pick player -->
+  <div id="flow-player-step" class="flow-card hidden">
+    <div id="flow-player-label" class="flow-step-label">Who?</div>
+    <div id="flow-player-inner" class="flow-player-grid"></div>
+  </div>
+
+  <!-- Step: pick loop action (Attack / Block / Freeball / Fault) -->
+  <div id="flow-actions-step" class="flow-card hidden">
+    <div class="flow-step-label">Next action</div>
+    <div id="flow-actions-inner" class="flow-actions-row"></div>
+  </div>
+
+  <!-- Step: pick outcome -->
+  <div id="flow-outcome-step" class="flow-card hidden">
+    <div id="flow-outcome-label" class="flow-step-label">Result</div>
+    <div id="flow-outcome-inner" class="flow-outcome-row"></div>
+  </div>
+
+  <!-- Confirm screen -->
+  <div id="flow-confirm" class="flow-card hidden">
+    <div class="flow-step-label">Review rally</div>
+    <div id="flow-confirm-list" class="flow-confirm-list"></div>
+    <div class="flow-confirm-actions">
+      <button id="flow-discard-btn" class="btn btn-outline btn-sm">✕ Discard</button>
+      <button id="flow-save-btn"    class="btn btn-primary btn-sm">✓ Save rally</button>
+    </div>
+  </div>
+
+  <!-- Back + breadcrumb footer -->
+  <div class="flow-footer">
+    <button id="flow-back-btn" class="btn btn-outline btn-sm">← Back</button>
+  </div>
+
+</div><!-- /#flow-section -->
 
 <!-- Toast feedback -->
 <div id="toast" class="toast hidden"></div>
@@ -116,5 +168,5 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/tracker.js') }}"></script>
-<script>Tracker.init({{ game.id }});</script>
+<script>Tracker.init({{ game.id }}, {{ players_json | tojson }}, {{ game.opponent | tojson }});</script>
 {% endblock %}
