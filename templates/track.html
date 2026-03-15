@@ -115,7 +115,22 @@
 <!-- ── Flow mode ──────────────────────────────────────────────────────────── -->
 <div id="flow-section" class="hidden">
 
-  <!-- Breadcrumb trail -->
+  <!-- Lineup bar -->
+  <div class="flow-lineup-bar">
+    <button id="lineup-btn" class="btn btn-sm btn-outline">&#128101; Lineup <span id="lineup-count">0/7</span></button>
+  </div>
+
+  <!-- Lineup panel (slide-down) -->
+  <div id="lineup-panel" class="lineup-panel hidden">
+    <div class="lineup-panel-header">
+      <span class="lineup-panel-title">On-court players <small>(max 7)</small></span>
+      <span id="lineup-count-badge" class="lineup-count-badge">0 / 7</span>
+    </div>
+    <div id="lineup-player-grid" class="lineup-player-grid"></div>
+    <div class="lineup-panel-footer">
+      <button id="lineup-done-btn" class="btn btn-primary btn-sm">&#10003; Done</button>
+    </div>
+  </div>
   <div id="flow-breadcrumb" class="flow-breadcrumb"></div>
 
   <!-- Step: pick serve or receive -->

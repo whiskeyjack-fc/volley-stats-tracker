@@ -366,9 +366,11 @@ const Tracker = (() => {
   }
 
   function activateSet(setId, sets) {
+    const changing = currentSetId !== setId;
     currentSetId = (currentSetId === setId) ? null : setId;  // toggle off if clicking active
     renderSetBarFromSets(sets);
     reloadStats();
+    if (changing && typeof RallyFlow !== "undefined") RallyFlow.resetLineup();
   }
 
   function renderSetBarFromSets(sets) {
@@ -658,11 +660,74 @@ const RallyFlow = (() => {
     fault:    [],
   };
 
-  let state     = "idle";
-  let rallyBuf  = [];
-  let loopStat  = null;
-  let loopPid   = null;
-  let editIdx   = null;
+  let state         = "idle";
+  let rallyBuf      = [];
+  let loopStat      = null;
+  let loopPid       = null;
+  let editIdx       = null;
+  let currentLineup = new Set(); // player ID strings, max 7
+
+  // ── Lineup helpers ────────────────────────────────────────────────────────
+
+  function getLineupSorted(stat) {
+    const all = window.__freqSortedPlayers
+      ? window.__freqSortedPlayers(stat)
+      : (window.__players || []);
+    if (currentLineup.size === 0) return all;
+    return all.filter(p => currentLineup.has(String(p.id)));
+  }
+
+  function updateLineupButton() {
+    const cnt = section("lineup-count");
+    if (cnt) cnt.textContent = `${currentLineup.size}/7`;
+    const badge = section("lineup-count-badge");
+    if (badge) badge.textContent = `${currentLineup.size} / 7`;
+  }
+
+  function renderLineupPanel() {
+    const grid = section("lineup-player-grid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    const all = window.__players || [];
+    all.forEach(p => {
+      const pid     = String(p.id);
+      const inField = currentLineup.has(pid);
+      const tile    = document.createElement("button");
+      tile.className = "lineup-tile" + (inField ? " active" : "");
+      tile.innerHTML  = (p.number ? `<span class="fp-num">#${p.number}</span>` : "")
+                      + `<span class="fp-name">${p.name}</span>`;
+      tile.addEventListener("click", () => {
+        if (currentLineup.has(pid)) {
+          currentLineup.delete(pid);
+        } else if (currentLineup.size < 7) {
+          currentLineup.add(pid);
+        }
+        tile.classList.toggle("active", currentLineup.has(pid));
+        updateLineupButton();
+        const badge = section("lineup-count-badge");
+        if (badge) badge.textContent = `${currentLineup.size} / 7`;
+      });
+      grid.appendChild(tile);
+    });
+    updateLineupButton();
+  }
+
+  function openLineupPanel() {
+    renderLineupPanel();
+    section("lineup-panel")?.classList.remove("hidden");
+  }
+
+  function closeLineupPanel() {
+    section("lineup-panel")?.classList.add("hidden");
+    if (state === "type" || state === "idle") renderTypePicker();
+  }
+
+  function resetLineup() {
+    currentLineup.clear();
+    updateLineupButton();
+    if (state !== "idle") resetFlow();
+    else renderTypePicker();
+  }
 
   function section(id) { return document.getElementById(id); }
 
@@ -690,13 +755,25 @@ const RallyFlow = (() => {
     const cont = section("flow-type-inner");
     if (!cont) return;
     cont.innerHTML = "";
-    [["serve","Our Serve"],["receive","Our Receive"]].forEach(([type, label]) => {
+    if (currentLineup.size === 0) {
+      const msg = document.createElement("p");
+      msg.className = "flow-lineup-prompt";
+      msg.textContent = "Select the on-court players before starting a rally.";
+      cont.appendChild(msg);
       const btn = document.createElement("button");
       btn.className = "flow-type-btn";
-      btn.textContent = label;
-      btn.addEventListener("click", () => onTypeChosen(type));
+      btn.textContent = "\uD83D\uDC65 Set Lineup";
+      btn.addEventListener("click", () => openLineupPanel());
       cont.appendChild(btn);
-    });
+    } else {
+      [["serve","Our Serve"],["receive","Our Receive"]].forEach(([type, label]) => {
+        const btn = document.createElement("button");
+        btn.className = "flow-type-btn";
+        btn.textContent = label;
+        btn.addEventListener("click", () => onTypeChosen(type));
+        cont.appendChild(btn);
+      });
+    }
     showOnly("flow-type-picker");
   }
 
@@ -707,7 +784,7 @@ const RallyFlow = (() => {
     const lbl = section("flow-player-label");
     if (lbl) lbl.textContent = "Who? ï¿½ " + stat;
 
-    const sorted = window.__freqSortedPlayers ? window.__freqSortedPlayers(stat) : (window.__players || []);
+    const sorted = getLineupSorted(stat);
     sorted.forEach(p => {
       const btn = document.createElement("button");
       btn.className = "flow-player-btn";
@@ -1014,9 +1091,11 @@ const RallyFlow = (() => {
     section("flow-back-btn")?.addEventListener("click", goBack);
     section("flow-save-btn")?.addEventListener("click", saveRally);
     section("flow-discard-btn")?.addEventListener("click", discardRally);
+    section("lineup-btn")?.addEventListener("click", () => openLineupPanel());
+    section("lineup-done-btn")?.addEventListener("click", () => closeLineupPanel());
     renderTypePicker();
   }
 
-  return { init, resetFlow };
+  return { init, resetFlow, resetLineup };
 })();
 

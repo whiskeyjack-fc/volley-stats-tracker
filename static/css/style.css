@@ -1228,6 +1228,105 @@ body.modal-open { overflow: hidden; }
   padding: 0.5rem 0 1rem;
 }
 
+/* ── Lineup bar & panel ───────────────────────────── */
+.flow-lineup-bar {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0 0.5rem;
+  gap: 0.5rem;
+}
+
+.lineup-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.lineup-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.lineup-panel-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--gray);
+}
+
+.lineup-panel-title small {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.lineup-count-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(79,142,247,.12);
+  border: 1px solid rgba(79,142,247,.3);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+}
+
+.lineup-player-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.lineup-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 0.55rem 0.5rem 0.4rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface2);
+  color: var(--gray);
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  user-select: none;
+}
+
+.lineup-tile:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.lineup-tile.active {
+  border-color: var(--green);
+  background: rgba(62,207,111,.12);
+  color: var(--text);
+}
+
+.lineup-tile.active .fp-num {
+  color: var(--green);
+}
+
+.lineup-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.flow-lineup-prompt {
+  font-size: 0.85rem;
+  color: var(--gray);
+  margin-bottom: 0.75rem;
+  text-align: center;
+  width: 100%;
+}
+
 /* Responsive flow */
 @media (max-width: 600px) {
   .flow-type-btn { font-size: 0.95rem; padding: 0.95rem 0.5rem; }
