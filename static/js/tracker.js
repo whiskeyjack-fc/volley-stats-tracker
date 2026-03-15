@@ -73,6 +73,7 @@ const Tracker = (() => {
   let gameId;
   let totalEvents = 0;
   let currentSetId = null;   // null = no set selected
+  let cachedSets    = [];      // latest fetched set list
   let players = [];          // [{id, name, number}] from server/cache
   let oppName  = "";
   const HOLD_MS = 500;
@@ -347,6 +348,7 @@ const Tracker = (() => {
 
   async function renderSetBar() {
     const sets = await fetchSets();
+    cachedSets = sets;
     const tabsEl = document.getElementById("set-tabs");
     const finishBtn = document.getElementById("finish-set-btn");
     if (!tabsEl) return;
@@ -373,6 +375,7 @@ const Tracker = (() => {
   }
 
   function renderSetBarFromSets(sets) {
+    cachedSets = sets;
     const tabsEl = document.getElementById("set-tabs");
     const finishBtn = document.getElementById("finish-set-btn");
     if (!tabsEl) return;
@@ -546,6 +549,11 @@ const Tracker = (() => {
     window.__updateEventCount  = updateEventCount;
     window.__showToast         = showToast;
     window.__getCurrentSetId   = () => currentSetId;
+    window.__isActiveSetFinished = () => {
+      if (!currentSetId) return false;
+      const s = cachedSets.find(x => x.id === currentSetId);
+      return s ? !!s.finished : false;
+    };
 
     document.querySelectorAll(".stat-cell").forEach(attachCellHandlers);
 
@@ -717,6 +725,10 @@ const RallyFlow = (() => {
       window.__showToast("Select a set first", "warn");
       return;
     }
+    if (window.__isActiveSetFinished && window.__isActiveSetFinished()) {
+      window.__showToast("This set is finished", "warn");
+      return;
+    }
     renderLineupPanel();
     section("lineup-panel")?.classList.remove("hidden");
   }
@@ -858,6 +870,14 @@ const RallyFlow = (() => {
       const msg = document.createElement("p");
       msg.className = "flow-lineup-prompt";
       msg.textContent = "Select a set from the set bar before starting a rally.";
+      cont.appendChild(msg);
+      showOnly("flow-type-picker");
+      return;
+    }
+    if (window.__isActiveSetFinished && window.__isActiveSetFinished()) {
+      const msg = document.createElement("p");
+      msg.className = "flow-lineup-prompt";
+      msg.textContent = "This set is finished. Select an active set to record stats.";
       cont.appendChild(msg);
       showOnly("flow-type-picker");
       return;
