@@ -673,47 +673,58 @@ const RallyFlow = (() => {
   let loopStat      = null;
   let loopPid       = null;
   let editIdx       = null;
-  let currentLineup = new Set(); // player ID strings, max 7
+  const lineupBySet = {};  // setId (string) → Set of player ID strings
 
   // ── Lineup helpers ────────────────────────────────────────────────────────
 
+  function getActiveLineup() {
+    const sid = window.__getCurrentSetId ? String(window.__getCurrentSetId()) : null;
+    if (!sid) return new Set(); // no set active — return throwaway
+    if (!lineupBySet[sid]) lineupBySet[sid] = new Set();
+    return lineupBySet[sid];
+  }
+
   function getLineupSorted(stat) {
+    const lineup = getActiveLineup();
     const all = window.__freqSortedPlayers
       ? window.__freqSortedPlayers(stat)
       : (window.__players || []);
-    if (currentLineup.size === 0) return all;
-    return all.filter(p => currentLineup.has(String(p.id)));
+    if (lineup.size === 0) return all;
+    return all.filter(p => lineup.has(String(p.id)));
   }
 
   function updateLineupButton() {
+    const size = getActiveLineup().size;
     const cnt = section("lineup-count");
-    if (cnt) cnt.textContent = `${currentLineup.size}/7`;
+    if (cnt) cnt.textContent = `${size}/7`;
     const badge = section("lineup-count-badge");
-    if (badge) badge.textContent = `${currentLineup.size} / 7`;
+    if (badge) badge.textContent = `${size} / 7`;
   }
 
   function renderLineupPanel() {
     const grid = section("lineup-player-grid");
     if (!grid) return;
     grid.innerHTML = "";
+    const lineup = getActiveLineup();
     const all = window.__players || [];
     all.forEach(p => {
       const pid     = String(p.id);
-      const inField = currentLineup.has(pid);
+      const inField = lineup.has(pid);
       const tile    = document.createElement("button");
       tile.className = "lineup-tile" + (inField ? " active" : "");
       tile.innerHTML  = (p.number ? `<span class="fp-num">#${p.number}</span>` : "")
                       + `<span class="fp-name">${p.name}</span>`;
       tile.addEventListener("click", () => {
-        if (currentLineup.has(pid)) {
-          currentLineup.delete(pid);
-        } else if (currentLineup.size < 7) {
-          currentLineup.add(pid);
+        const lu = getActiveLineup();
+        if (lu.has(pid)) {
+          lu.delete(pid);
+        } else if (lu.size < 7) {
+          lu.add(pid);
         }
-        tile.classList.toggle("active", currentLineup.has(pid));
+        tile.classList.toggle("active", lu.has(pid));
         updateLineupButton();
         const badge = section("lineup-count-badge");
-        if (badge) badge.textContent = `${currentLineup.size} / 7`;
+        if (badge) badge.textContent = `${lu.size} / 7`;
       });
       grid.appendChild(tile);
     });
@@ -739,7 +750,8 @@ const RallyFlow = (() => {
   }
 
   function resetLineup() {
-    currentLineup.clear();
+    // Called on set change — don't wipe lineup data; just reset the flow
+    // and re-render so the new set's saved lineup (if any) is loaded.
     updateLineupButton();
     if (state !== "idle") resetFlow();
     else renderTypePicker();
@@ -882,7 +894,7 @@ const RallyFlow = (() => {
       showOnly("flow-type-picker");
       return;
     }
-    if (currentLineup.size === 0) {
+    if (getActiveLineup().size === 0) {
       const msg = document.createElement("p");
       msg.className = "flow-lineup-prompt";
       msg.textContent = "Select the on-court players before starting a rally.";
