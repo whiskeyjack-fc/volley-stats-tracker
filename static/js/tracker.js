@@ -735,19 +735,93 @@ const RallyFlow = (() => {
     ["flow-type-picker","flow-player-step","flow-actions-step","flow-outcome-step","flow-confirm"]
       .forEach(id => { const el = section(id); if (el) el.classList.add("hidden"); });
     ids.forEach(id => { const el = section(id); if (el) el.classList.remove("hidden"); });
-    updateBreadcrumb();
+    renderRallyTrail();
   }
 
-  function updateBreadcrumb() {
-    const el = section("flow-breadcrumb");
+  // Stat category accent colours (matches CSS class names)
+  const STAT_COLOR = { serve:"blue", receive:"teal", attack:"orange", block:"purple", freeball:"cyan", fault:"rose" };
+
+  function getPlayerLabel(pid) {
+    if (pid === "opponent") return { name: window.__oppName || "Opponent", num: "" };
+    const p = (window.__players || []).find(p => String(p.id) === String(pid));
+    return p ? { name: p.name, num: p.number || "" } : { name: "?", num: "" };
+  }
+
+  function renderRallyTrail() {
+    const el = section("flow-trail");
     if (!el) return;
-    const crumbs = rallyBuf.map(a => {
-      const pname = a.pid === "opponent"
-        ? (window.__oppName || "Opp")
-        : (window.__players || []).find(p => String(p.id) === String(a.pid))?.name || "?";
-      return `${pname}\u00b7${a.stat}\u00b7${a.result}`;
+    el.innerHTML = "";
+
+    rallyBuf.forEach((action, idx) => {
+      if (idx > 0) {
+        const arrow = document.createElement("span");
+        arrow.className = "trail-arrow";
+        arrow.textContent = "\u2192";
+        el.appendChild(arrow);
+      }
+
+      const cc    = getActionColor(action.stat, action.result, action.pid); // "fc-green"|"fc-red"|"fc-yellow"
+      const color = cc.replace("fc-","") || "gray"; // "green"|"red"|"yellow"
+      const { name, num } = getPlayerLabel(action.pid);
+      const statColor = STAT_COLOR[action.stat] || "gray";
+
+      const node = document.createElement("div");
+      node.className = `trail-node trail-node-${color}`;
+      node.innerHTML =
+        `<div class="trail-player">${num ? `<span class="trail-num">#${num}</span>` : ""}<span class="trail-name">${name}</span></div>`+
+        `<div class="trail-badges">`+
+          `<span class="trail-stat-badge trail-stat-${statColor}">${action.stat}</span>`+
+          `<span class="trail-result-badge trail-result-${color}">${action.result}</span>`+
+        `</div>`;
+      el.appendChild(node);
     });
-    el.textContent = crumbs.join("  \u2192  ");
+
+    // Pending indicator while a step is in progress
+    if (state !== "idle" && state !== "type" && state !== "confirm") {
+      if (rallyBuf.length > 0) {
+        const arrow = document.createElement("span");
+        arrow.className = "trail-arrow trail-arrow-pending";
+        arrow.textContent = "\u2192";
+        el.appendChild(arrow);
+      }
+      const pending = document.createElement("div");
+      pending.className = "trail-node trail-node-pending";
+      pending.innerHTML = `<span class="trail-pending-label">${getStepShortLabel()}</span><span class="trail-pulse"></span>`;
+      el.appendChild(pending);
+    }
+
+    // Scroll trail to end
+    el.scrollLeft = el.scrollWidth;
+  }
+
+  function getStepShortLabel() {
+    if (state==="serve-player"||state==="serve-outcome") return "Serve";
+    if (state==="receive-player"||state==="receive-outcome") return "Receive";
+    if (state==="loop-action"||state==="insert") return "...";
+    if (state==="loop-player"||state==="insert-player") return loopStat||"-";
+    if (state==="loop-outcome"||state==="insert-outcome") return loopStat||"-";
+    return "...";
+  }
+
+  // Step header labels shown at top of each active card
+  const STEP_HEADERS = {
+    "type":           { n:1, label:"Start rally" },
+    "serve-player":   { n:1, label:"Serve — who served?" },
+    "serve-outcome":  { n:2, label:"Serve — result" },
+    "receive-player": { n:1, label:"Receive — who received?" },
+    "receive-outcome":{ n:2, label:"Receive — result" },
+    "loop-action":    { n:null, label:"Next action" },
+    "loop-player":    { n:null, label:"Who?" },
+    "loop-outcome":   { n:null, label:"Result" },
+    "confirm":        { n:null, label:"Review rally" },
+  };
+
+  function setActiveCardHeader(cardId, overrideLabel) {
+    const h = STEP_HEADERS[state];
+    const label = overrideLabel || (h ? h.label : "");
+    const stepNum = h && h.n ? `<span class="step-pill step-${rallyBuf.length+1}">${rallyBuf.length+1}<\/span>` : "";
+    const el = section(cardId)?.querySelector(".flow-step-label");
+    if (el) el.innerHTML = `${stepNum}${label}`;
   }
 
   function renderTypePicker() {
@@ -766,9 +840,9 @@ const RallyFlow = (() => {
       btn.addEventListener("click", () => openLineupPanel());
       cont.appendChild(btn);
     } else {
-      [["serve","Our Serve"],["receive","Our Receive"]].forEach(([type, label]) => {
+      [["serve","\uD83C\uDFD0 Our Serve"],["receive","\uD83E\uDD1C Our Receive"]].forEach(([type, label]) => {
         const btn = document.createElement("button");
-        btn.className = "flow-type-btn";
+        btn.className = `flow-type-btn flow-type-${type}`;
         btn.textContent = label;
         btn.addEventListener("click", () => onTypeChosen(type));
         cont.appendChild(btn);
@@ -781,8 +855,7 @@ const RallyFlow = (() => {
     const cont = section("flow-player-inner");
     if (!cont) return;
     cont.innerHTML = "";
-    const lbl = section("flow-player-label");
-    if (lbl) lbl.textContent = "Who? \u2014 " + stat;
+    setActiveCardHeader("flow-player-step", "Who? \u2014 " + stat);
 
     const sorted = getLineupSorted(stat);
     sorted.forEach(p => {
@@ -815,6 +888,7 @@ const RallyFlow = (() => {
       btn.addEventListener("click", () => onActionChosen(a.stat));
       cont.appendChild(btn);
     });
+    setActiveCardHeader("flow-actions-step");
     showOnly("flow-actions-step");
   }
 
@@ -822,15 +896,14 @@ const RallyFlow = (() => {
     const cont = section("flow-outcome-inner");
     if (!cont) return;
     cont.innerHTML = "";
-    const lbl = section("flow-outcome-label");
-    if (lbl) lbl.textContent = "Result" + (loopStat ? " \u2014 " + loopStat : "");
     outcomes.forEach(o => {
       const btn = document.createElement("button");
       btn.className = `flow-outcome-btn flow-outcome-${o.color}`;
-      btn.textContent = o.label;
+      btn.innerHTML = `<span class="fo-label">${o.label}<\/span><span class="fo-hint">${o.loop ? "continues" : o.color==="green" ? "our point" : "their point"}<\/span>`;
       btn.addEventListener("click", () => onOutcomeChosen(o));
       cont.appendChild(btn);
     });
+    setActiveCardHeader("flow-outcome-step", "Result" + (loopStat ? " \u2014 " + loopStat : ""));
     showOnly("flow-outcome-step");
   }
 
@@ -898,7 +971,7 @@ const RallyFlow = (() => {
   function commitAction(pid, stat, result) {
     rallyBuf.push({ pid, stat, result });
     if (pid !== "opponent" && window.__bumpFreq) window.__bumpFreq(pid, stat);
-    updateBreadcrumb();
+    renderRallyTrail();
   }
 
   function finaliseInsert() {
@@ -1055,8 +1128,8 @@ const RallyFlow = (() => {
 
   function resetFlow() {
     rallyBuf = []; state = "idle"; loopStat = null; loopPid = null; editIdx = null;
-    const bc = section("flow-breadcrumb");
-    if (bc) bc.textContent = "";
+    const bc = section("flow-trail");
+    if (bc) bc.innerHTML = "";
     renderTypePicker();
   }
 

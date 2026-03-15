@@ -977,14 +977,123 @@ body.modal-open { overflow: hidden; }
   margin-bottom: 4rem;
 }
 
-.flow-breadcrumb {
-  font-size: 0.75rem;
+.flow-trail {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 0.35rem 0 0.5rem;
+  margin-bottom: 0.5rem;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  min-height: 3.2rem;
+}
+.flow-trail:empty { display: none; }
+
+/* Trail node cards */
+.trail-node {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  border-left: 3px solid var(--border);
+  background: var(--surface2);
+  min-width: 72px;
+  max-width: 110px;
+  font-size: 0.7rem;
+}
+.trail-node-green  { border-left-color: var(--green); }
+.trail-node-red    { border-left-color: var(--red); }
+.trail-node-yellow { border-left-color: var(--yellow); }
+.trail-node-pending {
+  border-left-color: var(--accent);
+  opacity: 0.6;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.6rem;
+  min-width: 56px;
+}
+
+/* Arrow connector */
+.trail-arrow {
+  flex: 0 0 auto;
   color: var(--gray);
-  min-height: 1.4em;
-  margin-bottom: 0.6rem;
-  padding: 0.25rem 0;
-  word-break: break-word;
-  opacity: 0.8;
+  font-size: 0.9rem;
+  opacity: 0.55;
+}
+.trail-arrow-pending { opacity: 0.3; }
+
+/* Player label inside trail node */
+.trail-player {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.trail-num {
+  font-weight: 700;
+  font-size: 0.67rem;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.trail-name {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Badge row */
+.trail-badges {
+  display: flex;
+  gap: 0.2rem;
+  flex-wrap: wrap;
+}
+.trail-stat-badge, .trail-result-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.1rem 0.28rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+/* Stat category colors */
+.trail-stat-blue   { background: rgba(79,142,247,.18); color: #7ab0ff; }
+.trail-stat-teal   { background: rgba(56,189,166,.18); color: #5ecdb8; }
+.trail-stat-orange { background: rgba(247,147,56,.18);  color: #f7a05a; }
+.trail-stat-purple { background: rgba(168,85,247,.18);  color: #c084fc; }
+.trail-stat-cyan   { background: rgba(34,211,238,.18);  color: #44d4e8; }
+.trail-stat-rose   { background: rgba(244,63,94,.18);   color: #fb7185; }
+/* Result colors */
+.trail-result-green  { background: rgba(74,222,128,.18); color: var(--green); }
+.trail-result-red    { background: rgba(248,113,113,.18);color: var(--red); }
+.trail-result-yellow { background: rgba(253,224,71,.18); color: var(--yellow); }
+
+/* Pending pulse */
+.trail-pending-label {
+  font-size: 0.65rem;
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 0.2rem;
+}
+.trail-pulse {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: trailPulse 1s ease-in-out infinite;
+}
+@keyframes trailPulse {
+  0%,100% { opacity: .3; transform: scale(.7); }
+  50%      { opacity: 1;  transform: scale(1.2); }
 }
 
 .flow-card {
@@ -1333,4 +1442,45 @@ body.modal-open { overflow: hidden; }
   .flow-player-btn { min-width: 68px; padding: 0.55rem 0.4rem; }
   .flow-outcome-btn { font-size: 0.9rem; padding: 0.75rem 0.3rem; }
 }
+
+/* ── Step-pill in card headers ────────────────────── */
+.step-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2em; height: 1.2em;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 800;
+  margin-right: 0.35em;
+  vertical-align: middle;
+}
+
+/* ── Outcome button label + hint ─────────────────── */
+.flow-outcome-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+.fo-label {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.fo-hint {
+  font-size: 0.62rem;
+  font-weight: 500;
+  opacity: 0.65;
+  text-transform: lowercase;
+  line-height: 1;
+}
+
+/* ── Type picker serve / receive tints ───────────── */
+.flow-type-serve   { border-color: rgba(79,142,247,.55);  background: rgba(79,142,247,.07); }
+.flow-type-receive { border-color: rgba(56,189,166,.55);  background: rgba(56,189,166,.07); }
+.flow-type-serve:hover   { border-color: #4f8ef7; background: rgba(79,142,247,.18); }
+.flow-type-receive:hover { border-color: #38bda6; background: rgba(56,189,166,.18); }
 
