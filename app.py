@@ -327,12 +327,16 @@ def build_comparison_data(players_data, games):
                  (_v(g, "receive", "error") or 0) + (_v(g, "fault", "fault") or 0))
                 if gsm.get(g) else None for g in game_ids
             ],
-            "serve_ace":    [_v(g, "serve",    "ace")                               for g in game_ids],
-            "serve_qual":   [gsm[g]["serve"].get("quality",   0) if gsm.get(g) else None for g in game_ids],
+            "serve_results":   {r: [_v(g, "serve", r) for g in game_ids] for r in ["error", "1-serve", "2-serve", "3-serve", "ace"]},
+            "serve_qual":      [gsm[g]["serve"].get("quality", 0) if gsm.get(g) else None for g in game_ids],
+            "serve_fault_pct": [gsm[g]["serve"]["fault_pct"]      if gsm.get(g) else None for g in game_ids],
             "attack_kill":  [_v(g, "attack",   "kill")                              for g in game_ids],
             "attack_err":   [_v(g, "attack",   "error")                             for g in game_ids],
-            "receive_qual": [gsm[g]["receive"].get("quality", 0) if gsm.get(g) else None for g in game_ids],
-            "block_kill":   [_v(g, "block",    "kill")                              for g in game_ids],
+            "receive_results":   {r: [_v(g, "receive", r) for g in game_ids] for r in ["error", "1-receive", "2-receive", "3-receive", "overpass"]},
+            "receive_qual":      [gsm[g]["receive"].get("quality", 0) if gsm.get(g) else None for g in game_ids],
+            "receive_fault_pct": [gsm[g]["receive"]["fault_pct"]      if gsm.get(g) else None for g in game_ids],
+            "block_kill":   [_v(g, "block", "kill")  for g in game_ids],
+            "block_err":    [_v(g, "block", "error") for g in game_ids],
         })
     return {"labels": labels, "players": players_out}
 
@@ -1279,6 +1283,8 @@ def player_report():
     players_data_js = [
         {
             "slug":          p["slug"],
+            "name":          p["name"],
+            "number":        p["number"],
             "chart_data":    p["chart_data"],
             "game_set_data": p["game_set_data"],
         }

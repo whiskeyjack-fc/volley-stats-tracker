@@ -79,7 +79,8 @@ const Tracker = (() => {
   const HOLD_MS = 500;
 
   // per-session frequency counters: {pid â†’ {stat â†’ count}}
-  const freqMap = {};
+  const freqMap  = {};
+  const baseFreq = {};
 
   function bumpFreq(pid, stat) {
     if (!freqMap[pid]) freqMap[pid] = {};
@@ -88,8 +89,8 @@ const Tracker = (() => {
 
   function freqSortedPlayers(stat) {
     return [...players].sort((a, b) => {
-      const fa = (freqMap[a.id] || {})[stat] || 0;
-      const fb = (freqMap[b.id] || {})[stat] || 0;
+      const fa = ((baseFreq[a.id] || {})[stat] || 0) + ((freqMap[a.id] || {})[stat] || 0);
+      const fb = ((baseFreq[b.id] || {})[stat] || 0) + ((freqMap[b.id] || {})[stat] || 0);
       return fb - fa || (parseInt(a.number)||999) - (parseInt(b.number)||999);
     });
   }
@@ -509,6 +510,8 @@ const Tracker = (() => {
     } catch {}
     if (!data) data = await DB.getCache(`stats-${gameId}-${currentSetId}`) || {};
     let total = 0;
+    // Rebuild baseFreq from scratch (avoids double-counting on set changes)
+    Object.keys(baseFreq).forEach(k => delete baseFreq[k]);
     for (const [pid, pdata] of Object.entries(data)) {
       if (!pdata.stats) continue;
       for (const [stat, results] of Object.entries(pdata.stats)) {
@@ -517,8 +520,8 @@ const Tracker = (() => {
           setCount(pid, stat, result, count);
           total += count;
           if (pid !== "opponent" && count > 0) {
-            const existing = (freqMap[pid] || {})[stat] || 0;
-            if (existing === 0) freqMap[pid] = { ...(freqMap[pid] || {}), [stat]: count };
+            if (!baseFreq[pid]) baseFreq[pid] = {};
+            baseFreq[pid][stat] = (baseFreq[pid][stat] || 0) + count;
           }
         }
       }
@@ -546,6 +549,8 @@ const Tracker = (() => {
     window.__getCount          = getCount;
     window.__setCount          = setCount;
     window.__incrTotal         = () => { totalEvents++; };
+    window.__decrTotal         = () => { totalEvents = Math.max(0, totalEvents - 1); };
+    window.__apiDecrement      = apiDecrement;
     window.__updateEventCount  = updateEventCount;
     window.__showToast         = showToast;
     window.__getCurrentSetId   = () => currentSetId;
@@ -556,14 +561,6 @@ const Tracker = (() => {
     };
 
     document.querySelectorAll(".stat-cell").forEach(attachCellHandlers);
-
-    document.getElementById("undo-btn")?.addEventListener("click", async () => {
-      const ok = await apiUndoLast();
-      if (ok) {
-        await reloadStats();
-        showToast("Undone", "ok");
-      }
-    });
 
     document.getElementById("sync-now-btn")?.addEventListener("click", async () => {
       showToast("Syncing...", "ok");
@@ -668,13 +665,16 @@ const RallyFlow = (() => {
     fault:    [],
   };
 
-  let state         = "idle";
-  let rallyBuf      = [];
-  let loopStat      = null;
-  let loopPid       = null;
-  let editIdx       = null;
-  let lsKey         = null;  // set by init() once gameId is known
-  const lineupBySet = {};  // setId (string) → Set of player ID strings
+  let state              = "idle";
+  let rallyBuf           = [];
+  let loopStat           = null;
+  let loopPid            = null;
+  let loopOutcomePending = null;  // set by combined card; cleared when player chosen
+  let editIdx            = null;
+  let lsKey              = null;  // set by init() once gameId is known
+  let lastSavedBuf       = [];    // snapshot of last auto-saved rally (for undo)
+  let undoToastTimer     = null;
+  const lineupBySet      = {};  // setId (string) → Set of player ID strings
 
   function saveLineups() {
     if (!lsKey) return;
@@ -786,6 +786,9 @@ const RallyFlow = (() => {
     ["flow-type-picker","flow-player-step","flow-actions-step","flow-outcome-step","flow-confirm"]
       .forEach(id => { const el = section(id); if (el) el.classList.add("hidden"); });
     ids.forEach(id => { const el = section(id); if (el) el.classList.remove("hidden"); });
+    // Hide Back button at the start of a rally (nothing to go back to)
+    const backBtn = section("flow-back-btn");
+    if (backBtn) backBtn.classList.toggle("hidden", state === "type" || state === "idle");
     renderRallyTrail();
   }
 
@@ -869,7 +872,7 @@ const RallyFlow = (() => {
   function getStepShortLabel() {
     if (state==="serve-player"||state==="serve-outcome") return "Serve";
     if (state==="receive-player"||state==="receive-outcome") return "Receive";
-    if (state==="loop-action"||state==="insert") return "...";
+    if (state==="loop-combined"||state==="loop-action"||state==="insert") return "...";
     if (state==="loop-player"||state==="insert-player") return loopStat||"-";
     if (state==="loop-outcome"||state==="insert-outcome") return loopStat||"-";
     return "...";
@@ -882,6 +885,7 @@ const RallyFlow = (() => {
     "serve-outcome":  { n:2, label:"Serve — result" },
     "receive-player": { n:1, label:"Receive — who received?" },
     "receive-outcome":{ n:2, label:"Receive — result" },
+    "loop-combined":  { n:null, label:"What happened?" },
     "loop-action":    { n:null, label:"Next action" },
     "loop-player":    { n:null, label:"Who?" },
     "loop-outcome":   { n:null, label:"Result" },
@@ -945,8 +949,39 @@ const RallyFlow = (() => {
     cont.innerHTML = "";
     setActiveCardHeader("flow-player-step", "Who? \u2014 " + stat);
 
-    const sorted = getLineupSorted(stat);
-    sorted.forEach(p => {
+    const lineupList = getLineupSorted(stat);
+    const rallyCounts = {};
+    rallyBuf.forEach(a => { if (a.stat === stat) rallyCounts[String(a.pid)] = (rallyCounts[String(a.pid)] || 0) + 1; });
+    const sorted = [...lineupList].sort((a, b) => {
+      const ca = rallyCounts[String(a.id)] || 0;
+      const cb = rallyCounts[String(b.id)] || 0;
+      // tiebreak preserves the freq-sorted order from getLineupSorted
+      return cb - ca || lineupList.indexOf(a) - lineupList.indexOf(b);
+    });
+
+    // Quick-pick row: top 3 players shown larger (only when lineup > 3)
+    const quickPick = sorted.length > 3 ? sorted.slice(0, 3) : [];
+    const rest      = sorted.length > 3 ? sorted.slice(3)    : sorted;
+
+    if (quickPick.length > 0) {
+      const qpRow = document.createElement("div");
+      qpRow.className = "flow-quickpick-row";
+      quickPick.forEach(p => {
+        const btn = document.createElement("button");
+        btn.className = "flow-player-btn flow-player-qp";
+        btn.innerHTML = (p.number ? `<span class="fp-num">#${p.number}</span>` : "") + `<span class="fp-name">${p.name}</span>`;
+        btn.addEventListener("click", () => onPlayerChosen(String(p.id)));
+        qpRow.appendChild(btn);
+      });
+      cont.appendChild(qpRow);
+      if (rest.length > 0 || includeOpponent) {
+        const div = document.createElement("div");
+        div.className = "flow-player-divider";
+        cont.appendChild(div);
+      }
+    }
+
+    rest.forEach(p => {
       const btn = document.createElement("button");
       btn.className = "flow-player-btn";
       btn.innerHTML = (p.number ? `<span class="fp-num">#${p.number}</span>` : "") + `<span class="fp-name">${p.name}</span>`;
@@ -975,6 +1010,50 @@ const RallyFlow = (() => {
       btn.textContent = a.label;
       btn.addEventListener("click", () => onActionChosen(a.stat));
       cont.appendChild(btn);
+    });
+    setActiveCardHeader("flow-actions-step");
+    showOnly("flow-actions-step");
+  }
+
+  function renderCombinedActionOutcome() {
+    state = "loop-combined";
+    const cont = section("flow-actions-inner");
+    if (!cont) return;
+    cont.innerHTML = "";
+    LOOP_ACTIONS.forEach(a => {
+      const row = document.createElement("div");
+      row.className = "flow-combined-row";
+      const lbl = document.createElement("span");
+      lbl.className = `flow-combined-lbl flow-action-${a.stat}`;
+      lbl.textContent = a.label;
+      row.appendChild(lbl);
+      const outcomes = LOOP_OUTCOMES[a.stat] || [];
+      if (outcomes.length === 0) {
+        const btn = document.createElement("button");
+        btn.className = "flow-combined-btn flow-outcome-red";
+        btn.textContent = "Fault";
+        btn.addEventListener("click", () => {
+          loopStat = a.stat;
+          loopOutcomePending = { result: "fault", color: "red", loop: false };
+          state = "loop-player";
+          renderPlayerStep(loopStat, true);
+        });
+        row.appendChild(btn);
+      } else {
+        outcomes.forEach(o => {
+          const btn = document.createElement("button");
+          btn.className = `flow-combined-btn flow-outcome-${o.color}`;
+          btn.textContent = o.label;
+          btn.addEventListener("click", () => {
+            loopStat = a.stat;
+            loopOutcomePending = o;
+            state = "loop-player";
+            renderPlayerStep(loopStat, loopStat !== "serve");
+          });
+          row.appendChild(btn);
+        });
+      }
+      cont.appendChild(row);
     });
     setActiveCardHeader("flow-actions-step");
     showOnly("flow-actions-step");
@@ -1014,10 +1093,22 @@ const RallyFlow = (() => {
       state = "receive-outcome";
       renderOutcomeStep(pid === "opponent" ? RECEIVE_OPP_OUTCOMES : RECEIVE_OUR_OUTCOMES);
     } else if (state === "loop-player" || state === "insert-player") {
-      if (loopStat === "fault") {
+      if (loopOutcomePending !== null) {
+        const outcome = loopOutcomePending;
+        loopOutcomePending = null;
+        commitAction(pid, loopStat, outcome.result);
+        if (state === "insert-player") {
+          finaliseInsert();
+        } else if (outcome.loop) {
+          loopStat = null; loopPid = null;
+          renderCombinedActionOutcome();
+        } else {
+          autoSaveRally();
+        }
+      } else if (loopStat === "fault") {
         commitAction(pid, "fault", "fault");
         if (state === "insert-player") { finaliseInsert(); }
-        else { goToConfirm(); }
+        else { autoSaveRally(); }
       } else {
         state = (state === "insert-player") ? "insert-outcome" : "loop-outcome";
         renderOutcomeStep(LOOP_OUTCOMES[loopStat] || []);
@@ -1050,9 +1141,9 @@ const RallyFlow = (() => {
     commitAction(loopPid, stat, outcome.result);
     if (outcome.loop) {
       loopStat = null; loopPid = null;
-      renderActionPicker();
+      renderCombinedActionOutcome();
     } else {
-      goToConfirm();
+      autoSaveRally();
     }
   }
 
@@ -1197,13 +1288,62 @@ const RallyFlow = (() => {
     resetFlow();
   }
 
+  // Auto-save rally (happy path) — saves immediately then shows undo toast
+  async function autoSaveRally() {
+    if (rallyBuf.length === 0) { resetFlow(); return; }
+    // Dismiss any previous undo window; can't undo once a new save starts
+    section("flow-undo-toast")?.classList.add("hidden");
+    clearTimeout(undoToastTimer);
+    lastSavedBuf = [...rallyBuf];
+    for (const action of lastSavedBuf) {
+      if (window.__apiRecord) await window.__apiRecord(action.pid, action.stat, action.result);
+      const cur = window.__getCount ? window.__getCount(action.pid, action.stat, action.result) : 0;
+      if (window.__setCount) window.__setCount(action.pid, action.stat, action.result, cur + 1);
+      if (window.__incrTotal) window.__incrTotal();
+    }
+    if (window.__updateEventCount) window.__updateEventCount();
+    const count = lastSavedBuf.length;
+    resetFlow();
+    showUndoToast(count);
+  }
+
+  function showUndoToast(count) {
+    const toast = section("flow-undo-toast");
+    const msg   = section("flow-undo-msg");
+    if (!toast || !msg) return;
+    msg.textContent = `\u2713 Rally saved (${count} action${count !== 1 ? "s" : ""})`;
+    toast.classList.remove("hidden");
+    clearTimeout(undoToastTimer);
+    undoToastTimer = setTimeout(() => {
+      toast.classList.add("hidden");
+      lastSavedBuf = [];
+    }, 10000);
+  }
+
+  async function undoLastAutoSave() {
+    if (lastSavedBuf.length === 0) return;
+    section("flow-undo-toast")?.classList.add("hidden");
+    clearTimeout(undoToastTimer);
+    const toUndo = [...lastSavedBuf];
+    lastSavedBuf = [];
+    for (const action of toUndo) {
+      if (window.__apiDecrement) await window.__apiDecrement(action.pid, action.stat, action.result);
+      const cur = window.__getCount ? window.__getCount(action.pid, action.stat, action.result) : 0;
+      if (window.__setCount) window.__setCount(action.pid, action.stat, action.result, Math.max(0, cur - 1));
+      if (window.__decrTotal) window.__decrTotal();
+    }
+    if (window.__updateEventCount) window.__updateEventCount();
+    rallyBuf = [...toUndo];
+    goToConfirm();
+  }
+
   function discardRally() {
     window.__showToast("Rally discarded", "warn");
     resetFlow();
   }
 
   function resetFlow() {
-    rallyBuf = []; state = "idle"; loopStat = null; loopPid = null; editIdx = null;
+    rallyBuf = []; state = "idle"; loopStat = null; loopPid = null; loopOutcomePending = null; editIdx = null;
     const bc = section("flow-trail");
     if (bc) bc.innerHTML = "";
     renderTypePicker();
@@ -1215,7 +1355,7 @@ const RallyFlow = (() => {
       rallyBuf.pop();
       if (rallyBuf.length === 0) { resetFlow(); return; }
       loopStat = null; loopPid = null;
-      renderActionPicker();
+      renderCombinedActionOutcome();
       return;
     }
     if (["serve-outcome","serve-player","receive-outcome","receive-player","type"].includes(state)) { resetFlow(); return; }
@@ -1224,8 +1364,14 @@ const RallyFlow = (() => {
       renderPlayerStep(loopStat, loopStat !== "serve"); return;
     }
     if (state === "loop-player" || state === "insert-player") {
-      state = state === "insert-player" ? "insert" : "loop-action";
-      renderActionPicker(); return;
+      if (loopOutcomePending !== null) { loopOutcomePending = null; }
+      if (state === "insert-player") { state = "insert"; renderActionPicker(); return; }
+      renderCombinedActionOutcome(); return;
+    }
+    if (state === "loop-combined") {
+      if (rallyBuf.length > 0) rallyBuf.pop();
+      if (rallyBuf.length === 0) { resetFlow(); return; }
+      renderCombinedActionOutcome(); return;
     }
     if (state === "loop-action") {
       if (rallyBuf.length > 0) rallyBuf.pop();
@@ -1242,6 +1388,7 @@ const RallyFlow = (() => {
     section("flow-back-btn")?.addEventListener("click", goBack);
     section("flow-save-btn")?.addEventListener("click", saveRally);
     section("flow-discard-btn")?.addEventListener("click", discardRally);
+    section("flow-undo-btn")?.addEventListener("click", undoLastAutoSave);
     section("lineup-btn")?.addEventListener("click", () => openLineupPanel());
     section("lineup-done-btn")?.addEventListener("click", () => closeLineupPanel());
     renderTypePicker();
