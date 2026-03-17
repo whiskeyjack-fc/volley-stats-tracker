@@ -31,18 +31,15 @@ Load credentials from the `.env` file in the workspace root. Read the file and e
 
 If any value is missing or still set to the placeholder default, stop and tell the user to configure `.env` first.
 
-## Step 1 — Create a console
-Send a POST request to create a new bash console:
+## Step 1 — Find a running console
+New consoles require a browser session to start and cannot be used immediately via API. Instead, list existing consoles and use the first one:
 
 ```
-POST https://www.pythonanywhere.com/api/v0/user/{PA_USERNAME}/consoles/
+GET https://www.pythonanywhere.com/api/v0/user/{PA_USERNAME}/consoles/
 Authorization: Token {PA_API_TOKEN}
-Content-Type: application/json
-
-{"executable": "bash", "arguments": "", "working_directory": "/home/{PA_USERNAME}"}
 ```
 
-Extract the `id` field from the JSON response — this is the console ID needed for the next steps.
+Use the `id` of the first console in the returned array. If the array is empty, stop and tell the user to open a Bash console at pythonanywhere.com/user/{PA_USERNAME}/consoles/ and then retry.
 
 ## Step 2 — Run the deploy script
 Send the deploy command to the console:

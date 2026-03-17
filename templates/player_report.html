@@ -79,12 +79,15 @@
 
   {% if player_chips | length > 1 %}
   <div class="set-filter-bar" style="flex-wrap:wrap; gap:0.3rem 0.4rem;">
-    <span class="set-label">Player:</span>
+    <span class="set-label">{% if is_comparison %}Compare:{% else %}Player:{% endif %}</span>
     {% for chip in player_chips %}
-    <a href="{{ player_urls[chip.slug] }}" class="set-chip {% if chip.slug == active_player %}active{% endif %}">
+    <a href="{{ player_urls[chip.slug] }}" class="set-chip {% if chip.slug in active_players %}active{% endif %}">
       {% if chip.number %}#{{ chip.number }} {% endif %}{{ chip.name }}
     </a>
     {% endfor %}
+    {% if is_comparison %}
+    <a href="{{ clear_comparison_url }}" class="set-chip" title="Exit comparison — show single player">&#x2715; Clear</a>
+    {% endif %}
   </div>
   {% endif %}
   </div></div>
@@ -128,6 +131,7 @@
 
 {% else %}
 
+{% if not is_comparison %}
 {% for player in players_data %}
 <!-- ── Player Section ──────────────────────────────────────────────── -->
 <section id="player-{{ player.slug }}" class="player-section">
@@ -244,6 +248,51 @@
   </div>
 </section>
 {% endfor %}
+{% else %}
+<!-- ── Comparison section ─────────────────────────────────────────── -->
+<section id="compare-section" class="player-section">
+  <h2 class="player-section-title">
+    Comparing:
+    {% for p in players_data %}{% if not loop.first %} <span class="muted">vs</span> {% endif %}{% if p.number %}<span class="season-tag">#{{ p.number }}</span> {% endif %}{{ p.name }}{% endfor %}
+  </h2>
+
+  <!-- Points Made / Lost per Game -->
+  <div class="charts-row charts-row-wide">
+    <div class="chart-card" style="flex:1">
+      <div class="chart-title">Points Made / Lost per Game</div>
+      <div class="chart-body"><canvas id="compare-pointsChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Serve + Receive Quality -->
+  <div class="charts-row charts-row-2">
+    <div class="dual-chart-card">
+      <div class="chart-title">Serve</div>
+      <div class="dual-top"><canvas id="compare-serve-top"></canvas></div>
+      <div class="dual-sep">Quality</div>
+      <div class="dual-bottom"><canvas id="compare-serve-qual"></canvas></div>
+    </div>
+    <div class="dual-chart-card">
+      <div class="chart-title">Receive</div>
+      <div class="dual-top"><canvas id="compare-receive-top"></canvas></div>
+      <div class="dual-sep">Quality</div>
+      <div class="dual-bottom"><canvas id="compare-receive-qual"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Attack Kills + Block Kills -->
+  <div class="charts-row charts-row-2">
+    <div class="chart-card">
+      <div class="chart-title">Attack Kills</div>
+      <div class="chart-body"><canvas id="compare-attack"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Block Kills</div>
+      <div class="chart-body"><canvas id="compare-block"></canvas></div>
+    </div>
+  </div>
+</section>
+{% endif %}
 
 <!-- ── Full-screen chart focus modal ──────────────────────────────────── -->
 <div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" hidden>
@@ -263,6 +312,9 @@ const QUALITY_STATS    = new Set({{ quality_stats | list | tojson }});
 const SPLIT_AVAILABLE  = {{ split_available | tojson }};
 const STAT_POS         = {{ stat_positive | tojson }};
 const STAT_NEG         = {{ stat_negative | tojson }};
+const IS_COMPARISON    = {{ is_comparison | tojson }};
+const COMPARISON_DATA  = {{ comparison_data_js | tojson }};
+const PLAYER_COLORS    = ['79,142,247','62,207,111','247,201,72','232,81,74','163,116,245','79,223,192','247,158,79','232,125,232'];
 
 const CAT_COLORS = {
   serve:    { base:"59,130,246",  results:{ error:"232,81,74", "1-serve":"249,115,22", "2-serve":"245,200,66", "3-serve":"86,190,120", ace:"16,185,129" } },
@@ -671,8 +723,375 @@ function renderNormalTables(slug) {
   });
 }
 
-// ── Initialise all players ────────────────────────────────────────────
-ALL_PLAYERS_DATA.forEach(p => initPlayerCharts(p.slug, p.chart_data));
+// ── Comparison charts initialiser ────────────────────────────────────
+function initComparisonCharts(data) {
+  const labels  = data.labels;
+  const players = data.players;
+  const pc      = PLAYER_COLORS;
+  function rgba(i, a) { return `rgba(${pc[i % pc.length]},${a})`; }
+  function rgb(i)     { return `rgb(${pc[i % pc.length]})`; }
+  function plabel(p)  { return p.number ? `#${p.number} ${p.name}` : p.name; }
+
+  // 1. Points net per player per game — grouped bar
+  (function() {
+    const datasets = players.map((p, i) => ({
+      label: plabel(p),
+      data: p.points_pos.map((pos, j) => pos === null ? null : pos - (p.points_neg[j] || 0)),
+      backgroundColor: rgba(i, .75),
+      borderColor: rgb(i),
+      borderWidth: 1,
+    }));
+    mkChart('compare-pointsChart', {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        ...base,
+        plugins: { legend },
+        scales: {
+          x: { ...xAxis },
+          y: { ...yAxis, ticks: { ...yAxis.ticks, callback: v => v < 0 ? -v : v } },
+        },
+      },
+    });
+  })();
+
+  // 2. Serve — top: stacked result-type bars (shades of player color) + err% lines, bottom: avg quality
+  (function() {
+    const SERVE_RES  = ['error', '1-serve', '2-serve', '3-serve', 'ace'];
+    const SERVE_ALPHA = { 'error': 0.2, '1-serve': 0.4, '2-serve': 0.55, '3-serve': 0.75, 'ace': 1.0 };
+    const sc = CAT_COLORS.serve.results;
+    mkChart('compare-serve-top', {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          ...SERVE_RES.flatMap(r =>
+            players.map((p, i) => ({
+              type: 'bar',
+              label: r === 'error' ? plabel(p) : RESULT_LABELS[r] || r,
+              data: (p.serve_results || {})[r] || [],
+              backgroundColor: `rgba(${pc[i % pc.length]},${SERVE_ALPHA[r]})`,
+              borderWidth: 0,
+              stack: 'p' + i,
+              yAxisID: 'y',
+            }))
+          ),
+          ...players.map((p, i) => ({
+            type: 'line',
+            label: 'Err%',
+            data: p.serve_fault_pct,
+            borderColor: rgb(i),
+            backgroundColor: 'transparent',
+            pointBackgroundColor: rgb(i),
+            pointRadius: 3, borderWidth: 2, tension: 0.3, spanGaps: false,
+            borderDash: [4, 3],
+            yAxisID: 'yPct',
+          })),
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: {
+              color: '#8891b2', font: { size: 10 },
+              filter: (item) => {
+                return item.datasetIndex < players.length;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { ...xAxis },
+          y: { ...yAxis, beginAtZero: true,
+               ticks: { ...yAxis.ticks, stepSize: 1, callback: v => Number.isInteger(v) ? v : null } },
+          yPct: { position: 'right', beginAtZero: true, max: 100,
+                  ticks: { color: 'rgba(232,81,74,.7)', font: { size: 9 }, callback: v => v + '%' },
+                  grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+    mkChart('compare-serve-qual', {
+      type: 'bar',
+      data: {
+        labels: players.map(p => plabel(p)),
+        datasets: [{
+          label: 'Quality',
+          data: players.map(p => {
+            const vals = p.serve_qual.filter(v => v !== null);
+            return vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : null;
+          }),
+          backgroundColor: 'rgba(45,185,170,.75)',
+          borderColor: 'rgb(45,185,170)',
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 16 } },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            display: true, anchor: 'end', align: 'end',
+            color: '#2db9aa', font: { size: 9 },
+            formatter: v => v == null ? '' : v.toFixed(2),
+          },
+        },
+        scales: {
+          x: { ...xAxis },
+          y: { ...yAxis, beginAtZero: true, max: 4, ticks: { ...yAxis.ticks, stepSize: 1, callback: v => v } },
+        },
+      },
+    });
+  })();
+
+  // 3. Attack kills + errors — stacked diverging per player
+  mkChart('compare-attack', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        ...players.map((p, i) => ({
+          label: plabel(p),
+          data: p.attack_kill,
+          backgroundColor: rgba(i, .75),
+          borderColor: rgb(i),
+          borderWidth: 1,
+          stack: 'p' + i,
+        })),
+        ...players.map((p, i) => ({
+          label: 'Error',
+          data: (p.attack_err || []).map(v => v !== null ? -v : null),
+          backgroundColor: rgba(i, .35),
+          borderColor: rgb(i),
+          borderWidth: 1,
+          stack: 'p' + i,
+        })),
+      ],
+    },
+    options: {
+      ...base,
+      plugins: {
+        legend: {
+          labels: {
+            color: '#8891b2', font: { size: 10 },
+            filter: item => item.datasetIndex < players.length,
+          },
+        },
+      },
+      scales: {
+        x: { ...xAxis, stacked: true },
+        y: { ...yAxis, stacked: true, ticks: { ...yAxis.ticks, stepSize: 1, callback: v => v < 0 ? -v : v } },
+      },
+    },
+  });
+
+  // 4. Receive — top: stacked result-type bars (shades of player color) + err% lines, bottom: avg quality
+  (function() {
+    const RECV_RES   = ['error', '1-receive', '2-receive', '3-receive', 'overpass'];
+    const RECV_ALPHA = { 'error': 0.2, '1-receive': 0.4, '2-receive': 0.55, '3-receive': 0.75, 'overpass': 0.9 };
+    mkChart('compare-receive-top', {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          ...RECV_RES.flatMap(r =>
+            players.map((p, i) => ({
+              type: 'bar',
+              label: r === 'error' ? plabel(p) : RESULT_LABELS[r] || r,
+              data: (p.receive_results || {})[r] || [],
+              backgroundColor: `rgba(${pc[i % pc.length]},${RECV_ALPHA[r]})`,
+              borderWidth: 0,
+              stack: 'p' + i,
+              yAxisID: 'y',
+            }))
+          ),
+          ...players.map((p, i) => ({
+            type: 'line',
+            label: 'Err%',
+            data: p.receive_fault_pct,
+            borderColor: rgb(i),
+            backgroundColor: 'transparent',
+            pointBackgroundColor: rgb(i),
+            pointRadius: 3, borderWidth: 2, tension: 0.3, spanGaps: false,
+            borderDash: [4, 3],
+            yAxisID: 'yPct',
+          })),
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: {
+              color: '#8891b2', font: { size: 10 },
+              filter: (item) => item.datasetIndex < players.length,
+            },
+          },
+        },
+        scales: {
+          x: { ...xAxis },
+          y: { ...yAxis, beginAtZero: true,
+               ticks: { ...yAxis.ticks, stepSize: 1, callback: v => Number.isInteger(v) ? v : null } },
+          yPct: { position: 'right', beginAtZero: true, max: 100,
+                  ticks: { color: 'rgba(232,81,74,.7)', font: { size: 9 }, callback: v => v + '%' },
+                  grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+    mkChart('compare-receive-qual', {
+      type: 'bar',
+      data: {
+        labels: players.map(p => plabel(p)),
+        datasets: [{
+          label: 'Quality',
+          data: players.map(p => {
+            const vals = p.receive_qual.filter(v => v !== null);
+            return vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : null;
+          }),
+          backgroundColor: 'rgba(45,185,170,.75)',
+          borderColor: 'rgb(45,185,170)',
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 16 } },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            display: true, anchor: 'end', align: 'end',
+            color: '#2db9aa', font: { size: 9 },
+            formatter: v => v == null ? '' : v.toFixed(2),
+          },
+        },
+        scales: {
+          x: { ...xAxis },
+          y: { ...yAxis, beginAtZero: true, max: 3, ticks: { ...yAxis.ticks, stepSize: 1, callback: v => v } },
+        },
+      },
+    });
+  })();
+
+  // 5. Block kills + errors — stacked diverging per player
+  mkChart('compare-block', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        ...players.map((p, i) => ({
+          label: plabel(p),
+          data: p.block_kill,
+          backgroundColor: rgba(i, .75),
+          borderColor: rgb(i),
+          borderWidth: 1,
+          stack: 'p' + i,
+        })),
+        ...players.map((p, i) => ({
+          label: 'Error',
+          data: (p.block_err || []).map(v => v !== null ? -v : null),
+          backgroundColor: rgba(i, .35),
+          borderColor: rgb(i),
+          borderWidth: 1,
+          stack: 'p' + i,
+        })),
+      ],
+    },
+    options: {
+      ...base,
+      plugins: {
+        legend: {
+          labels: {
+            color: '#8891b2', font: { size: 10 },
+            filter: item => item.datasetIndex < players.length,
+          },
+        },
+      },
+      scales: {
+        x: { ...xAxis, stacked: true },
+        y: { ...yAxis, stacked: true, ticks: { ...yAxis.ticks, stepSize: 1, callback: v => v < 0 ? -v : v } },
+      },
+    },
+  });
+}
+
+// ── Initialise charts ─────────────────────────────────────────────────
+if (IS_COMPARISON) {
+  initComparisonCharts(COMPARISON_DATA);
+} else {
+  ALL_PLAYERS_DATA.forEach(p => initPlayerCharts(p.slug, p.chart_data));
+}
+
+// ── Comparison split helper ───────────────────────────────────────────
+function computeComparisonSplitPoints(allPlayersData) {
+  // Build canonical game→sets map (merging across players)
+  const gameMap = new Map();
+  allPlayersData.forEach(p => {
+    (p.game_set_data || []).forEach(g => {
+      if (!gameMap.has(g.game_id)) {
+        gameMap.set(g.game_id, { label: g.label, sets: g.sets.map(s => s.label) });
+      } else {
+        const existing = gameMap.get(g.game_id);
+        if (g.sets.length > existing.sets.length)
+          existing.sets = g.sets.map(s => s.label);
+      }
+    });
+  });
+  const labels = [];
+  const splitGroups = [];
+  let barIdx = 0;
+  gameMap.forEach(g => {
+    g.sets.forEach(sl => labels.push(sl));
+    splitGroups.push({ name: g.label, start: barIdx, count: g.sets.length });
+    barIdx += g.sets.length;
+  });
+  const pc = PLAYER_COLORS;
+  const datasets = allPlayersData.map((p, i) => {
+    const lookup = new Map();
+    (p.game_set_data || []).forEach(g => {
+      const setMap = new Map();
+      g.sets.forEach(s => {
+        const cd = s.chart_data;
+        let net = 0;
+        Object.values(cd.points_pos || {}).forEach(arr => { net += (arr[0] || 0); });
+        Object.values(cd.points_neg || {}).forEach(arr => { net += (arr[0] || 0); });
+        setMap.set(s.label, net);
+      });
+      lookup.set(g.game_id, setMap);
+    });
+    const data = [];
+    gameMap.forEach((g, gid) => {
+      g.sets.forEach(sl => {
+        const setMap = lookup.get(gid);
+        data.push(setMap ? (setMap.get(sl) ?? 0) : 0);
+      });
+    });
+    const name = p.number ? `#${p.number} ${p.name}` : p.name;
+    return {
+      label: name,
+      data,
+      backgroundColor: `rgba(${pc[i % pc.length]},.75)`,
+      borderColor: `rgb(${pc[i % pc.length]})`,
+      borderWidth: 1,
+    };
+  });
+  return { labels, datasets, splitGroups };
+}
+
+function _mkComparePointsChart(labels, datasets) {
+  mkChart('compare-pointsChart', {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      ...base,
+      plugins: { legend },
+      scales: {
+        x: { ...xAxis },
+        y: { ...yAxis, ticks: { ...yAxis.ticks, callback: v => v < 0 ? -v : v } },
+      },
+    },
+  });
+}
 
 // ── Split-by-set toggle ───────────────────────────────────────────────
 let splitActive = false;
@@ -681,20 +1100,42 @@ if (splitBtn && SPLIT_AVAILABLE) {
   splitBtn.addEventListener('click', () => {
     splitActive = !splitActive;
     splitBtn.classList.toggle('active', splitActive);
-    ALL_PLAYERS_DATA.forEach(p => {
-      destroyPlayerCharts(p.slug);
-      if (splitActive && p.game_set_data && p.game_set_data.length) {
-        const splitCD = computeSplitCD(p.game_set_data, p.chart_data);
-        _splitGroups = splitCD.playerGroups;
-        initPlayerCharts(p.slug, splitCD);
+    if (IS_COMPARISON) {
+      // Only re-render the Points chart with per-set data
+      const chartId = 'compare-pointsChart';
+      if (chartInstances[chartId]) { chartInstances[chartId].destroy(); delete chartInstances[chartId]; delete chartRegistry[chartId]; }
+      if (splitActive) {
+        const sd = computeComparisonSplitPoints(ALL_PLAYERS_DATA);
+        _splitGroups = sd.splitGroups;
+        _mkComparePointsChart(sd.labels, sd.datasets);
         _splitGroups = null;
-        renderSplitTables(p.slug, p.game_set_data);
       } else {
-        _splitGroups = null;
-        initPlayerCharts(p.slug, p.chart_data);
-        renderNormalTables(p.slug);
+        const pc = PLAYER_COLORS;
+        const datasets = COMPARISON_DATA.players.map((p, i) => ({
+          label: p.number ? `#${p.number} ${p.name}` : p.name,
+          data: p.points_pos.map((pos, j) => pos === null ? null : pos - (p.points_neg[j] || 0)),
+          backgroundColor: `rgba(${pc[i % pc.length]},.75)`,
+          borderColor: `rgb(${pc[i % pc.length]})`,
+          borderWidth: 1,
+        }));
+        _mkComparePointsChart(COMPARISON_DATA.labels, datasets);
       }
-    });
+    } else {
+      ALL_PLAYERS_DATA.forEach(p => {
+        destroyPlayerCharts(p.slug);
+        if (splitActive && p.game_set_data && p.game_set_data.length) {
+          const splitCD = computeSplitCD(p.game_set_data, p.chart_data);
+          _splitGroups = splitCD.playerGroups;
+          initPlayerCharts(p.slug, splitCD);
+          _splitGroups = null;
+          renderSplitTables(p.slug, p.game_set_data);
+        } else {
+          _splitGroups = null;
+          initPlayerCharts(p.slug, p.chart_data);
+          renderNormalTables(p.slug);
+        }
+      });
+    }
   });
 }
 
