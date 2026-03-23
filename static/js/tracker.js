@@ -698,6 +698,8 @@ const Tracker = (() => {
     window.__apiDecrement      = apiDecrement;
     window.__updateEventCount  = updateEventCount;
     window.__showToast         = showToast;
+    window.__pushEventLog      = (entry) => { eventLog.push(entry); renderEventLog(); };
+    window.__popEventLog       = () => { eventLog.pop(); renderEventLog(); };
     window.__getCurrentSetId   = () => currentSetId;
     window.__isActiveSetFinished = () => {
       if (!currentSetId) return false;
@@ -1515,12 +1517,11 @@ const RallyFlow = (() => {
     const curHome = parseInt(document.getElementById("score-home").textContent) || 0;
     const curOpp  = parseInt(document.getElementById("score-opp").textContent)  || 0;
     updateFlowScore(curHome + _lastRallyDelta.home, curOpp + _lastRallyDelta.opp);
-    eventLog.push({
+    if (window.__pushEventLog) window.__pushEventLog({
       actions:     [...lastSavedBuf],
       scoreBefore: { home: curHome, opp: curOpp },
       scoreAfter:  { home: curHome + _lastRallyDelta.home, opp: curOpp + _lastRallyDelta.opp }
     });
-    renderEventLog();
     resetFlow();
     showUndoToast(count);
   }
@@ -1556,8 +1557,7 @@ const RallyFlow = (() => {
     const curOpp  = parseInt(document.getElementById("score-opp").textContent)  || 0;
     updateFlowScore(curHome - _lastRallyDelta.home, curOpp - _lastRallyDelta.opp);
     _lastRallyDelta = { home: 0, opp: 0 };
-    eventLog.pop();
-    renderEventLog();
+    if (window.__popEventLog) window.__popEventLog();
     goToConfirm();
   }
 
