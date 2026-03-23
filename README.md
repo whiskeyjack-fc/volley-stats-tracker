@@ -52,6 +52,7 @@ PlayerStats/
 - Flask 3.x
 - Flask-Login 0.6+
 - Flask-Limiter 3.5+ (login rate limiting)
+- Flask-WTF 1.2+ (CSRF protection)
 - Gunicorn 21+ (production only)
 
 Install dependencies:

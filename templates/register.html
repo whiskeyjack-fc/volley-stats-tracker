@@ -10,6 +10,7 @@
   {% endif %}
 
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>
       Email
       <input type="email" name="email" value="{{ email or '' }}" required autofocus>

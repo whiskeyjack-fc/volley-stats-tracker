@@ -33,6 +33,7 @@
         <td style="padding:.65rem .5rem;color:var(--muted)">{{ u.created_at[:10] }}</td>
         <td style="padding:.65rem .5rem">
           <form method="post" action="{{ url_for('admin_set_role', user_id=u.id) }}" style="display:flex;gap:.4rem;align-items:center">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label for="role-{{ u.id }}" class="sr-only">Role for {{ u.email }}</label>
             <select id="role-{{ u.id }}" name="role" style="background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .5rem;font-size:0.85rem">
               <option value="trainer"     {% if u.role == 'trainer'     %}selected{% endif %}>trainer</option>

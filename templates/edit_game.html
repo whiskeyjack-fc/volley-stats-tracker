@@ -3,6 +3,7 @@
 {% block content %}
 <h1>Edit Game</h1>
 <form method="POST" id="edit-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <section class="card">
     <h2>Game Info</h2>
     <div class="field-row">

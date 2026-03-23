@@ -9,12 +9,15 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, m
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-insecure-key-change-in-production")
+app.config["WTF_CSRF_SECRET_KEY"] = os.environ.get("WTF_CSRF_SECRET_KEY", app.secret_key)
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stats.db")
 
+csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 login_manager.login_message = "Please log in to access this page."
@@ -521,6 +524,7 @@ def api_health():
 # ── API ───────────────────────────────────────────────────────────────────────
 
 @app.route("/api/games/<int:game_id>/events", methods=["POST"])
+@csrf.exempt
 @login_required
 def record_event(game_id):
     db = get_db()
@@ -546,6 +550,7 @@ def record_event(game_id):
 
 
 @app.route("/api/games/<int:game_id>/events", methods=["DELETE"])
+@csrf.exempt
 @login_required
 def undo_event(game_id):
     """Undo the single most recent event for this game."""
@@ -563,6 +568,7 @@ def undo_event(game_id):
 
 
 @app.route("/api/games/<int:game_id>/events/decrement", methods=["POST"])
+@csrf.exempt
 @login_required
 def decrement_event(game_id):
     """Remove the most recent event matching a specific player+stat+result."""
@@ -657,6 +663,7 @@ def get_sets(game_id):
 
 
 @app.route("/api/games/<int:game_id>/sets", methods=["POST"])
+@csrf.exempt
 @login_required
 def create_set(game_id):
     db = get_db()
@@ -685,6 +692,7 @@ def create_set(game_id):
 
 
 @app.route("/api/games/<int:game_id>/sets/<int:set_id>", methods=["DELETE"])
+@csrf.exempt
 @login_required
 def delete_set(game_id, set_id):
     db = get_db()
@@ -703,6 +711,7 @@ def delete_set(game_id, set_id):
 
 
 @app.route("/api/games/<int:game_id>/sets/<int:set_id>/finish", methods=["POST"])
+@csrf.exempt
 @login_required
 def finish_set(game_id, set_id):
     db = get_db()
@@ -717,6 +726,7 @@ def finish_set(game_id, set_id):
 
 
 @app.route("/api/games/<int:game_id>/sets/<int:set_id>/reopen", methods=["POST"])
+@csrf.exempt
 @login_required
 def reopen_set(game_id, set_id):
     db = get_db()
@@ -1565,6 +1575,7 @@ def api_team_players(team_id):
 
 
 @app.route("/api/seasons", methods=["POST"])
+@csrf.exempt
 @login_required
 def api_create_season():
     data = request.get_json()

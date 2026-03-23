@@ -45,6 +45,7 @@
       {% if current_user.role == 'admin' %}<a href="{{ url_for('admin_users') }}">Admin</a>{% endif %}
       <span class="nav-user">{{ current_user.email }} <span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span></span>
       <form method="post" action="{{ url_for('logout') }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-sm btn-outline">Log out</button>
       </form>
       {% else %}

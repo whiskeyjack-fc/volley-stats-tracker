@@ -79,6 +79,8 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **`CAT_COLORS`, `RESULT_LABELS`, and the shared axis defaults (`xAxis`, `yAxis`, `legend`, `base`) live in `static/js/charts-common.js`** — included via `<script>` in `report.html`, `season_report.html`, and `player_report.html`; do not re-declare these constants inline in any template.
 - **`edit_team` and `new_team` player INSERT loops must be wrapped in try/except+rollback** — the loop runs after the parent-row INSERT; a mid-loop failure leaves the parent row committed with no children. Extend the `try` block to cover the entire sequence (parent INSERT + child loop + `db.commit()`). Add `db.rollback()` in every `except` branch, including `except sqlite3.IntegrityError` which otherwise silently leaves an open transaction.
 - **Rowcount must be checked in every UPDATE route, not just JSON API endpoints** — capture the cursor (`cur = db.execute("UPDATE ...")`), then check `if cur.rowcount == 0: return 404`. Omitting this check causes silent no-ops when a row was deleted between the auth check and the UPDATE.
+- **Flask-WTF CSRF must cover all POST forms; exempt only `/api/…` JSON routes** — enable `CSRFProtect(app)`, configure `WTF_CSRF_SECRET_KEY`, add `{{ csrf_token() }}` hidden input to every HTML POST form, and decorate every `/api/…` mutation route with `@csrf.exempt` (fetch-based routes send their own auth context and cannot include a form CSRF token).
+- **Chart label strings must use string concatenation, not template literals, when embedding user-supplied data** — template literals evaluate embedded `${}` expressions, so a crafted player name like `` ${alert(1)} `` would execute as JS. Use `(p.number ? "#" + p.number + " " : "") + p.name` instead.
 
 ---
 

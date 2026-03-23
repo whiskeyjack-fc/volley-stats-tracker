@@ -51,6 +51,7 @@
         <a class="btn btn-sm btn-outline" href="{{ url_for('export_csv', game_id=g.id) }}">CSV</a>
         <form method="POST" action="{{ url_for('delete_game', game_id=g.id) }}" class="inline-form"
               onsubmit="return confirm('Delete this game and all its stats?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-sm btn-danger">🗑 Delete</button>
         </form>
       </td>

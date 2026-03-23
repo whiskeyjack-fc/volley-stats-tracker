@@ -712,7 +712,7 @@ function initComparisonCharts(data) {
   const pc      = PLAYER_COLORS;
   function rgba(i, a) { return `rgba(${pc[i % pc.length]},${a})`; }
   function rgb(i)     { return `rgb(${pc[i % pc.length]})`; }
-  function plabel(p)  { return p.number ? `#${p.number} ${p.name}` : p.name; }
+  function plabel(p)  { return (p.number ? "#" + p.number + " " : "") + p.name; }
 
   // 1. Points net per player per game — grouped bar
   (function() {
@@ -1048,7 +1048,7 @@ function computeComparisonSplitPoints(allPlayersData) {
         data.push(setMap ? (setMap.get(sl) ?? 0) : 0);
       });
     });
-    const name = p.number ? `#${p.number} ${p.name}` : p.name;
+    const name = (p.number ? "#" + p.number + " " : "") + p.name;
     return {
       label: name,
       data,
@@ -1094,7 +1094,7 @@ if (splitBtn && SPLIT_AVAILABLE) {
       } else {
         const pc = PLAYER_COLORS;
         const datasets = COMPARISON_DATA.players.map((p, i) => ({
-          label: p.number ? `#${p.number} ${p.name}` : p.name,
+          label: (p.number ? "#" + p.number + " " : "") + p.name,
           data: p.points_pos.map((pos, j) => pos === null ? null : pos - (p.points_neg[j] || 0)),
           backgroundColor: `rgba(${pc[i % pc.length]},.75)`,
           borderColor: `rgb(${pc[i % pc.length]})`,
