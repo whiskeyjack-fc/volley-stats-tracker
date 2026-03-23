@@ -129,6 +129,7 @@ main { max-width: 1600px; margin: 0 auto; padding: 1rem 1.25rem; }
   text-align: left;
 }
 .table th { color: var(--gray); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
+.num-col { width: 80px; }
 .table tbody tr:hover { background: var(--surface2); }
 .actions { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
 .inline-form { display: inline; margin: 0; padding: 0; }
@@ -767,6 +768,7 @@ body.modal-open { overflow: hidden; }
   .stat-btn { width: 90px; font-size: 0.85rem; }
   .track-header { flex-direction: column; }
   .stat-section { flex: 1 1 100%; min-width: 0; max-width: 100%; }
+  .num-col { width: 56px; min-width: 40px; }
 }
 
 /* ── Auth pages ─────────────────────────────────────────────── */

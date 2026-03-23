@@ -83,6 +83,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Flask-WTF CSRF must cover all POST forms; exempt only `/api/…` JSON routes** — enable `CSRFProtect(app)`, configure `WTF_CSRF_SECRET_KEY`, add `{{ csrf_token() }}` hidden input to every HTML POST form, and decorate every `/api/…` mutation route with `@csrf.exempt` (fetch-based routes send their own auth context and cannot include a form CSRF token).
 - **Chart label strings must use string concatenation, not template literals, when embedding user-supplied data** — template literals evaluate embedded `${}` expressions, so a crafted player name like `` ${alert(1)} `` would execute as JS. Use `(p.number ? "#" + p.number + " " : "") + p.name` instead.
 - **`attachGridDelegation()` must be guarded with a boolean flag** — event delegation prevents per-element accumulation but does not prevent the setup function itself from being called multiple times. Add `let _gridDelegated = false;` at the module level; return immediately if already `true`, then set it to `true` after all listeners are attached.
+- **Inline `style="width:Npx"` on table columns breaks mobile layout** — always use a CSS class with a responsive media query instead (e.g. `.num-col { width: 80px; }` with `@media (max-width: 600px) { .num-col { width: 56px; min-width: 40px; } }`).
 
 ---
 
