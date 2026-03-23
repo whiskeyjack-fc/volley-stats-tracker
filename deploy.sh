@@ -10,11 +10,9 @@ git pull origin main
 
 NEW_HASH=$(git rev-parse HEAD)
 
-# Only reinstall dependencies if requirements.txt changed
-if git diff --name-only "$OLD_HASH" "$NEW_HASH" | grep -q "requirements.txt"; then
-    echo "requirements.txt changed — running pip install..."
-    workon volleystats
-    pip install -r requirements.txt
-fi
+# Always reinstall dependencies to pick up any new packages
+echo "Running pip install..."
+workon volleystats
+pip install -r requirements.txt
 
 echo "DEPLOY_DONE"
