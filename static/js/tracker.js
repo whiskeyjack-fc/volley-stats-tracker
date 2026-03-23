@@ -598,15 +598,18 @@ const Tracker = (() => {
     const gridSection = document.getElementById("grid-section");
     const flowSection = document.getElementById("flow-section");
     const btn         = document.getElementById("mode-toggle");
+    const hint        = document.querySelector(".grid-hint");
     if (!gridSection || !flowSection) return;
     if (mode === "flow") {
       gridSection.classList.add("hidden");
       flowSection.classList.remove("hidden");
       if (btn) btn.textContent = "\u2630 Grid";
+      if (hint) hint.classList.add("hidden");
     } else {
       gridSection.classList.remove("hidden");
       flowSection.classList.add("hidden");
       if (btn) btn.textContent = "\u26A1 Flow";
+      if (hint) hint.classList.remove("hidden");
     }
   }
 
