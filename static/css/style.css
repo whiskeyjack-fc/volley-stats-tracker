@@ -1632,7 +1632,7 @@ body.modal-open { overflow: hidden; }
 .flow-event-log {
   max-height: 9rem;
   overflow-y: auto;
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   background: var(--surface);
 }
 .flow-log-entry {
