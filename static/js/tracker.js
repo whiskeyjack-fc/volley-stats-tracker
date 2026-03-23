@@ -77,6 +77,7 @@ const Tracker = (() => {
   let players = [];          // [{id, name, number}] from server/cache
   let oppName  = "";
   const HOLD_MS = 500;
+  let _gridDelegated = false;
 
   // per-session frequency counters: {pid â†’ {stat â†’ count}}
   const freqMap  = {};
@@ -341,7 +342,7 @@ const Tracker = (() => {
     chip.textContent = setLabel(s);
     chip.addEventListener("click", async () => {
       const allSets = await fetchSets();
-      activateSet(s.id, allSets);
+      await activateSet(s.id, allSets);
     });
 
     const del = document.createElement("button");
@@ -376,10 +377,10 @@ const Tracker = (() => {
     await reloadStats();
   }
 
-  function activateSet(setId, sets) {
+  async function activateSet(setId, sets) {
     currentSetId = (currentSetId === setId) ? null : setId;  // toggle off if clicking active
     renderSetBarFromSets(sets);
-    reloadStats();
+    await reloadStats();
     if (typeof RallyFlow !== "undefined") RallyFlow.resetLineup();
   }
 
@@ -462,6 +463,7 @@ const Tracker = (() => {
   // â”€â”€ Long-press detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function attachGridDelegation() {
+    if (_gridDelegated) return;
     const container = document.getElementById("grid-section");
     if (!container) return;
     let holdTimer = null;
@@ -535,6 +537,7 @@ const Tracker = (() => {
     container.addEventListener("contextmenu", e => {
       if (e.target.closest(".stat-cell")) e.preventDefault();
     });
+    _gridDelegated = true;
   }
   async function reloadStats() {
     const url = currentSetId

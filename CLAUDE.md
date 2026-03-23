@@ -82,6 +82,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Rowcount must be checked in every UPDATE route, not just JSON API endpoints** — capture the cursor (`cur = db.execute("UPDATE ...")`), then check `if cur.rowcount == 0: return 404`. Omitting this check causes silent no-ops when a row was deleted between the auth check and the UPDATE.
 - **Flask-WTF CSRF must cover all POST forms; exempt only `/api/…` JSON routes** — enable `CSRFProtect(app)`, configure `WTF_CSRF_SECRET_KEY`, add `{{ csrf_token() }}` hidden input to every HTML POST form, and decorate every `/api/…` mutation route with `@csrf.exempt` (fetch-based routes send their own auth context and cannot include a form CSRF token).
 - **Chart label strings must use string concatenation, not template literals, when embedding user-supplied data** — template literals evaluate embedded `${}` expressions, so a crafted player name like `` ${alert(1)} `` would execute as JS. Use `(p.number ? "#" + p.number + " " : "") + p.name` instead.
+- **`attachGridDelegation()` must be guarded with a boolean flag** — event delegation prevents per-element accumulation but does not prevent the setup function itself from being called multiple times. Add `let _gridDelegated = false;` at the module level; return immediately if already `true`, then set it to `true` after all listeners are attached.
 
 ---
 
