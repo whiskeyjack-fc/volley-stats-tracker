@@ -154,7 +154,7 @@ const Tracker = (() => {
             showToast("Sync failed \u2013 check connection", "warn");
             _syncFailStreak = 0;
           }
-        } /* network error â€” try again next cycle */ }
+        }
       }
     } finally {
       syncInFlight = false;
