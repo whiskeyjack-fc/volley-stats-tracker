@@ -552,11 +552,11 @@ const Tracker = (() => {
     for (const k of Object.keys(stats)) {
       const s = stats[k].stats;
       if (k === "opponent") {
-        home += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.fault?.fault ?? 0);
+        home += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.freeball?.error ?? 0) + (s?.fault?.fault ?? 0);
         opp  += (s?.serve?.ace   ?? 0) + (s?.attack?.kill  ?? 0) + (s?.block?.kill  ?? 0);
       } else {
         home += (s?.serve?.ace   ?? 0) + (s?.attack?.kill  ?? 0) + (s?.block?.kill  ?? 0);
-        opp  += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.fault?.fault ?? 0);
+        opp  += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.freeball?.error ?? 0) + (s?.fault?.fault ?? 0);
       }
     }
     return { home, opp };
@@ -630,19 +630,24 @@ const Tracker = (() => {
     el.scrollTop = el.scrollHeight;
   }
 
+  // Exact scoring combos mirroring STAT_POSITIVE/STAT_NEGATIVE in app.py
+  const SCORE_OWN  = new Set(["serve.ace",   "attack.kill",  "block.kill"]);
+  const SCORE_ERR  = new Set(["serve.error",  "attack.error", "receive.error", "freeball.error", "fault.fault"]);
+
   function buildEventLogFromHistory(rawEvents) {
     eventLog = [];
     let home = 0, opp = 0;
     for (const e of rawEvents) {
       const pid   = e.player_id === null ? "opponent" : String(e.player_id);
       const isOpp = pid === "opponent";
+      const key   = e.stat + "." + e.result;
       let scoredHome = false, scoredOpp = false;
       if (!isOpp) {
-        if (e.result === "ace"   || e.result === "kill")  scoredHome = true;
-        else if (e.result === "error" || e.result === "fault") scoredOpp = true;
+        if (SCORE_OWN.has(key))  scoredHome = true;
+        else if (SCORE_ERR.has(key)) scoredOpp = true;
       } else {
-        if (e.result === "error" || e.result === "fault") scoredHome = true;
-        else if (e.result === "ace" || e.result === "kill")   scoredOpp = true;
+        if (SCORE_ERR.has(key))  scoredHome = true;
+        else if (SCORE_OWN.has(key)) scoredOpp = true;
       }
       if (!scoredHome && !scoredOpp) continue;
       if (scoredHome) home++;
@@ -1539,13 +1544,17 @@ const RallyFlow = (() => {
     if (window.__updateEventCount) window.__updateEventCount();
     const count = lastSavedBuf.length;
     const delta = { home: 0, opp: 0 };
+    const _scoreOwn = new Set(["serve.ace", "attack.kill", "block.kill"]);
+    const _scoreErr = new Set(["serve.error", "attack.error", "receive.error", "freeball.error", "fault.fault"]);
     for (const action of lastSavedBuf) {
-      if (action.pid === "opponent") {
-        if (["error","fault"].includes(action.result)) delta.home++;
-        else if (action.result === "ace" || action.result === "kill")  delta.opp++;
+      const key   = action.stat + "." + action.result;
+      const isOpp = action.pid === "opponent";
+      if (!isOpp) {
+        if (_scoreOwn.has(key)) delta.home++;
+        else if (_scoreErr.has(key)) delta.opp++;
       } else {
-        if (action.result === "ace"   || action.result === "kill")  delta.home++;
-        else if (["error","fault"].includes(action.result))          delta.opp++;
+        if (_scoreErr.has(key)) delta.home++;
+        else if (_scoreOwn.has(key)) delta.opp++;
       }
     }
     if (window.__setRallyDelta) window.__setRallyDelta(delta);
