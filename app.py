@@ -480,7 +480,7 @@ def new_game():
         names   = request.form.getlist("player_name")
         try:
             for num, name in zip(numbers, names):
-                name = name.strip()
+                name = name.strip().lower()
                 if name:
                     db.execute(
                         "INSERT INTO players (game_id, name, number) VALUES (?,?,?)",
@@ -1416,7 +1416,7 @@ def edit_game(game_id):
         numbers = request.form.getlist("player_number")
         names   = request.form.getlist("player_name")
         for num, name in zip(numbers, names):
-            name = name.strip()
+            name = name.strip().lower()
             if name:
                 db.execute(
                     "INSERT INTO players (game_id, name, number) VALUES (?,?,?)",
@@ -1487,7 +1487,7 @@ def new_team():
             numbers = request.form.getlist("player_number")
             names   = request.form.getlist("player_name")
             for num, pname in zip(numbers, names):
-                pname = pname.strip()
+                pname = pname.strip().lower()
                 if pname:
                     db.execute(
                         "INSERT INTO club_team_players (team_id, name, number) VALUES (?,?,?)",
@@ -1527,7 +1527,7 @@ def edit_team(team_id):
             numbers = request.form.getlist("player_number")
             names   = request.form.getlist("player_name")
             for num, pname in zip(numbers, names):
-                pname = pname.strip()
+                pname = pname.strip().lower()
                 if pname:
                     db.execute(
                         "INSERT INTO club_team_players (team_id, name, number) VALUES (?,?,?)",
@@ -1554,9 +1554,13 @@ def delete_team(team_id):
     ucond, uparams = _uid_cond()
     if not db.execute(f"SELECT id FROM club_teams WHERE id=?{ucond}", [team_id] + uparams).fetchone():
         return "Team not found", 404
-    db.execute("DELETE FROM club_team_players WHERE team_id=?", (team_id,))
-    db.execute("DELETE FROM club_teams WHERE id=?", (team_id,))
-    db.commit()
+    try:
+        db.execute("DELETE FROM club_team_players WHERE team_id=?", (team_id,))
+        db.execute("DELETE FROM club_teams WHERE id=?", (team_id,))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return redirect(url_for("team_list"))
 
 

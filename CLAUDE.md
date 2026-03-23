@@ -84,6 +84,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Chart label strings must use string concatenation, not template literals, when embedding user-supplied data** — template literals evaluate embedded `${}` expressions, so a crafted player name like `` ${alert(1)} `` would execute as JS. Use `(p.number ? "#" + p.number + " " : "") + p.name` instead.
 - **`attachGridDelegation()` must be guarded with a boolean flag** — event delegation prevents per-element accumulation but does not prevent the setup function itself from being called multiple times. Add `let _gridDelegated = false;` at the module level; return immediately if already `true`, then set it to `true` after all listeners are attached.
 - **Inline `style="width:Npx"` on table columns breaks mobile layout** — always use a CSS class with a responsive media query instead (e.g. `.num-col { width: 80px; }` with `@media (max-width: 600px) { .num-col { width: 56px; min-width: 40px; } }`).
+- **Player name normalisation at INSERT must use `name.strip().lower()`, not `name.strip()`** — the asymmetry between insert-time and query-time casing silently creates duplicate player identities in reports.
 
 ---
 
