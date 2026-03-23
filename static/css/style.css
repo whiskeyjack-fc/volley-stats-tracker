@@ -763,6 +763,7 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 600px) {
   .stat-btn { width: 90px; font-size: 0.85rem; }
   .track-header { flex-direction: column; }
+  .stat-section { flex: 1 1 100%; min-width: 0; max-width: 100%; }
 }
 
 /* ── Auth pages ─────────────────────────────────────────────── */
@@ -800,6 +801,7 @@ body.modal-open { overflow: hidden; }
 
 .grid-wrap {
   width: 100%;
+  overflow-x: auto;
   margin-bottom: 3.5rem;
 }
 

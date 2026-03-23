@@ -112,6 +112,21 @@
       e.preventDefault();
       document.getElementById('team-select').focus();
       alert('Please select or add a team name.');
+      return;
+    }
+    // Duplicate player-name check: block if two names normalise to the same string
+    const nameInputs = document.querySelectorAll('#players-body input[name="player_name"]');
+    const seen = new Set();
+    for (const input of nameInputs) {
+      const norm = input.value.trim().toLowerCase();
+      if (!norm) continue;
+      if (seen.has(norm)) {
+        e.preventDefault();
+        input.focus();
+        alert('Duplicate player name: "' + input.value.trim() + '". Each player must have a unique name.');
+        return;
+      }
+      seen.add(norm);
     }
   });
 

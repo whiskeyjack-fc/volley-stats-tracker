@@ -69,6 +69,9 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Event delegation prevents duplicate listener accumulation** — attaching handlers to individual cells with `forEach(attachCellHandlers)` risks double-binding if the setup code ever runs more than once. A single delegated listener on the container (`e.target.closest(".stat-cell")`) is idempotent and handles any dynamically added cells automatically.
 - **`baseFreq` + `freqMap` double-counting on reload** — `reloadStats()` rebuilds `baseFreq` from server totals which already include the in-session taps stored in `freqMap`. Fix: after rebuilding `baseFreq`, subtract `freqMap` per key so `freqSortedPlayers` returns the server total without double-counting (`baseFreq[pid][stat] = Math.max(0, serverTotal - freqMap[pid][stat])`).
 - **Never inject player-supplied names/numbers via `innerHTML`** — player names and jersey numbers come from user input and must be set via `.textContent` or `document.createElement` + `textContent`; using template literals in `.innerHTML` creates an XSS vector even for internal tools.
+- **`LOOP_OUTCOMES["fault"]` is intentionally empty** — fault auto-records after player selection; the `else if (loopStat === "fault")` branch in `onPlayerChosen` prevents falling through to an empty `renderOutcomeStep([])` which would leave the flow stuck. Do not remove that branch.
+- **Background sync interval should guard on queue length** — call `DB.getPending()` before `isOnline()`/`flushQueue()` in the `setInterval` callback; when the queue is empty there is no need to probe the network at all.
+- **Duplicate player names must be caught client-side** — `game_setup.html`'s submit handler normalises names with `.trim().toLowerCase()` and blocks submit if two entries resolve to the same string; this mirrors the server-side `name.strip().lower()` identity rule and prevents silent merging of two players into one.
 
 ---
 

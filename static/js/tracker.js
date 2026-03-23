@@ -630,8 +630,12 @@ const Tracker = (() => {
     await renderSetBar();
     updateSyncPill();
 
-    // Start background sync polling every 30 s
-    setInterval(() => { isOnline().then(on => { if (on) flushQueue(); }); }, 30000);
+    // Start background sync polling every 30 s — only when queue is non-empty
+    setInterval(async () => {
+      const pending = await DB.getPending();
+      if (pending.length === 0) return;
+      if (await isOnline()) flushQueue();
+    }, 30000);
 
     RallyFlow.init(gameId);
   }
