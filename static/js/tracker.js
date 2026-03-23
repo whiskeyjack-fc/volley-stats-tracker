@@ -101,6 +101,8 @@ const Tracker = (() => {
   let syncInFlight = false;
   let _syncFailStreak = 0;
   let _lastRallyDelta = { home: 0, opp: 0 };
+  let eventLog      = [];    // saved rally history for this set session
+  let _lastLogSetId = null;
   // localSetRef â†’ real server set_id
   const setIdMap = {};
 
@@ -571,7 +573,66 @@ const Tracker = (() => {
     }
   }
 
+  function getPlayerLabel(pid) {
+    if (pid === "opponent") return window.__oppName || "Opp";
+    const p = (window.__players || []).find(x => String(x.id) === String(pid));
+    if (!p) return "P" + pid;
+    return (p.number ? "#" + p.number + " " : "") + p.name.split(" ")[0];
+  }
+
+  function scoringAction(actions) {
+    for (const a of actions) {
+      const isOpp = a.pid === "opponent";
+      if (!isOpp && (a.result === "ace"   || a.result === "kill"))  return { action: a, forHome: true };
+      if (!isOpp && (a.result === "error" || a.result === "fault")) return { action: a, forHome: false };
+      if (isOpp  && (a.result === "error" || a.result === "fault")) return { action: a, forHome: true };
+      if (isOpp  && (a.result === "ace"   || a.result === "kill"))  return { action: a, forHome: false };
+    }
+    return null;
+  }
+
+  function renderEventLog() {
+    const el = document.getElementById("flow-event-log");
+    if (!el) return;
+    if (eventLog.length === 0 || !currentSetId) {
+      el.classList.add("hidden");
+      el.innerHTML = "";
+      return;
+    }
+    el.classList.remove("hidden");
+    el.innerHTML = "";
+    for (const entry of eventLog) {
+      const row = document.createElement("div");
+      row.className = "flow-log-entry";
+      const scored = scoringAction(entry.actions);
+      let dotClass = "flow-log-dot--nil";
+      let txt = "\u2013";
+      if (scored) {
+        dotClass = scored.forHome ? "flow-log-dot--home" : "flow-log-dot--opp";
+        const label   = getPlayerLabel(scored.action.pid);
+        const statStr = scored.action.stat;
+        const resStr  = scored.action.result;
+        txt = label + " \u00b7 " + (statStr === resStr ? statStr : statStr + " " + resStr);
+      }
+      const dot = document.createElement("span");
+      dot.className = "flow-log-dot " + dotClass;
+      dot.textContent = "\u25cf";
+      const text = document.createElement("span");
+      text.className = "flow-log-text";
+      text.textContent = txt;
+      const score = document.createElement("span");
+      score.className = "flow-log-score";
+      score.textContent = entry.scoreAfter.home + "\u2013" + entry.scoreAfter.opp;
+      row.appendChild(dot);
+      row.appendChild(text);
+      row.appendChild(score);
+      el.appendChild(row);
+    }
+    el.scrollTop = el.scrollHeight;
+  }
+
   async function reloadStats() {
+    if (_lastLogSetId !== currentSetId) { eventLog = []; _lastLogSetId = currentSetId; }
     const url = currentSetId
       ? `/api/games/${gameId}/stats?set_id=${currentSetId}`
       : `/api/games/${gameId}/stats`;
@@ -611,6 +672,7 @@ const Tracker = (() => {
     updateEventCount();
     const sc = computeScoreFromStats(data);
     updateFlowScore(sc.home, sc.opp);
+    renderEventLog();
   }
 
   // â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1453,6 +1515,12 @@ const RallyFlow = (() => {
     const curHome = parseInt(document.getElementById("score-home").textContent) || 0;
     const curOpp  = parseInt(document.getElementById("score-opp").textContent)  || 0;
     updateFlowScore(curHome + _lastRallyDelta.home, curOpp + _lastRallyDelta.opp);
+    eventLog.push({
+      actions:     [...lastSavedBuf],
+      scoreBefore: { home: curHome, opp: curOpp },
+      scoreAfter:  { home: curHome + _lastRallyDelta.home, opp: curOpp + _lastRallyDelta.opp }
+    });
+    renderEventLog();
     resetFlow();
     showUndoToast(count);
   }
@@ -1488,6 +1556,8 @@ const RallyFlow = (() => {
     const curOpp  = parseInt(document.getElementById("score-opp").textContent)  || 0;
     updateFlowScore(curHome - _lastRallyDelta.home, curOpp - _lastRallyDelta.opp);
     _lastRallyDelta = { home: 0, opp: 0 };
+    eventLog.pop();
+    renderEventLog();
     goToConfirm();
   }
 

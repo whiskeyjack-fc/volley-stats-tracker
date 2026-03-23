@@ -1629,6 +1629,46 @@ body.modal-open { overflow: hidden; }
 .flow-type-serve:hover   { border-color: #4f8ef7; background: rgba(79,142,247,.18); }
 .flow-type-receive:hover { border-color: #38bda6; background: rgba(56,189,166,.18); }
 
+.flow-event-log {
+  max-height: 9rem;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.flow-log-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.18rem 0.75rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.flow-log-entry:last-child {
+  background: var(--surface2);
+}
+.flow-log-dot {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  line-height: 1;
+}
+.flow-log-dot--home { color: var(--green); }
+.flow-log-dot--opp  { color: var(--red); }
+.flow-log-dot--nil  { color: var(--text-muted); }
+.flow-log-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.flow-log-score {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.82rem;
+  min-width: 2.8rem;
+  text-align: right;
+}
 .flow-score-bar {
   display: flex;
   align-items: center;
