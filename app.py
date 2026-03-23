@@ -679,6 +679,8 @@ def create_set(game_id):
     )
     db.commit()
     new_set = db.execute("SELECT * FROM sets WHERE id=?", (cur.lastrowid,)).fetchone()
+    if not new_set:
+        return jsonify({"error": "failed to retrieve set"}), 500
     return jsonify(dict(new_set)), 201
 
 
@@ -1392,10 +1394,12 @@ def edit_game(game_id):
         opp    = request.form["opponent"].strip()
         played = request.form.get("played_at") or game["played_at"]
         season = request.form.get("season", "").strip()
-        db.execute(
+        cur = db.execute(
             "UPDATE games SET team_name=?, opponent=?, played_at=?, season=? WHERE id=?",
             (team, opp, played, season, game_id)
         )
+        if cur.rowcount == 0:
+            return "Game not found", 404
 
         # Rebuild players: delete all then re-insert from form
         db.execute("DELETE FROM players WHERE game_id=?", (game_id,))
@@ -1429,10 +1433,14 @@ def delete_game(game_id):
     ucond, uparams = _uid_cond()
     if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return "Game not found", 404
-    db.execute("DELETE FROM events  WHERE game_id=?", (game_id,))
-    db.execute("DELETE FROM players WHERE game_id=?", (game_id,))
-    db.execute("DELETE FROM games   WHERE id=?",      (game_id,))
-    db.commit()
+    try:
+        db.execute("DELETE FROM events  WHERE game_id=?", (game_id,))
+        db.execute("DELETE FROM players WHERE game_id=?", (game_id,))
+        db.execute("DELETE FROM games   WHERE id=?",      (game_id,))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return redirect(url_for("index"))
 
 
@@ -1466,18 +1474,22 @@ def new_team():
         try:
             cur = db.execute("INSERT INTO club_teams (user_id, name) VALUES (?,?)", (current_user.id, name))
             team_id = cur.lastrowid
+            numbers = request.form.getlist("player_number")
+            names   = request.form.getlist("player_name")
+            for num, pname in zip(numbers, names):
+                pname = pname.strip()
+                if pname:
+                    db.execute(
+                        "INSERT INTO club_team_players (team_id, name, number) VALUES (?,?,?)",
+                        (team_id, pname, num.strip())
+                    )
+            db.commit()
         except sqlite3.IntegrityError:
+            db.rollback()
             return render_template("team_form.html", team=None, players=[], error="A team with this name already exists.")
-        numbers = request.form.getlist("player_number")
-        names   = request.form.getlist("player_name")
-        for num, pname in zip(numbers, names):
-            pname = pname.strip()
-            if pname:
-                db.execute(
-                    "INSERT INTO club_team_players (team_id, name, number) VALUES (?,?,?)",
-                    (team_id, pname, num.strip())
-                )
-        db.commit()
+        except Exception:
+            db.rollback()
+            raise
         return redirect(url_for("team_list"))
     return render_template("team_form.html", team=None, players=[])
 
@@ -1498,20 +1510,26 @@ def edit_team(team_id):
         if not name:
             return render_template("team_form.html", team=team, players=players, error="Team name is required.")
         try:
-            db.execute("UPDATE club_teams SET name=? WHERE id=?", (name, team_id))
+            cur = db.execute("UPDATE club_teams SET name=? WHERE id=?", (name, team_id))
+            if cur.rowcount == 0:
+                return "Team not found", 404
+            db.execute("DELETE FROM club_team_players WHERE team_id=?", (team_id,))
+            numbers = request.form.getlist("player_number")
+            names   = request.form.getlist("player_name")
+            for num, pname in zip(numbers, names):
+                pname = pname.strip()
+                if pname:
+                    db.execute(
+                        "INSERT INTO club_team_players (team_id, name, number) VALUES (?,?,?)",
+                        (team_id, pname, num.strip())
+                    )
+            db.commit()
         except sqlite3.IntegrityError:
+            db.rollback()
             return render_template("team_form.html", team=team, players=players, error="A team with this name already exists.")
-        db.execute("DELETE FROM club_team_players WHERE team_id=?", (team_id,))
-        numbers = request.form.getlist("player_number")
-        names   = request.form.getlist("player_name")
-        for num, pname in zip(numbers, names):
-            pname = pname.strip()
-            if pname:
-                db.execute(
-                    "INSERT INTO club_team_players (team_id, name, number) VALUES (?,?,?)",
-                    (team_id, pname, num.strip())
-                )
-        db.commit()
+        except Exception:
+            db.rollback()
+            raise
         return redirect(url_for("team_list"))
     players = db.execute(
         "SELECT * FROM club_team_players WHERE team_id=? ORDER BY name COLLATE NOCASE", (team_id,)

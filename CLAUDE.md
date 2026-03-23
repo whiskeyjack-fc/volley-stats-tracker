@@ -77,6 +77,8 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Wrap multi-row INSERT loops in explicit try/except + rollback** — Python's sqlite3 won't auto-rollback until the connection closes; an unhandled exception mid-loop leaves the transaction open and the caller gets an unhandled 500. Always `db.rollback()` in the except branch and return a user-facing error.
 - **`aria-expanded` must be kept in sync with toggle state** — set `aria-expanded="true/false"` as an initial attribute on toggle buttons and update it in the click handler alongside the CSS class toggle; omitting the update leaves screen readers with stale state.
 - **`CAT_COLORS`, `RESULT_LABELS`, and the shared axis defaults (`xAxis`, `yAxis`, `legend`, `base`) live in `static/js/charts-common.js`** — included via `<script>` in `report.html`, `season_report.html`, and `player_report.html`; do not re-declare these constants inline in any template.
+- **`edit_team` and `new_team` player INSERT loops must be wrapped in try/except+rollback** — the loop runs after the parent-row INSERT; a mid-loop failure leaves the parent row committed with no children. Extend the `try` block to cover the entire sequence (parent INSERT + child loop + `db.commit()`). Add `db.rollback()` in every `except` branch, including `except sqlite3.IntegrityError` which otherwise silently leaves an open transaction.
+- **Rowcount must be checked in every UPDATE route, not just JSON API endpoints** — capture the cursor (`cur = db.execute("UPDATE ...")`), then check `if cur.rowcount == 0: return 404`. Omitting this check causes silent no-ops when a row was deleted between the auth check and the UPDATE.
 
 ---
 
