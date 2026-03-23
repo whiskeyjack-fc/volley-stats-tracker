@@ -1,0 +1,2 @@
+# Enforce LF line endings for all text files to prevent CRLF issues with tooling
+* text=auto eol=lf

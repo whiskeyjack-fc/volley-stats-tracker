@@ -48,6 +48,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 | **Tracking JS stays in `tracker.js`** | Report/chart JS lives inside each template's own `<script>` block; pages don't share runtime JS |
 | **Player identity = `name.strip().lower()`** | Applied at both insert time and query time; no alias matching |
 | **`sqlite3.Row` row factory on every connection** | Set in `get_db()`; forgetting it breaks downstream `dict()` calls silently |
+| **Keep line endings as LF** | CRLF in JS/HTML/Python files breaks string-matching tools (replace, grep, patch); enforce with `.gitattributes`: `* text=auto eol=lf` |
 
 ---
 
@@ -64,6 +65,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Validate foreign-key ownership at the API boundary** — SQLite FK enforcement is off by default, so verify that a supplied `set_id` belongs to the given `game_id` with a SELECT before INSERT.
 - **Guard post-INSERT SELECT results** — `db.execute("INSERT…"); row = db.execute("SELECT…").fetchone()` can return `None` in race conditions or edge cases; always check `if not row` before accessing fields.
 - **`migrate_db` exception handling must distinguish UNIQUE/already-exists errors from real failures** — use `except Exception as exc` and log unexpected errors to `sys.stderr` rather than silently swallowing them with bare `except: pass`.
+- **CRLF line endings break string-matching tools** — `replace_string_in_file`, `grep_search`, and patch tools all fail silently or produce no matches when the file uses CRLF (`\r\n`). Set `* text=auto eol=lf` in `.gitattributes` to enforce LF repo-wide; if a CRLF file must be edited, use PowerShell `[System.IO.File]::ReadAllText` / `WriteAllText` with regex replace as a fallback.
 
 ---
 
