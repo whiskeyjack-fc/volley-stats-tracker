@@ -523,6 +523,26 @@ def api_health():
 
 # ── API ───────────────────────────────────────────────────────────────────────
 
+@app.route("/api/games/<int:game_id>/events", methods=["GET"])
+@login_required
+def get_events_list(game_id):
+    db = get_db()
+    ucond, uparams = _uid_cond()
+    if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
+        return jsonify({"error": "forbidden"}), 403
+    set_id_filter = request.args.get("set_id", type=int)
+    if set_id_filter:
+        rows = db.execute(
+            "SELECT player_id, stat, result FROM events WHERE game_id=? AND set_id=? ORDER BY id",
+            (game_id, set_id_filter)
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT player_id, stat, result FROM events WHERE game_id=? ORDER BY id",
+            (game_id,)
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
 @app.route("/api/games/<int:game_id>/events", methods=["POST"])
 @csrf.exempt
 @login_required

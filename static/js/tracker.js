@@ -102,7 +102,6 @@ const Tracker = (() => {
   let _syncFailStreak = 0;
   let _lastRallyDelta = { home: 0, opp: 0 };
   let eventLog      = [];    // saved rally history for this set session
-  let _lastLogSetId = null;
   // localSetRef â†’ real server set_id
   const setIdMap = {};
 
@@ -631,8 +630,32 @@ const Tracker = (() => {
     el.scrollTop = el.scrollHeight;
   }
 
+  function buildEventLogFromHistory(rawEvents) {
+    eventLog = [];
+    let home = 0, opp = 0;
+    for (const e of rawEvents) {
+      const pid   = e.player_id === null ? "opponent" : String(e.player_id);
+      const isOpp = pid === "opponent";
+      let scoredHome = false, scoredOpp = false;
+      if (!isOpp) {
+        if (e.result === "ace"   || e.result === "kill")  scoredHome = true;
+        else if (e.result === "error" || e.result === "fault") scoredOpp = true;
+      } else {
+        if (e.result === "error" || e.result === "fault") scoredHome = true;
+        else if (e.result === "ace" || e.result === "kill")   scoredOpp = true;
+      }
+      if (!scoredHome && !scoredOpp) continue;
+      if (scoredHome) home++;
+      if (scoredOpp)  opp++;
+      eventLog.push({
+        actions: [{ pid, stat: e.stat, result: e.result }],
+        scoreBefore: { home: scoredHome ? home - 1 : home, opp: scoredOpp ? opp - 1 : opp },
+        scoreAfter:  { home, opp }
+      });
+    }
+  }
+
   async function reloadStats() {
-    if (_lastLogSetId !== currentSetId) { eventLog = []; _lastLogSetId = currentSetId; }
     const url = currentSetId
       ? `/api/games/${gameId}/stats?set_id=${currentSetId}`
       : `/api/games/${gameId}/stats`;
@@ -672,6 +695,14 @@ const Tracker = (() => {
     updateEventCount();
     const sc = computeScoreFromStats(data);
     updateFlowScore(sc.home, sc.opp);
+    // Rebuild event log from server event history
+    try {
+      const evtUrl = currentSetId
+        ? `/api/games/${gameId}/events?set_id=${currentSetId}`
+        : `/api/games/${gameId}/events`;
+      const er = await fetch(evtUrl);
+      if (er.ok) buildEventLogFromHistory(await er.json());
+    } catch {}
     renderEventLog();
   }
 
