@@ -148,6 +148,12 @@ const Tracker = (() => {
             }
             await DB.markSynced(op.localId);
             _syncFailStreak = 0;
+          } else {
+            _syncFailStreak++;
+            if (_syncFailStreak >= 2) {
+              showToast("Sync failed \u2013 check connection", "warn");
+              _syncFailStreak = 0;
+            }
           }
         } catch {
           _syncFailStreak++;
