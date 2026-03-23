@@ -66,6 +66,9 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Guard post-INSERT SELECT results** — `db.execute("INSERT…"); row = db.execute("SELECT…").fetchone()` can return `None` in race conditions or edge cases; always check `if not row` before accessing fields.
 - **`migrate_db` exception handling must distinguish UNIQUE/already-exists errors from real failures** — use `except Exception as exc` and log unexpected errors to `sys.stderr` rather than silently swallowing them with bare `except: pass`.
 - **CRLF line endings break string-matching tools** — `replace_string_in_file`, `grep_search`, and patch tools all fail silently or produce no matches when the file uses CRLF (`\r\n`). Set `* text=auto eol=lf` in `.gitattributes` to enforce LF repo-wide; if a CRLF file must be edited, use PowerShell `[System.IO.File]::ReadAllText` / `WriteAllText` with regex replace as a fallback.
+- **Event delegation prevents duplicate listener accumulation** — attaching handlers to individual cells with `forEach(attachCellHandlers)` risks double-binding if the setup code ever runs more than once. A single delegated listener on the container (`e.target.closest(".stat-cell")`) is idempotent and handles any dynamically added cells automatically.
+- **`baseFreq` + `freqMap` double-counting on reload** — `reloadStats()` rebuilds `baseFreq` from server totals which already include the in-session taps stored in `freqMap`. Fix: after rebuilding `baseFreq`, subtract `freqMap` per key so `freqSortedPlayers` returns the server total without double-counting (`baseFreq[pid][stat] = Math.max(0, serverTotal - freqMap[pid][stat])`).
+- **Never inject player-supplied names/numbers via `innerHTML`** — player names and jersey numbers come from user input and must be set via `.textContent` or `document.createElement` + `textContent`; using template literals in `.innerHTML` creates an XSS vector even for internal tools.
 
 ---
 

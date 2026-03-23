@@ -1,4 +1,4 @@
-// â”€â”€ IndexedDB offline queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+﻿// â”€â”€ IndexedDB offline queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const DB = (() => {
   const DB_NAME  = "volleystats";
@@ -98,6 +98,7 @@ const Tracker = (() => {
   // â”€â”€ Sync helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   let syncInFlight = false;
+  let _syncFailStreak = 0;
   // localSetRef â†’ real server set_id
   const setIdMap = {};
 
@@ -145,8 +146,15 @@ const Tracker = (() => {
               if (op.localSetRef) setIdMap[op.localSetRef] = d.id;
             }
             await DB.markSynced(op.localId);
+            _syncFailStreak = 0;
           }
-        } catch { /* network error â€” try again next cycle */ }
+        } catch {
+          _syncFailStreak++;
+          if (_syncFailStreak >= 2) {
+            showToast("Sync failed \u2013 check connection", "warn");
+            _syncFailStreak = 0;
+          }
+        } /* network error â€” try again next cycle */ }
       }
     } finally {
       syncInFlight = false;
@@ -453,49 +461,81 @@ const Tracker = (() => {
 
   // â”€â”€ Long-press detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  function attachCellHandlers(td) {
-    const pid    = td.dataset.pid;
-    const stat   = td.dataset.stat;
-    const result = td.dataset.result;
+  function attachGridDelegation() {
+    const container = document.getElementById("grid-section");
+    if (!container) return;
     let holdTimer = null;
-    let fired = false;
+    let firedHold = false;
+    let activeCell = null;
 
-    function startHold(e) {
-      fired = false;
+    function startHold(td) {
+      cancelHold();
+      activeCell = td;
+      firedHold = false;
       holdTimer = setTimeout(() => {
-        fired = true;
-        onRemove(td, pid, stat, result);
+        firedHold = true;
+        onRemove(td, td.dataset.pid, td.dataset.stat, td.dataset.result);
+        activeCell = null;
       }, HOLD_MS);
     }
 
     function cancelHold() {
       clearTimeout(holdTimer);
+      holdTimer = null;
+      activeCell = null;
+      firedHold = false;
     }
 
-    function endHold(e) {
-      if (holdTimer) clearTimeout(holdTimer);
-      if (!fired) {
-        // short click â†’ add
-        onAdd(td, pid, stat, result);
-      }
+    function endHold() {
+      if (!activeCell || firedHold) { cancelHold(); return; }
+      clearTimeout(holdTimer);
+      const td = activeCell;
+      activeCell = null;
+      holdTimer = null;
+      onAdd(td, td.dataset.pid, td.dataset.stat, td.dataset.result);
     }
 
     // Mouse
-    td.addEventListener("mousedown",  startHold);
-    td.addEventListener("mouseup",    endHold);
-    td.addEventListener("mouseleave", cancelHold);
+    container.addEventListener("mousedown", e => {
+      const td = e.target.closest(".stat-cell");
+      if (td) startHold(td);
+    });
+    container.addEventListener("mouseup", endHold);
+    container.addEventListener("mouseleave", cancelHold);
+    container.addEventListener("mouseover", e => {
+      if (activeCell && e.target.closest(".stat-cell") !== activeCell) cancelHold();
+    });
 
     // Touch
-    td.addEventListener("touchstart", (e) => { e.preventDefault(); startHold(e); }, { passive: false });
-    td.addEventListener("touchend",   (e) => { e.preventDefault(); endHold(e);   }, { passive: false });
-    td.addEventListener("touchcancel",cancelHold);
+    container.addEventListener("touchstart", e => {
+      const td = e.target.closest(".stat-cell");
+      if (!td) return;
+      e.preventDefault();
+      startHold(td);
+    }, { passive: false });
+    container.addEventListener("touchend", e => {
+      if (!activeCell) return;
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      const under = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (under && under.closest(".stat-cell") === activeCell) {
+        endHold();
+      } else {
+        cancelHold();
+      }
+    }, { passive: false });
+    container.addEventListener("touchcancel", cancelHold);
+    container.addEventListener("touchmove", e => {
+      if (!activeCell) return;
+      const touch = e.touches[0];
+      const under = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (!under || under.closest(".stat-cell") !== activeCell) cancelHold();
+    }, { passive: true });
 
-    // Prevent context menu on long-press on mobile
-    td.addEventListener("contextmenu", (e) => e.preventDefault());
+    container.addEventListener("contextmenu", e => {
+      if (e.target.closest(".stat-cell")) e.preventDefault();
+    });
   }
-
-  // â”€â”€ Load stats from server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
   async function reloadStats() {
     const url = currentSetId
       ? `/api/games/${gameId}/stats?set_id=${currentSetId}`
@@ -510,7 +550,7 @@ const Tracker = (() => {
     } catch {}
     if (!data) data = await DB.getCache(`stats-${gameId}-${currentSetId}`) || {};
     let total = 0;
-    // Rebuild baseFreq from scratch (avoids double-counting on set changes)
+    // Rebuild baseFreq from scratch for the current set/filter
     Object.keys(baseFreq).forEach(k => delete baseFreq[k]);
     for (const [pid, pdata] of Object.entries(data)) {
       if (!pdata.stats) continue;
@@ -524,6 +564,12 @@ const Tracker = (() => {
             baseFreq[pid][stat] = (baseFreq[pid][stat] || 0) + count;
           }
         }
+      }
+    }
+    // Subtract in-session taps from baseFreq so freqSortedPlayers = server total (no double-count)
+    for (const pid of Object.keys(baseFreq)) {
+      for (const stat of Object.keys(baseFreq[pid])) {
+        baseFreq[pid][stat] = Math.max(0, baseFreq[pid][stat] - ((freqMap[pid] || {})[stat] || 0));
       }
     }
     totalEvents = total;
@@ -560,7 +606,7 @@ const Tracker = (() => {
       return s ? !!s.finished : false;
     };
 
-    document.querySelectorAll(".stat-cell").forEach(attachCellHandlers);
+    attachGridDelegation();
 
     document.getElementById("sync-now-btn")?.addEventListener("click", async () => {
       showToast("Syncing...", "ok");
@@ -737,8 +783,16 @@ const RallyFlow = (() => {
       const inField = lineup.has(pid);
       const tile    = document.createElement("button");
       tile.className = "lineup-tile" + (inField ? " active" : "");
-      tile.innerHTML  = (p.number ? `<span class="fp-num">#${p.number}</span>` : "")
-                      + `<span class="fp-name">${p.name}</span>`;
+      if (p.number) {
+        const numSpan = document.createElement("span");
+        numSpan.className = "fp-num";
+        numSpan.textContent = "#" + p.number;
+        tile.appendChild(numSpan);
+      }
+      const nameSpan0 = document.createElement("span");
+      nameSpan0.className = "fp-name";
+      nameSpan0.textContent = p.name;
+      tile.appendChild(nameSpan0);
       tile.addEventListener("click", () => {
         const lu = getActiveLineup();
         if (lu.has(pid)) {
@@ -824,12 +878,30 @@ const RallyFlow = (() => {
 
       const node = document.createElement("div");
       node.className = `trail-node trail-node-${color}`;
-      node.innerHTML =
-        `<div class="trail-player">${num ? `<span class="trail-num">#${num}</span>` : ""}<span class="trail-name">${name}</span></div>`+
-        `<div class="trail-badges">`+
-          `<span class="trail-stat-badge trail-stat-${statColor}">${action.stat}</span>`+
-          `<span class="trail-result-badge trail-result-${color}">${action.result}</span>`+
-        `</div>`;
+      const playerDiv = document.createElement("div");
+      playerDiv.className = "trail-player";
+      if (num) {
+        const numSpan = document.createElement("span");
+        numSpan.className = "trail-num";
+        numSpan.textContent = "#" + num;
+        playerDiv.appendChild(numSpan);
+      }
+      const trailName = document.createElement("span");
+      trailName.className = "trail-name";
+      trailName.textContent = name;
+      playerDiv.appendChild(trailName);
+      node.appendChild(playerDiv);
+      const badgesDiv = document.createElement("div");
+      badgesDiv.className = "trail-badges";
+      const statBadge = document.createElement("span");
+      statBadge.className = `trail-stat-badge trail-stat-${statColor}`;
+      statBadge.textContent = action.stat;
+      badgesDiv.appendChild(statBadge);
+      const resultBadge = document.createElement("span");
+      resultBadge.className = `trail-result-badge trail-result-${color}`;
+      resultBadge.textContent = action.result;
+      badgesDiv.appendChild(resultBadge);
+      node.appendChild(badgesDiv);
       if (state === "confirm") {
         const capturedIdx = idx;
         node.classList.add("trail-node-confirm");
@@ -972,7 +1044,16 @@ const RallyFlow = (() => {
       quickPick.forEach(p => {
         const btn = document.createElement("button");
         btn.className = "flow-player-btn flow-player-qp";
-        btn.innerHTML = (p.number ? `<span class="fp-num">#${p.number}</span>` : "") + `<span class="fp-name">${p.name}</span>`;
+        if (p.number) {
+          const ns = document.createElement("span");
+          ns.className = "fp-num";
+          ns.textContent = "#" + p.number;
+          btn.appendChild(ns);
+        }
+        const fnSpan = document.createElement("span");
+        fnSpan.className = "fp-name";
+        fnSpan.textContent = p.name;
+        btn.appendChild(fnSpan);
         btn.addEventListener("click", () => onPlayerChosen(String(p.id)));
         qpRow.appendChild(btn);
       });
@@ -987,7 +1068,16 @@ const RallyFlow = (() => {
     rest.forEach(p => {
       const btn = document.createElement("button");
       btn.className = "flow-player-btn";
-      btn.innerHTML = (p.number ? `<span class="fp-num">#${p.number}</span>` : "") + `<span class="fp-name">${p.name}</span>`;
+      if (p.number) {
+        const ns = document.createElement("span");
+        ns.className = "fp-num";
+        ns.textContent = "#" + p.number;
+        btn.appendChild(ns);
+      }
+      const fnSpan = document.createElement("span");
+      fnSpan.className = "fp-name";
+      fnSpan.textContent = p.name;
+      btn.appendChild(fnSpan);
       btn.addEventListener("click", () => onPlayerChosen(String(p.id)));
       cont.appendChild(btn);
     });
@@ -995,7 +1085,10 @@ const RallyFlow = (() => {
     if (includeOpponent) {
       const btn = document.createElement("button");
       btn.className = "flow-player-btn flow-player-opp";
-      btn.innerHTML = `<span class="fp-name">${window.__oppName || "Opponent"}</span>`;
+      const oppSpan = document.createElement("span");
+      oppSpan.className = "fp-name";
+      oppSpan.textContent = window.__oppName || "Opponent";
+      btn.appendChild(oppSpan);
       btn.addEventListener("click", () => onPlayerChosen("opponent"));
       cont.appendChild(btn);
     }
