@@ -55,6 +55,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 ## Lessons Learned
 
 - **`new Chart()` breaks fullscreen silently** — the expand button appears but re-renders a blank chart. Always `mkChart()`.
+- **`new Chart()` inside modal render callbacks bypasses `chartRegistry` just as silently as it does for inline charts** — the `mkChart()` rule applies everywhere, including inside modal open handlers. Assign a distinct ID (e.g. `srcId + '-modal'`) to the modal canvas element before calling `mkChart(id, cfg)` so it does not collide with the inline canvas already in `chartRegistry`.
 - **Missing slug prefix on a canvas ID** causes multi-player chart datasets to map to the wrong player — no JS error, just wrong data rendered.
 - **Skipping `_uid_cond()`** produces no error; a trainer simply sees other users' games. Always validate scope isolation after adding new list queries.
 - **`sqlite3.Row` row factory** must be set on every new `get_db()` call. A missing line causes `dict(row)` failures that only surface at JSON serialisation, not at query time.

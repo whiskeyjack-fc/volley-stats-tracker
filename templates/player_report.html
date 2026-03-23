@@ -319,6 +319,9 @@ const PLAYER_COLORS    = ['79,142,247','62,207,111','247,201,72','232,81,74','16
 
 const chartRegistry  = {};
 const chartInstances = {};
+const cssGreen  = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
+const cssRed    = getComputedStyle(document.documentElement).getPropertyValue('--red').trim();
+const cssBorder = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
 
 const splitGroupPlugin = {
   id: "splitGroup",
@@ -338,7 +341,7 @@ const splitGroupPlugin = {
         ctx.fillRect(x0, top, x1 - x0, bottom - top);
       }
       if (gi > 0) {
-        ctx.strokeStyle = "rgba(136,145,178,0.3)";
+        ctx.strokeStyle = cssBorder;
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 3]);
         ctx.beginPath();
@@ -347,7 +350,7 @@ const splitGroupPlugin = {
         ctx.stroke();
         ctx.setLineDash([]);
       }
-      ctx.fillStyle = "#a8b4c8";
+      ctx.fillStyle = xAxis.ticks.color;
       ctx.font = "bold 10px 'Segoe UI', system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(g.name, (x0 + x1) / 2, top - 4);
@@ -394,7 +397,7 @@ const netTotalPlugin = {
       const xPos  = x.getPixelForValue(i);
       const yPos  = chart.chartArea.bottom - 5;
       const label = net > 0 ? `+${net}` : `${net}`;
-      ctx.fillStyle = net >= 0 ? "#3ecf6f" : "#e8514a";
+      ctx.fillStyle = net >= 0 ? cssGreen : cssRed;
       ctx.fillText(label, xPos, yPos);
     }
     ctx.restore();
@@ -417,21 +420,27 @@ function openChartModal(card) {
     const topId  = card.querySelector('.dual-top canvas').id;
     const qualId = card.querySelector('.dual-bottom canvas').id;
     const topWrap = Object.assign(document.createElement('div'), { className:'modal-chart-top' });
-    const tc = document.createElement('canvas'); topWrap.appendChild(tc);
+    const tc = document.createElement('canvas');
+    tc.id = topId + '-modal';
+    topWrap.appendChild(tc);
     body.appendChild(topWrap);
     const sep = Object.assign(document.createElement('div'), { className:'dual-sep', textContent:'Quality' });
     body.appendChild(sep);
     const qualWrap = Object.assign(document.createElement('div'), { className:'modal-chart-qual' });
-    const qc = document.createElement('canvas'); qualWrap.appendChild(qc);
+    const qc = document.createElement('canvas');
+    qc.id = qualId + '-modal';
+    qualWrap.appendChild(qc);
     body.appendChild(qualWrap);
-    if (chartRegistry[topId])  modalCharts.push(new Chart(tc,  cloneCfg(chartRegistry[topId])));
-    if (chartRegistry[qualId]) modalCharts.push(new Chart(qc, cloneCfg(chartRegistry[qualId])));
+    if (chartRegistry[topId])  modalCharts.push(mkChart(topId + '-modal', cloneCfg(chartRegistry[topId])));
+    if (chartRegistry[qualId]) modalCharts.push(mkChart(qualId + '-modal', cloneCfg(chartRegistry[qualId])));
   } else {
     const srcId = card.querySelector('canvas').id;
     const wrap = Object.assign(document.createElement('div'), { className:'modal-chart-wrap' });
-    const c = document.createElement('canvas'); wrap.appendChild(c);
+    const c = document.createElement('canvas');
+    c.id = srcId + '-modal';
+    wrap.appendChild(c);
     body.appendChild(wrap);
-    if (chartRegistry[srcId]) modalCharts.push(new Chart(c, cloneCfg(chartRegistry[srcId])));
+    if (chartRegistry[srcId]) modalCharts.push(mkChart(srcId + '-modal', cloneCfg(chartRegistry[srcId])));
   }
   document.getElementById('chart-modal').hidden = false;
   document.body.classList.add('modal-open');
@@ -450,14 +459,14 @@ function initPlayerCharts(slug, data) {
 
   // 1. Points Made / Lost
   (function(){
-    const posColors = { "Ace":"rgba(251,191,36,.9)", "Attack Kill":"rgba(62,207,111,.85)", "Block Kill":"rgba(134,239,172,.85)" };
-    const negColors = { "Serve Err":"rgba(239,68,68,.85)", "Attack Err":"rgba(220,38,38,.85)", "Receive Err":"rgba(252,165,165,.85)", "Fault":"rgba(254,202,202,.85)" };
+    const posColors = { "Ace":`rgba(${CAT_COLORS.serve.results.ace},.9)`, "Attack Kill":`rgba(${CAT_COLORS.attack.results.kill},.85)`, "Block Kill":`rgba(${CAT_COLORS.block.results.kill},.85)` };
+    const negColors = { "Serve Err":`rgba(${CAT_COLORS.serve.results.error},.85)`, "Attack Err":`rgba(${CAT_COLORS.attack.results.error},.85)`, "Receive Err":`rgba(${CAT_COLORS.receive.results.error},.85)`, "Fault":`rgba(${CAT_COLORS.fault.results.fault},.85)` };
     const datasets = [
       ...Object.entries(data.points_pos).map(([lbl, vals]) => ({
-        label: lbl, data: vals, backgroundColor: posColors[lbl]||"rgba(62,207,111,.7)", stack:"s", borderWidth:0,
+        label: lbl, data: vals, backgroundColor: posColors[lbl]||`rgba(${CAT_COLORS.attack.results.kill},.7)`, stack:"s", borderWidth:0,
       })),
       ...Object.entries(data.points_neg).map(([lbl, vals]) => ({
-        label: lbl, data: vals, backgroundColor: negColors[lbl]||"rgba(232,81,74,.7)", stack:"s", borderWidth:0,
+        label: lbl, data: vals, backgroundColor: negColors[lbl]||`rgba(${CAT_COLORS.serve.results.error},.7)`, stack:"s", borderWidth:0,
       })),
     ];
     mkChart(pfx + "pointsChart", {
@@ -487,8 +496,8 @@ function initPlayerCharts(slug, data) {
     }));
     barDatasets.push({
       type:"line", label:"Err%", data: data.fault_pct[stat],
-      borderColor:"rgba(232,81,74,.9)", backgroundColor:"transparent",
-      pointBackgroundColor:"rgba(232,81,74,.9)",
+      borderColor:`rgba(${CAT_COLORS.serve.results.error},.9)`, backgroundColor:"transparent",
+      pointBackgroundColor:`rgba(${CAT_COLORS.serve.results.error},.9)`,
       pointRadius:3, borderWidth:2, yAxisID:"yPct", tension:0.2,
     });
     mkChart(pfx + `chart-${stat}-top`, {
@@ -501,7 +510,7 @@ function initPlayerCharts(slug, data) {
           x:{ ...xAxis, stacked:true },
           y:{ ...yAxis, stacked:true, beginAtZero:true },
           yPct:{ position:"right", beginAtZero:true, max:100,
-                 ticks:{ color:"rgba(232,81,74,.7)", font:{size:9}, callback: v => v+"%" },
+                 ticks:{ color:`rgba(${CAT_COLORS.serve.results.error},.7)`, font:{size:9}, callback: v => v+"%" },
                  grid:{ drawOnChartArea:false } }
         }
       }
@@ -538,8 +547,8 @@ function initPlayerCharts(slug, data) {
     mkChart(pfx + 'chart-attack', {
       type:"bar", plugins:[netTotalPlugin],
       data:{ labels:data.players, datasets:[
-        { label:"Kill",  data:kills,  backgroundColor:"rgba(62,207,111,.78)", borderColor:"rgb(62,207,111)",  borderWidth:1, stack:"s" },
-        { label:"Error", data:errors, backgroundColor:"rgba(232,81,74,.78)",  borderColor:"rgb(232,81,74)",   borderWidth:1, stack:"s" },
+        { label:"Kill",  data:kills,  backgroundColor:`rgba(${CAT_COLORS.attack.results.kill},.78)`, borderColor:`rgb(${CAT_COLORS.attack.results.kill})`,  borderWidth:1, stack:"s" },
+        { label:"Error", data:errors, backgroundColor:`rgba(${CAT_COLORS.attack.results.error},.78)`,  borderColor:`rgb(${CAT_COLORS.attack.results.error})`,   borderWidth:1, stack:"s" },
       ]},
       options:{ ...base, scales:{
         x:{ ...xAxis, stacked:true },
@@ -555,7 +564,7 @@ function initPlayerCharts(slug, data) {
     mkChart(pfx + 'chart-block', {
       type:"bar", plugins:[netTotalPlugin],
       data:{ labels:data.players, datasets:[
-        { label:"Kill",  data:kills,  backgroundColor:"rgba(62,207,111,.78)", borderColor:"rgb(62,207,111)",  borderWidth:1, stack:"s" },
+        { label:"Kill",  data:kills,  backgroundColor:`rgba(${CAT_COLORS.block.results.kill},.78)`, borderColor:`rgb(${CAT_COLORS.block.results.kill})`,  borderWidth:1, stack:"s" },
         { label:"Error", data:errors, backgroundColor:"rgba(136,145,178,.65)", borderColor:"rgb(136,145,178)", borderWidth:1, stack:"s", neutral:true },
       ]},
       options:{ ...base, scales:{ x:{ ...xAxis, stacked:true }, y:{ ...yAxis, stacked:true,
@@ -788,7 +797,7 @@ function initComparisonCharts(data) {
           y: { ...yAxis, beginAtZero: true,
                ticks: { ...yAxis.ticks, stepSize: 1, callback: v => Number.isInteger(v) ? v : null } },
           yPct: { position: 'right', beginAtZero: true, max: 100,
-                  ticks: { color: 'rgba(232,81,74,.7)', font: { size: 9 }, callback: v => v + '%' },
+                  ticks: { color: `rgba(${CAT_COLORS.serve.results.error},.7)`, font: { size: 9 }, callback: v => v + '%' },
                   grid: { drawOnChartArea: false } },
         },
       },
@@ -916,7 +925,7 @@ function initComparisonCharts(data) {
           y: { ...yAxis, beginAtZero: true,
                ticks: { ...yAxis.ticks, stepSize: 1, callback: v => Number.isInteger(v) ? v : null } },
           yPct: { position: 'right', beginAtZero: true, max: 100,
-                  ticks: { color: 'rgba(232,81,74,.7)', font: { size: 9 }, callback: v => v + '%' },
+                  ticks: { color: `rgba(${CAT_COLORS.serve.results.error},.7)`, font: { size: 9 }, callback: v => v + '%' },
                   grid: { drawOnChartArea: false } },
         },
       },
