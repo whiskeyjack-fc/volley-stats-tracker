@@ -6,6 +6,8 @@ const CAT_COLORS = {
   block:    { base:"139,92,246",  results:{ kill:"62,207,111", error:"232,81,74" } },
   freeball: { base:"6,182,212",   results:{ error:"232,81,74", "1-freeball":"249,115,22", "2-freeball":"245,200,66", "3-freeball":"86,190,120" } },
   fault:    { base:"244,63,94",   results:{ fault:"244,63,94" } },
+  quality:  "rgba(45,185,170,.75)",
+  neutral:  "rgba(136,145,178,.65)",
 };
 
 const RESULT_LABELS = {

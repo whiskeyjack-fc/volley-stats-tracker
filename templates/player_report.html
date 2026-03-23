@@ -295,7 +295,7 @@
 {% endif %}
 
 <!-- ── Full-screen chart focus modal ──────────────────────────────────── -->
-<div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" hidden>
+<div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title" hidden>
   <div class="chart-modal-card">
     <div class="chart-modal-header">
       <span id="chart-modal-title" class="chart-modal-title-text"></span>
@@ -337,7 +337,7 @@ const splitGroupPlugin = {
       const x0 = x.getPixelForValue(g.start) - step / 2;
       const x1 = x.getPixelForValue(g.start + g.count - 1) + step / 2;
       if (gi % 2 === 1) {
-        ctx.fillStyle = "rgba(255,255,255,0.04)";
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--split-fill').trim();
         ctx.fillRect(x0, top, x1 - x0, bottom - top);
       }
       if (gi > 0) {

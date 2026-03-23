@@ -204,7 +204,7 @@
 {% endif %}
 
 <!-- ── Full-screen chart focus modal ──────────────── -->
-<div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" hidden>
+<div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title" hidden>
   <div class="chart-modal-card">
     <div class="chart-modal-header">
       <span id="chart-modal-title" class="chart-modal-title-text"></span>
@@ -244,7 +244,7 @@ const splitGroupPlugin = {
       const x0 = x.getPixelForValue(g.start) - step / 2;
       const x1 = x.getPixelForValue(g.start + g.count - 1) + step / 2;
       if (gi % 2 === 1) {
-        ctx.fillStyle = "rgba(255,255,255,0.04)";
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--split-fill').trim();
         ctx.fillRect(x0, top, x1 - x0, bottom - top);
       }
       if (gi > 0) {
@@ -443,7 +443,7 @@ function initCharts(data) {
         datasets:[{
           label:"Quality",
           data: data.quality[stat],
-          backgroundColor:"rgba(45,185,170,.75)",
+          backgroundColor:CAT_COLORS['quality'],
           borderColor:"rgb(45,185,170)",
           borderWidth:1,
         }]
@@ -532,7 +532,7 @@ function initCharts(data) {
           {
             label:"Error",
             data: errors,
-            backgroundColor:"rgba(136,145,178,.65)",
+            backgroundColor:CAT_COLORS['neutral'],
             borderColor:"rgb(136,145,178)",
             borderWidth:1,
             stack:"s",
