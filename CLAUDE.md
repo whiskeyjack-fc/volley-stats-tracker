@@ -87,6 +87,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Inline `style="width:Npx"` on table columns breaks mobile layout** — always use a CSS class with a responsive media query instead (e.g. `.num-col { width: 80px; }` with `@media (max-width: 600px) { .num-col { width: 56px; min-width: 40px; } }`).
 - **Player name normalisation at INSERT must use `name.strip().lower()`, not `name.strip()`** — the asymmetry between insert-time and query-time casing silently creates duplicate player identities in reports.
 - **Undefined CSS variables referenced via `var()` silently fall back to `inherit` for inherited properties** — always declare every variable explicitly in `:root` to avoid fragile implicit inheritance.
+- **Per-set score in the flow view is derived entirely from events using the same `STAT_POSITIVE`/`STAT_NEGATIVE` model as `app.py`** — `computeScoreFromStats(stats)` iterates the stats JSON, `updateFlowScore(home, opp)` writes to DOM and shows/hides `#flow-score-bar` based on `currentSetId`, and `_lastRallyDelta` stores the rally delta so `undoLastAutoSave()` can reverse it without a server round-trip.
 
 ---
 
