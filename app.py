@@ -1,4 +1,5 @@
 import os
+import sys
 import sqlite3
 import csv
 import io
@@ -166,8 +167,10 @@ def migrate_db():
         try:
             db.execute(sql)
             db.commit()
-        except Exception:
-            pass
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "duplicate column" not in msg and "already exists" not in msg:
+                print(f"migrate_db warning: {exc}", file=sys.stderr)
 
     # Ensure whiskeyjack.fc@gmail.com is admin
     try:
@@ -385,6 +388,8 @@ def register():
         )
         db.commit()
         row = db.execute("SELECT id, email, role FROM users WHERE email=?", (email,)).fetchone()
+        if not row:
+            return render_template("register.html", error="Registration failed. Please try again.", email=email)
         login_user(User(row["id"], row["email"], row["role"]))
         return redirect(url_for("index"))
     return render_template("register.html")
@@ -476,7 +481,7 @@ def new_game():
     db = get_db()
     ucond, uparams = _uid_cond()
     seasons = [s["name"] for s in db.execute(
-        f"SELECT name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
+        f"SELECT DISTINCT name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
     ).fetchall()]
     club_teams = [dict(t) for t in db.execute(
         f"SELECT id, name FROM club_teams WHERE 1=1{ucond} ORDER BY name COLLATE NOCASE", uparams
@@ -518,6 +523,9 @@ def record_event(game_id):
     result    = data["result"]
     if stat not in STAT_RESULTS or result not in STAT_RESULTS[stat]:
         return jsonify({"error": "invalid stat/result"}), 400
+    if set_id is not None:
+        if not db.execute("SELECT id FROM sets WHERE id=? AND game_id=?", (set_id, game_id)).fetchone():
+            return jsonify({"error": "set_id does not belong to this game"}), 400
     db.execute(
         "INSERT INTO events (game_id, set_id, player_id, stat, result, ts) VALUES (?,?,?,?,?,?)",
         (game_id, set_id, player_id, stat, result, datetime.now(UTC).isoformat())
@@ -688,8 +696,10 @@ def finish_set(game_id, set_id):
     ucond, uparams = _uid_cond()
     if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
-    db.execute("UPDATE sets SET finished=1 WHERE id=? AND game_id=?", (set_id, game_id))
+    cur = db.execute("UPDATE sets SET finished=1 WHERE id=? AND game_id=?", (set_id, game_id))
     db.commit()
+    if cur.rowcount == 0:
+        return jsonify({"error": "set not found"}), 404
     return jsonify({"ok": True})
 
 
@@ -700,8 +710,10 @@ def reopen_set(game_id, set_id):
     ucond, uparams = _uid_cond()
     if not db.execute(f"SELECT id FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
-    db.execute("UPDATE sets SET finished=0 WHERE id=? AND game_id=?", (set_id, game_id))
+    cur = db.execute("UPDATE sets SET finished=0 WHERE id=? AND game_id=?", (set_id, game_id))
     db.commit()
+    if cur.rowcount == 0:
+        return jsonify({"error": "set not found"}), 404
     return jsonify({"ok": True})
 
 
@@ -1565,8 +1577,10 @@ def admin_set_role(user_id):
     if new_role not in ("trainer", "coordinator", "admin"):
         return "Invalid role", 400
     db = get_db()
-    db.execute("UPDATE users SET role=? WHERE id=?", (new_role, user_id))
+    cur = db.execute("UPDATE users SET role=? WHERE id=?", (new_role, user_id))
     db.commit()
+    if cur.rowcount == 0:
+        return "User not found", 404
     return redirect(url_for("admin_users"))
 
 
