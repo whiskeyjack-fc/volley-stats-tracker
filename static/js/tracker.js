@@ -100,6 +100,7 @@ const Tracker = (() => {
 
   let syncInFlight = false;
   let _syncFailStreak = 0;
+  let _lastRallyDelta = { home: 0, opp: 0 };
   // localSetRef â†’ real server set_id
   const setIdMap = {};
 
@@ -545,6 +546,31 @@ const Tracker = (() => {
     });
     _gridDelegated = true;
   }
+  function computeScoreFromStats(stats) {
+    let home = 0, opp = 0;
+    for (const k of Object.keys(stats)) {
+      const s = stats[k].stats;
+      if (k === "opponent") {
+        home += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.fault?.fault ?? 0);
+        opp  += (s?.serve?.ace   ?? 0) + (s?.attack?.kill  ?? 0) + (s?.block?.kill  ?? 0);
+      } else {
+        home += (s?.serve?.ace   ?? 0) + (s?.attack?.kill  ?? 0) + (s?.block?.kill  ?? 0);
+        opp  += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.fault?.fault ?? 0);
+      }
+    }
+    return { home, opp };
+  }
+
+  function updateFlowScore(home, opp) {
+    document.getElementById("score-home").textContent = home;
+    document.getElementById("score-opp").textContent  = opp;
+    const bar = document.getElementById("flow-score-bar");
+    if (bar) {
+      if (currentSetId) bar.classList.remove("hidden");
+      else              bar.classList.add("hidden");
+    }
+  }
+
   async function reloadStats() {
     const url = currentSetId
       ? `/api/games/${gameId}/stats?set_id=${currentSetId}`
@@ -583,6 +609,8 @@ const Tracker = (() => {
     }
     totalEvents = total;
     updateEventCount();
+    const sc = computeScoreFromStats(data);
+    updateFlowScore(sc.home, sc.opp);
   }
 
   // â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1412,6 +1440,19 @@ const RallyFlow = (() => {
     }
     if (window.__updateEventCount) window.__updateEventCount();
     const count = lastSavedBuf.length;
+    _lastRallyDelta = { home: 0, opp: 0 };
+    for (const action of lastSavedBuf) {
+      if (action.pid === "opponent") {
+        if (["error","fault"].includes(action.result)) _lastRallyDelta.home++;
+        else if (action.result === "ace" || action.result === "kill")  _lastRallyDelta.opp++;
+      } else {
+        if (action.result === "ace"   || action.result === "kill")  _lastRallyDelta.home++;
+        else if (["error","fault"].includes(action.result))          _lastRallyDelta.opp++;
+      }
+    }
+    const curHome = parseInt(document.getElementById("score-home").textContent) || 0;
+    const curOpp  = parseInt(document.getElementById("score-opp").textContent)  || 0;
+    updateFlowScore(curHome + _lastRallyDelta.home, curOpp + _lastRallyDelta.opp);
     resetFlow();
     showUndoToast(count);
   }
@@ -1443,6 +1484,10 @@ const RallyFlow = (() => {
     }
     if (window.__updateEventCount) window.__updateEventCount();
     rallyBuf = [...toUndo];
+    const curHome = parseInt(document.getElementById("score-home").textContent) || 0;
+    const curOpp  = parseInt(document.getElementById("score-opp").textContent)  || 0;
+    updateFlowScore(curHome - _lastRallyDelta.home, curOpp - _lastRallyDelta.opp);
+    _lastRallyDelta = { home: 0, opp: 0 };
     goToConfirm();
   }
 
