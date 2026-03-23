@@ -1629,3 +1629,30 @@ body.modal-open { overflow: hidden; }
 .flow-type-serve:hover   { border-color: #4f8ef7; background: rgba(79,142,247,.18); }
 .flow-type-receive:hover { border-color: #38bda6; background: rgba(56,189,166,.18); }
 
+.flow-score-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.score-val {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 2rem;
+  text-align: center;
+}
+.score-team {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+.score-sep {
+  font-size: 1.3rem;
+  color: var(--text-muted);
+}
+
