@@ -700,6 +700,9 @@ const Tracker = (() => {
     window.__showToast         = showToast;
     window.__pushEventLog      = (entry) => { eventLog.push(entry); renderEventLog(); };
     window.__popEventLog       = () => { eventLog.pop(); renderEventLog(); };
+    window.__updateFlowScore   = updateFlowScore;
+    window.__getRallyDelta     = () => _lastRallyDelta;
+    window.__setRallyDelta     = (d) => { _lastRallyDelta = d; };
     window.__getCurrentSetId   = () => currentSetId;
     window.__isActiveSetFinished = () => {
       if (!currentSetId) return false;
@@ -1504,23 +1507,24 @@ const RallyFlow = (() => {
     }
     if (window.__updateEventCount) window.__updateEventCount();
     const count = lastSavedBuf.length;
-    _lastRallyDelta = { home: 0, opp: 0 };
+    const delta = { home: 0, opp: 0 };
     for (const action of lastSavedBuf) {
       if (action.pid === "opponent") {
-        if (["error","fault"].includes(action.result)) _lastRallyDelta.home++;
-        else if (action.result === "ace" || action.result === "kill")  _lastRallyDelta.opp++;
+        if (["error","fault"].includes(action.result)) delta.home++;
+        else if (action.result === "ace" || action.result === "kill")  delta.opp++;
       } else {
-        if (action.result === "ace"   || action.result === "kill")  _lastRallyDelta.home++;
-        else if (["error","fault"].includes(action.result))          _lastRallyDelta.opp++;
+        if (action.result === "ace"   || action.result === "kill")  delta.home++;
+        else if (["error","fault"].includes(action.result))          delta.opp++;
       }
     }
+    if (window.__setRallyDelta) window.__setRallyDelta(delta);
     const curHome = parseInt(document.getElementById("score-home").textContent) || 0;
     const curOpp  = parseInt(document.getElementById("score-opp").textContent)  || 0;
-    updateFlowScore(curHome + _lastRallyDelta.home, curOpp + _lastRallyDelta.opp);
+    if (window.__updateFlowScore) window.__updateFlowScore(curHome + delta.home, curOpp + delta.opp);
     if (window.__pushEventLog) window.__pushEventLog({
       actions:     [...lastSavedBuf],
       scoreBefore: { home: curHome, opp: curOpp },
-      scoreAfter:  { home: curHome + _lastRallyDelta.home, opp: curOpp + _lastRallyDelta.opp }
+      scoreAfter:  { home: curHome + delta.home, opp: curOpp + delta.opp }
     });
     resetFlow();
     showUndoToast(count);
@@ -1555,8 +1559,9 @@ const RallyFlow = (() => {
     rallyBuf = [...toUndo];
     const curHome = parseInt(document.getElementById("score-home").textContent) || 0;
     const curOpp  = parseInt(document.getElementById("score-opp").textContent)  || 0;
-    updateFlowScore(curHome - _lastRallyDelta.home, curOpp - _lastRallyDelta.opp);
-    _lastRallyDelta = { home: 0, opp: 0 };
+    const delta = window.__getRallyDelta ? window.__getRallyDelta() : { home: 0, opp: 0 };
+    if (window.__updateFlowScore) window.__updateFlowScore(curHome - delta.home, curOpp - delta.opp);
+    if (window.__setRallyDelta) window.__setRallyDelta({ home: 0, opp: 0 });
     if (window.__popEventLog) window.__popEventLog();
     goToConfirm();
   }
