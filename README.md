@@ -41,7 +41,8 @@ PlayerStats/
 │   └── admin_users.html # Admin panel — user list and role management
 ├── static/
 │   ├── css/style.css
-│   └── js/tracker.js    # Tracking grid interactions (click, long-press, set bar)
+│   ├── js/tracker.js    # Tracking grid interactions (click, long-press, set bar)
+│   └── js/charts-common.js  # Shared chart constants: CAT_COLORS, RESULT_LABELS, axis defaults
 └── README.md
 ```
 

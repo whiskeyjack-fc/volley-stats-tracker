@@ -76,6 +76,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Always validate user-supplied filter params against the actual data set** — a `?team=` query param that doesn't match any team in the DB silently returns empty results; fetch the valid list first, then reset the param to `""` if not found.
 - **Wrap multi-row INSERT loops in explicit try/except + rollback** — Python's sqlite3 won't auto-rollback until the connection closes; an unhandled exception mid-loop leaves the transaction open and the caller gets an unhandled 500. Always `db.rollback()` in the except branch and return a user-facing error.
 - **`aria-expanded` must be kept in sync with toggle state** — set `aria-expanded="true/false"` as an initial attribute on toggle buttons and update it in the click handler alongside the CSS class toggle; omitting the update leaves screen readers with stale state.
+- **`CAT_COLORS`, `RESULT_LABELS`, and the shared axis defaults (`xAxis`, `yAxis`, `legend`, `base`) live in `static/js/charts-common.js`** — included via `<script>` in `report.html`, `season_report.html`, and `player_report.html`; do not re-declare these constants inline in any template.
 
 ---
 
