@@ -1,5 +1,7 @@
 # VolleyStats — Copilot Coding Guidelines
 
+> For architecture quick-ref, critical conventions, and lessons learned, see [CLAUDE.md](../CLAUDE.md) at the project root.
+
 ## Charts & Graphs
 - **All graphs must support full-screen focus mode.** Use the shared `mkChart(id, cfg)` helper (which registers the config in `chartRegistry`) so any chart can be re-rendered in the full-screen modal. Do not call `new Chart(...)` directly in report pages.
 - Every new chart card (`.chart-card` or `.dual-chart-card`) will automatically receive an expand button via the `querySelectorAll` block at the end of the script — no extra markup is required.
