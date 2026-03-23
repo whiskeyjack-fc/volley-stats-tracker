@@ -50,6 +50,7 @@ PlayerStats/
 - Python 3.9+
 - Flask 3.x
 - Flask-Login 0.6+
+- Flask-Limiter 3.5+ (login rate limiting)
 - Gunicorn 21+ (production only)
 
 Install dependencies:
@@ -159,3 +160,4 @@ The SQLite database (`stats.db`) is created automatically in the project root on
 |---|---|---|
 | Chart.js | 4.4.2 | https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js |
 | chartjs-plugin-datalabels | 2.2.0 | https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js |
+| Flask-Limiter | 3.5+ | pip (`flask-limiter`) — in-memory rate limiter for `/login` |

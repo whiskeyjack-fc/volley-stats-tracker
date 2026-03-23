@@ -72,6 +72,10 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **`LOOP_OUTCOMES["fault"]` is intentionally empty** — fault auto-records after player selection; the `else if (loopStat === "fault")` branch in `onPlayerChosen` prevents falling through to an empty `renderOutcomeStep([])` which would leave the flow stuck. Do not remove that branch.
 - **Background sync interval should guard on queue length** — call `DB.getPending()` before `isOnline()`/`flushQueue()` in the `setInterval` callback; when the queue is empty there is no need to probe the network at all.
 - **Duplicate player names must be caught client-side** — `game_setup.html`'s submit handler normalises names with `.trim().toLowerCase()` and blocks submit if two entries resolve to the same string; this mirrors the server-side `name.strip().lower()` identity rule and prevents silent merging of two players into one.
+- **Flask-Limiter is used for `/login` rate limiting** — configured with `storage_uri="memory://"` (resets on server restart); the limiter instance uses `get_remote_address` as the key function. Apply `@limiter.limit(...)` only to the routes that need it; the default limit is empty so other routes are unaffected.
+- **Always validate user-supplied filter params against the actual data set** — a `?team=` query param that doesn't match any team in the DB silently returns empty results; fetch the valid list first, then reset the param to `""` if not found.
+- **Wrap multi-row INSERT loops in explicit try/except + rollback** — Python's sqlite3 won't auto-rollback until the connection closes; an unhandled exception mid-loop leaves the transaction open and the caller gets an unhandled 500. Always `db.rollback()` in the except branch and return a user-facing error.
+- **`aria-expanded` must be kept in sync with toggle state** — set `aria-expanded="true/false"` as an initial attribute on toggle buttons and update it in the click handler alongside the CSS class toggle; omitting the update leaves screen readers with stale state.
 
 ---
 

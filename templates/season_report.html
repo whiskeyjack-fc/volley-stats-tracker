@@ -13,7 +13,7 @@
     </div>
     <div class="track-actions">
       <a href="{{ url_for('index') }}" class="btn btn-outline">← Games</a>
-      <button id="filter-toggle-btn" class="btn btn-outline btn-sm filter-toggle-btn">Filters <span class="filter-caret" aria-hidden="true">&#x25BE;</span></button>
+      <button id="filter-toggle-btn" class="btn btn-outline btn-sm filter-toggle-btn" aria-expanded="true" aria-controls="filter-rows">Filters <span class="filter-caret" aria-hidden="true">&#x25BE;</span></button>
     </div>
   </div>
   <div class="filter-rows-wrap" id="filter-rows"><div class="filter-rows-inner">
@@ -517,6 +517,7 @@ document.querySelectorAll('.chart-card, .dual-chart-card').forEach(card => {
   const btn = document.createElement('button');
   btn.className = 'chart-expand-btn';
   btn.title = 'Focus chart';
+  btn.setAttribute('aria-label', 'Focus chart');
   btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 5V1h4M8 1h4v4M12 8v4H8M5 12H1V8"/></svg>`;
   btn.addEventListener('click', e => { e.stopPropagation(); openChartModal(card); });
   card.appendChild(btn);

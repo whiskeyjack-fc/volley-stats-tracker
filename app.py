@@ -7,6 +7,8 @@ import re
 from datetime import datetime, UTC
 from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, g, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -16,6 +18,13 @@ DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stats.db")
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 login_manager.login_message = "Please log in to access this page."
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri="memory://",
+)
 
 
 class User(UserMixin):
@@ -250,26 +259,32 @@ STAT_NEGATIVE = {
     "fault":    {"fault"},
 }
 
+def _calc_stat_counts(events, stat, results):
+    """Return a counts dict for one stat category over a list of event dicts."""
+    cnt = {r: sum(1 for e in events if e["stat"] == stat and e["result"] == r)
+           for r in results}
+    cnt["total"] = sum(cnt[r] for r in results)
+    pos = sum(cnt[r] for r in results if r in STAT_POSITIVE.get(stat, set()))
+    neg = sum(cnt[r] for r in results if r in STAT_NEGATIVE.get(stat, set()))
+    cnt["raw"]       = pos - neg
+    cnt["fault_pct"] = round(neg / cnt["total"] * 100, 1) if cnt["total"] else 0.0
+    if stat in STAT_QUALITY_WEIGHTS:
+        w = STAT_QUALITY_WEIGHTS[stat]
+        weighted = sum(cnt[r] * w.get(r, 0) for r in results)
+        cnt["quality"] = round(weighted / cnt["total"], 2) if cnt["total"] else 0.0
+    return cnt
+
+
 def build_player_stats(events, players):
     """Return per-player stat summary list given event dicts and player rows."""
     result = []
     for p in players:
         pid   = p["id"]
         pevts = [e for e in events if e["player_id"] == pid]
-        by_stat = {}
-        for stat, results in STAT_RESULTS.items():
-            cnt = {r: sum(1 for e in pevts if e["stat"] == stat and e["result"] == r)
-                   for r in results}
-            cnt["total"] = sum(cnt[r] for r in results)
-            pos = sum(cnt[r] for r in results if r in STAT_POSITIVE.get(stat, set()))
-            neg = sum(cnt[r] for r in results if r in STAT_NEGATIVE.get(stat, set()))
-            cnt["raw"]       = pos - neg
-            cnt["fault_pct"] = round(neg / cnt["total"] * 100, 1) if cnt["total"] else 0.0
-            if stat in STAT_QUALITY_WEIGHTS:
-                w = STAT_QUALITY_WEIGHTS[stat]
-                weighted = sum(cnt[r] * w.get(r, 0) for r in results)
-                cnt["quality"] = round(weighted / cnt["total"], 2) if cnt["total"] else 0.0
-            by_stat[stat] = cnt
+        by_stat = {
+            stat: _calc_stat_counts(pevts, stat, results)
+            for stat, results in STAT_RESULTS.items()
+        }
         result.append({
             "id": pid, "name": p["name"], "number": p["number"],
             "stats": by_stat,
@@ -346,21 +361,10 @@ def build_comparison_data(players_data, games):
 
 def agg_team_stats(events):
     """Aggregate player events into per-stat totals with all derived fields."""
-    stats = {}
-    for stat, results in STAT_RESULTS.items():
-        cnt = {r: sum(1 for e in events if e["stat"] == stat and e["result"] == r)
-               for r in results}
-        cnt["total"] = sum(cnt[r] for r in results)
-        pos = sum(cnt[r] for r in results if r in STAT_POSITIVE.get(stat, set()))
-        neg = sum(cnt[r] for r in results if r in STAT_NEGATIVE.get(stat, set()))
-        cnt["raw"]       = pos - neg
-        cnt["fault_pct"] = round(neg / cnt["total"] * 100, 1) if cnt["total"] else 0.0
-        if stat in STAT_QUALITY_WEIGHTS:
-            w = STAT_QUALITY_WEIGHTS[stat]
-            weighted = sum(cnt[r] * w.get(r, 0) for r in results)
-            cnt["quality"] = round(weighted / cnt["total"], 2) if cnt["total"] else 0.0
-        stats[stat] = cnt
-    return stats
+    return {
+        stat: _calc_stat_counts(events, stat, results)
+        for stat, results in STAT_RESULTS.items()
+    }
 
 
 # ── auth ──────────────────────────────────────────────────────────────────────
@@ -396,6 +400,7 @@ def register():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute", error_message="Too many login attempts. Please wait a minute and try again.")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("index"))
@@ -428,8 +433,14 @@ def logout():
 @login_required
 def index():
     db = get_db()
-    active_team = request.args.get("team", "")
     ucond, uparams = _uid_cond()
+    teams = [r["team_name"] for r in db.execute(
+        f"SELECT DISTINCT team_name FROM games WHERE team_name != ''{ucond} ORDER BY team_name COLLATE NOCASE",
+        uparams
+    ).fetchall()]
+    active_team = request.args.get("team", "")
+    if active_team and active_team not in teams:
+        active_team = ""
     if active_team:
         games = db.execute(
             f"SELECT * FROM games WHERE team_name=?{ucond} ORDER BY played_at DESC, id DESC",
@@ -440,13 +451,8 @@ def index():
             f"SELECT * FROM games WHERE 1=1{ucond} ORDER BY played_at DESC, id DESC",
             uparams
         ).fetchall()
-    seasons = db.execute(
+    seasons = [s["season"] for s in db.execute(
         f"SELECT DISTINCT season FROM games WHERE season != ''{ucond} ORDER BY season DESC",
-        uparams
-    ).fetchall()
-    seasons = [s["season"] for s in seasons]
-    teams = [r["team_name"] for r in db.execute(
-        f"SELECT DISTINCT team_name FROM games WHERE team_name != ''{ucond} ORDER BY team_name COLLATE NOCASE",
         uparams
     ).fetchall()]
     return render_template("index.html", games=games, seasons=seasons, teams=teams, active_team=active_team)
@@ -469,14 +475,19 @@ def new_game():
 
         numbers = request.form.getlist("player_number")
         names   = request.form.getlist("player_name")
-        for num, name in zip(numbers, names):
-            name = name.strip()
-            if name:
-                db.execute(
-                    "INSERT INTO players (game_id, name, number) VALUES (?,?,?)",
-                    (game_id, name, num.strip())
-                )
-        db.commit()
+        try:
+            for num, name in zip(numbers, names):
+                name = name.strip()
+                if name:
+                    db.execute(
+                        "INSERT INTO players (game_id, name, number) VALUES (?,?,?)",
+                        (game_id, name, num.strip())
+                    )
+            db.commit()
+        except Exception:
+            db.rollback()
+            return render_template("game_setup.html", error="Failed to save players. Please try again.",
+                                   seasons=[], club_teams=[])
         return redirect(url_for("track", game_id=game_id))
     db = get_db()
     ucond, uparams = _uid_cond()

@@ -18,13 +18,16 @@
       var wrap = document.getElementById('filter-rows');
       var btn  = document.getElementById('filter-toggle-btn');
       if (!wrap || !btn) return;
-      if (localStorage.getItem(key) === '1') {
+      var hidden = localStorage.getItem(key) === '1';
+      if (hidden) {
         wrap.classList.add('filters-hidden');
         btn.classList.add('is-collapsed');
       }
+      btn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
       btn.addEventListener('click', function () {
         var nowHidden = wrap.classList.toggle('filters-hidden');
         btn.classList.toggle('is-collapsed', nowHidden);
+        btn.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
         localStorage.setItem(key, nowHidden ? '1' : '0');
       });
     }

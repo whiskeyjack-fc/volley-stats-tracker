@@ -10,7 +10,7 @@
   <div class="track-actions">
     <a href="{{ url_for('track', game_id=game.id) }}" class="btn btn-outline">← Track</a>
     {% if game.season %}<a href="{{ url_for('season_report', season=game.season) }}" class="btn btn-outline">📊 Season</a>{% endif %}
-    <button id="filter-toggle-btn" class="btn btn-outline btn-sm filter-toggle-btn">Filters <span class="filter-caret" aria-hidden="true">&#x25BE;</span></button>
+    <button id="filter-toggle-btn" class="btn btn-outline btn-sm filter-toggle-btn" aria-expanded="true" aria-controls="filter-rows">Filters <span class="filter-caret" aria-hidden="true">&#x25BE;</span></button>
     <a href="{{ url_for('export_csv', game_id=game.id) }}" class="btn btn-primary">⬇ CSV</a>
   </div>
 </div>
@@ -607,6 +607,7 @@ document.querySelectorAll('.chart-card, .dual-chart-card').forEach(card => {
   const btn = document.createElement('button');
   btn.className = 'chart-expand-btn';
   btn.title = 'Focus chart';
+  btn.setAttribute('aria-label', 'Focus chart');
   btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 5V1h4M8 1h4v4M12 8v4H8M5 12H1V8"/></svg>`;
   btn.addEventListener('click', e => { e.stopPropagation(); openChartModal(card); });
   card.appendChild(btn);
