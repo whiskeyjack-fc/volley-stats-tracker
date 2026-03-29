@@ -552,11 +552,11 @@ const Tracker = (() => {
     for (const k of Object.keys(stats)) {
       const s = stats[k].stats;
       if (k === "opponent") {
-        home += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.freeball?.error ?? 0) + (s?.fault?.fault ?? 0);
+        home += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.freeball?.error ?? 0) + (s?.fault?.fault ?? 0) + (s?.ball_error?.ball_error ?? 0);
         opp  += (s?.serve?.ace   ?? 0) + (s?.attack?.kill  ?? 0) + (s?.block?.kill  ?? 0);
       } else {
         home += (s?.serve?.ace   ?? 0) + (s?.attack?.kill  ?? 0) + (s?.block?.kill  ?? 0);
-        opp  += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.freeball?.error ?? 0) + (s?.fault?.fault ?? 0);
+        opp  += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.freeball?.error ?? 0) + (s?.fault?.fault ?? 0) + (s?.ball_error?.ball_error ?? 0);
       }
     }
     return { home, opp };
@@ -583,8 +583,8 @@ const Tracker = (() => {
     for (const a of actions) {
       const isOpp = a.pid === "opponent";
       if (!isOpp && (a.result === "ace"   || a.result === "kill"))  return { action: a, forHome: true };
-      if (!isOpp && (a.result === "error" || a.result === "fault")) return { action: a, forHome: false };
-      if (isOpp  && (a.result === "error" || a.result === "fault")) return { action: a, forHome: true };
+      if (!isOpp && (a.result === "error" || a.result === "fault" || a.result === "ball_error")) return { action: a, forHome: false };
+      if (isOpp  && (a.result === "error" || a.result === "fault" || a.result === "ball_error")) return { action: a, forHome: true };
       if (isOpp  && (a.result === "ace"   || a.result === "kill"))  return { action: a, forHome: false };
     }
     return null;
@@ -632,7 +632,7 @@ const Tracker = (() => {
 
   // Exact scoring combos mirroring STAT_POSITIVE/STAT_NEGATIVE in app.py
   const SCORE_OWN  = new Set(["serve.ace",   "attack.kill",  "block.kill"]);
-  const SCORE_ERR  = new Set(["serve.error",  "attack.error", "receive.error", "freeball.error", "fault.fault"]);
+  const SCORE_ERR  = new Set(["serve.error",  "attack.error", "receive.error", "freeball.error", "fault.fault", "ball_error.ball_error"]);
 
   function buildEventLogFromHistory(rawEvents) {
     eventLog = [];
@@ -834,10 +834,11 @@ const RallyFlow = (() => {
   ];
 
   const LOOP_ACTIONS = [
-    { label: "Attack",   stat: "attack"   },
-    { label: "Block",    stat: "block"    },
-    { label: "Freeball", stat: "freeball" },
-    { label: "Fault",    stat: "fault"    },
+    { label: "Attack",   stat: "attack"     },
+    { label: "Block",    stat: "block"      },
+    { label: "Freeball", stat: "freeball"   },
+    { label: "Fault",    stat: "fault"      },
+    { label: "Error",    stat: "ball_error" },
   ];
 
   const LOOP_OUTCOMES = {
@@ -855,7 +856,8 @@ const RallyFlow = (() => {
       { label: "F1",   result: "1-freeball", color: "yellow", loop: true },
       { label: "Err",  result: "error",      color: "red"    },
     ],
-    fault:    [],
+    fault:      [],
+    ball_error: [],
   };
 
   let state              = "idle";
@@ -994,7 +996,7 @@ const RallyFlow = (() => {
   }
 
   // Stat category accent colours (matches CSS class names)
-  const STAT_COLOR = { serve:"blue", receive:"teal", attack:"orange", block:"purple", freeball:"cyan", fault:"rose" };
+  const STAT_COLOR = { serve:"blue", receive:"teal", attack:"orange", block:"purple", freeball:"cyan", fault:"rose", ball_error:"rose" };
 
   function getPlayerLabel(pid) {
     if (pid === "opponent") return { name: window.__oppName || "Opponent", num: "" };
@@ -1271,10 +1273,10 @@ const RallyFlow = (() => {
       if (outcomes.length === 0) {
         const btn = document.createElement("button");
         btn.className = "flow-combined-btn flow-outcome-red";
-        btn.textContent = "Fault";
+        btn.textContent = a.label;
         btn.addEventListener("click", () => {
           loopStat = a.stat;
-          loopOutcomePending = { result: "fault", color: "red", loop: false };
+          loopOutcomePending = { result: a.stat, color: "red", loop: false };
           state = "loop-player";
           renderPlayerStep(loopStat, true);
         });
@@ -1347,6 +1349,10 @@ const RallyFlow = (() => {
         }
       } else if (loopStat === "fault") {
         commitAction(pid, "fault", "fault");
+        if (state === "insert-player") { finaliseInsert(); }
+        else { autoSaveRally(); }
+      } else if (loopStat === "ball_error") {
+        commitAction(pid, "ball_error", "ball_error");
         if (state === "insert-player") { finaliseInsert(); }
         else { autoSaveRally(); }
       } else {
@@ -1545,7 +1551,7 @@ const RallyFlow = (() => {
     const count = lastSavedBuf.length;
     const delta = { home: 0, opp: 0 };
     const _scoreOwn = new Set(["serve.ace", "attack.kill", "block.kill"]);
-    const _scoreErr = new Set(["serve.error", "attack.error", "receive.error", "freeball.error", "fault.fault"]);
+    const _scoreErr = new Set(["serve.error", "attack.error", "receive.error", "freeball.error", "fault.fault", "ball_error.ball_error"]);
     for (const action of lastSavedBuf) {
       const key   = action.stat + "." + action.result;
       const isOpp = action.pid === "opponent";

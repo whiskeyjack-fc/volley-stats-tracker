@@ -235,7 +235,8 @@ STAT_RESULTS = {
     "attack":   ["kill", "error"],
     "block":    ["kill", "error"],
     "freeball": ["error", "1-freeball", "2-freeball", "3-freeball"],
-    "fault":    ["fault"],
+    "fault":      ["fault"],
+    "ball_error": ["ball_error"],
 }
 
 # Quality weighting: result → score (only for stats with graded levels)
@@ -259,7 +260,8 @@ STAT_NEGATIVE = {
     "receive":  {"error"},
     "block":    set(),
     "freeball": {"error", "1-freeball"},
-    "fault":    {"fault"},
+    "fault":      {"fault"},
+    "ball_error": {"ball_error"},
 }
 
 def _calc_stat_counts(events, stat, results):
@@ -320,7 +322,8 @@ def build_chart_data(player_stats):
             "Serve Err":   [-ps["stats"]["serve"]["error"]   for ps in player_stats],
             "Attack Err":  [-ps["stats"]["attack"]["error"]  for ps in player_stats],
             "Receive Err": [-ps["stats"]["receive"]["error"] for ps in player_stats],
-            "Fault":       [-ps["stats"]["fault"]["fault"]   for ps in player_stats],
+            "Fault":       [-ps["stats"]["fault"]["fault"]       for ps in player_stats],
+            "Ball Error":  [-ps["stats"]["ball_error"]["ball_error"] for ps in player_stats],
         },
     }
 
@@ -345,7 +348,8 @@ def build_comparison_data(players_data, games):
             ],
             "points_neg":   [
                 ((_v(g, "serve", "error") or 0) + (_v(g, "attack", "error") or 0) +
-                 (_v(g, "receive", "error") or 0) + (_v(g, "fault", "fault") or 0))
+                 (_v(g, "receive", "error") or 0) + (_v(g, "fault", "fault") or 0) +
+                 (_v(g, "ball_error", "ball_error") or 0))
                 if gsm.get(g) else None for g in game_ids
             ],
             "serve_results":   {r: [_v(g, "serve", r) for g in game_ids] for r in ["error", "1-serve", "2-serve", "3-serve", "ace"]},
