@@ -252,14 +252,14 @@ STAT_POSITIVE = {
     "attack":   {"kill"},
     "receive":  set(),
     "block":    {"kill"},
-    "freeball": {"3-freeball", "2-freeball"},
+    "freeball": set(),
 }
 STAT_NEGATIVE = {
     "serve":    {"error"},
     "attack":   {"error"},
     "receive":  {"error"},
     "block":    set(),
-    "freeball": {"error", "1-freeball"},
+    "freeball": {"error"},
     "fault":      {"fault"},
     "ball_error": {"ball_error"},
 }

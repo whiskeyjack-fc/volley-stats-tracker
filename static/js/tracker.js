@@ -556,7 +556,7 @@ const Tracker = (() => {
         opp  += (s?.serve?.ace   ?? 0) + (s?.attack?.kill  ?? 0) + (s?.block?.kill  ?? 0);
       } else {
         home += (s?.serve?.ace   ?? 0) + (s?.attack?.kill  ?? 0) + (s?.block?.kill  ?? 0);
-        opp  += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.freeball?.error ?? 0) + (s?.fault?.fault ?? 0) + (s?.ball_error?.ball_error ?? 0);
+        opp  += (s?.serve?.error ?? 0) + (s?.attack?.error ?? 0) + (s?.block?.error ?? 0) + (s?.receive?.error ?? 0) + (s?.freeball?.error ?? 0) + (s?.fault?.fault ?? 0) + (s?.ball_error?.ball_error ?? 0);
       }
     }
     return { home, opp };
@@ -632,7 +632,7 @@ const Tracker = (() => {
 
   // Exact scoring combos mirroring STAT_POSITIVE/STAT_NEGATIVE in app.py
   const SCORE_OWN  = new Set(["serve.ace",   "attack.kill",  "block.kill"]);
-  const SCORE_ERR  = new Set(["serve.error",  "attack.error", "receive.error", "freeball.error", "fault.fault", "ball_error.ball_error"]);
+  const SCORE_ERR  = new Set(["serve.error",  "attack.error", "block.error", "receive.error", "freeball.error", "fault.fault", "ball_error.ball_error"]);
 
   function buildEventLogFromHistory(rawEvents) {
     eventLog = [];
