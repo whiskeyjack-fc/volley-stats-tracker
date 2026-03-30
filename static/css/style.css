@@ -1695,4 +1695,38 @@ body.modal-open { overflow: hidden; }
   font-size: 1.3rem;
   color: var(--text-muted);
 }
+.team-totals-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  padding: 0.3rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.72rem;
+}
+.tot-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.tot-label {
+  color: var(--gray);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tot-val {
+  font-weight: 700;
+  color: var(--accent);
+}
+.tot-sep-v {
+  color: var(--border);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.25rem;
+}
+@media (max-width: 600px) {
+  .team-totals-bar { gap: 0.3rem 0.65rem; padding: 0.3rem 0.5rem; }
+}
 

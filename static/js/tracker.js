@@ -562,6 +562,46 @@ const Tracker = (() => {
     return { home, opp };
   }
 
+  function updateTeamTotals() {
+    const serveWeights   = { "error": 0, "1-serve": 1, "2-serve": 2, "3-serve": 3, "ace": 4 };
+    const receiveWeights = { "error": 0, "1-receive": 1, "2-receive": 2, "3-receive": 3, "overpass": 0 };
+    let srvErr = 0, rcvErr = 0, atkErr = 0, atkKill = 0, blkKill = 0, faults = 0;
+    let srvWtd = 0, srvTot = 0, rcvWtd = 0, rcvTot = 0;
+    for (const p of players) {
+      const pid = String(p.id);
+      srvErr  += getCount(pid, "serve",   "error");
+      rcvErr  += getCount(pid, "receive", "error");
+      atkErr  += getCount(pid, "attack",  "error");
+      atkKill += getCount(pid, "attack",  "kill");
+      blkKill += getCount(pid, "block",   "kill");
+      faults  += getCount(pid, "fault",   "fault");
+      for (const [r, w] of Object.entries(serveWeights)) {
+        const n = getCount(pid, "serve", r);
+        srvWtd += n * w;
+        srvTot += n;
+      }
+      for (const [r, w] of Object.entries(receiveWeights)) {
+        const n = getCount(pid, "receive", r);
+        rcvWtd += n * w;
+        rcvTot += n;
+      }
+    }
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set("tot-serve-err",   srvErr);
+    set("tot-rcv-err",     rcvErr);
+    set("tot-attack-err",  atkErr);
+    set("tot-attack-kill", atkKill);
+    set("tot-block-kill",  blkKill);
+    set("tot-fault",       faults);
+    set("tot-serve-q",     srvTot > 0 ? (srvWtd / srvTot).toFixed(2) : "—");
+    set("tot-rcv-q",       rcvTot > 0 ? (rcvWtd / rcvTot).toFixed(2) : "—");
+    const totBar = document.getElementById("team-totals-bar");
+    if (totBar) {
+      if (currentSetId) totBar.classList.remove("hidden");
+      else              totBar.classList.add("hidden");
+    }
+  }
+
   function updateFlowScore(home, opp) {
     document.getElementById("score-home").textContent = home;
     document.getElementById("score-opp").textContent  = opp;
@@ -570,6 +610,7 @@ const Tracker = (() => {
       if (currentSetId) bar.classList.remove("hidden");
       else              bar.classList.add("hidden");
     }
+    updateTeamTotals();
   }
 
   function getPlayerLabel(pid) {
