@@ -61,6 +61,13 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+For local development and running tests:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests/ -v
+```
+
 ## Starting the Server (development)
 
 ```bash
