@@ -984,6 +984,9 @@ def season_report(season):
         allowed_set_ids = {s["id"] for s in all_sets if s["set_type"] == active_set_type}
         team_events = [e for e in all_events
                        if e["player_id"] is not None and e["set_id"] in allowed_set_ids]
+        # Limit games list to those that actually have sets of the requested type
+        games_with_type = {s["game_id"] for s in all_sets if s["set_type"] == active_set_type}
+        games = [g for g in games if g["id"] in games_with_type]
     else:
         team_events = [e for e in all_events if e["player_id"] is not None]
 
@@ -994,16 +997,45 @@ def season_report(season):
         "reserve": url_for("season_report", season=season, type="reserve", **team_kwarg),
     }
 
-    rows = []
-    for g in games:
-        g_events = [e for e in team_events if e["game_id"] == g["id"]]
-        rows.append({
-            "name":      f"vs {g['opponent']}",
-            "game_id":   g["id"],
-            "played_at": g["played_at"],
-            "opponent":  g["opponent"],
-            "stats":     agg_team_stats(g_events),
-        })
+    if active_set_type:
+        # Main / Reserve: one bar per game, skip games with no recorded events
+        rows = []
+        for g in games:
+            g_events = [e for e in team_events if e["game_id"] == g["id"]]
+            if not g_events:
+                continue
+            rows.append({
+                "name":      f"vs {g['opponent']}",
+                "game_id":   g["id"],
+                "played_at": g["played_at"],
+                "opponent":  g["opponent"],
+                "stats":     agg_team_stats(g_events),
+            })
+    else:
+        # All: aggregate games on the same date into one bar, skip days with no events
+        games_by_date = {}
+        for g in games:
+            games_by_date.setdefault(g["played_at"], []).append(g)
+        game_id_to_date = {g["id"]: g["played_at"] for g in games}
+        events_by_date = {}
+        for e in team_events:
+            date = game_id_to_date.get(e["game_id"])
+            if date:
+                events_by_date.setdefault(date, []).append(e)
+        rows = []
+        for date in sorted(games_by_date):
+            day_games = games_by_date[date]
+            day_events = events_by_date.get(date, [])
+            if not day_events:
+                continue
+            opponent = day_games[0]["opponent"]
+            rows.append({
+                "name":      f"vs {opponent}",
+                "game_id":   day_games[0]["id"],
+                "played_at": date,
+                "opponent":  opponent,
+                "stats":     agg_team_stats(day_events),
+            })
 
     season_totals  = agg_team_stats(team_events)
     chart_data_all = build_chart_data(rows)
