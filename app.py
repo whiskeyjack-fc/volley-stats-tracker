@@ -340,7 +340,7 @@ def build_comparison_data(players_data, games):
             return s[stat][result] if s else None
         players_out.append({
             "slug":         p["slug"],
-            "name":         p["name"],
+            "name":         p["name"].title(),
             "number":       p["number"],
             "points_pos":   [
                 ((_v(g, "serve", "ace") or 0) + (_v(g, "attack", "kill") or 0) + (_v(g, "block", "kill") or 0))
@@ -808,7 +808,7 @@ def report(game_id):
         opp_stats[stat] = cnt
 
     # Chart.js data
-    player_names = [ps["name"] for ps in player_stats]
+    player_names = [ps["name"].title() for ps in player_stats]
     chart_data = {
         "players": player_names,
         "stat_totals": {
@@ -867,7 +867,7 @@ def report(game_id):
             s_events = [e for e in all_events if e["set_id"] == s["id"]]
             s_player_stats = build_player_stats(s_events, players)
             s_chart_data = {
-                "players": [ps["name"] for ps in s_player_stats],
+                "players": [ps["name"].title() for ps in s_player_stats],
                 "stat_totals": {
                     stat: {
                         r: [ps["stats"][stat][r] for ps in s_player_stats]
@@ -1274,7 +1274,7 @@ def player_report():
         if not player_events:
             continue
 
-        display_name   = records[0]["name"]
+        display_name   = records[0]["name"].title()
         display_number = records[0]["number"]
         slug = re.sub(r'\W+', '_', norm_name).strip('_') or "player"
 

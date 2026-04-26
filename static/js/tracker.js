@@ -617,7 +617,8 @@ const Tracker = (() => {
     if (pid === "opponent") return window.__oppName || "Opp";
     const p = (window.__players || []).find(x => String(x.id) === String(pid));
     if (!p) return "P" + pid;
-    return (p.number ? "#" + p.number + " " : "") + p.name.split(" ")[0];
+    const firstName = p.name.split(" ")[0];
+    return (p.number ? "#" + p.number + " " : "") + firstName.charAt(0).toUpperCase() + firstName.slice(1);
   }
 
   function scoringAction(actions) {

@@ -36,7 +36,7 @@
         {% for p in players %}
         <tr>
           <td><input type="text" name="player_number" value="{{ p.number or '' }}" placeholder="#" /></td>
-          <td><input type="text" name="player_name"   value="{{ p.name }}" placeholder="Player name" /></td>
+          <td><input type="text" name="player_name"   value="{{ p.name | title }}" placeholder="Player name" /></td>
           <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
         </tr>
         {% endfor %}

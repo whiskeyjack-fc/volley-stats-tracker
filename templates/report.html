@@ -135,7 +135,7 @@
       {% for ps in player_stats %}
       <tr>
         <td>{{ ps.number or '—' }}</td>
-        <td>{{ ps.name }}</td>
+        <td>{{ ps.name | title }}</td>
         {% if ps.stats[stat].total == 0 %}
         <td colspan="{{ results|length + (4 if stat in quality_stats else 3) }}" class="no-data">—</td>
         {% else %}

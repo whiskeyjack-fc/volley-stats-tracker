@@ -820,6 +820,8 @@ body.modal-open { overflow: hidden; }
   table-layout: fixed;
 }
 
+.pname { text-transform: capitalize; }
+
 /* sticky player column */
 .stat-grid .name-col {
   position: sticky;
@@ -1090,6 +1092,7 @@ body.modal-open { overflow: hidden; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-transform: capitalize;
 }
 
 /* Badge row */
@@ -1210,7 +1213,7 @@ body.modal-open { overflow: hidden; }
 }
 .flow-player-opp:hover { border-color: var(--red); color: var(--text); opacity: 1; background: rgba(232,81,74,.12); }
 .fp-num  { font-size: 0.92rem; color: var(--gray); line-height: 1; }
-.fp-name { font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
+.fp-name { font-size: 1.15rem; font-weight: 700; line-height: 1.2; text-transform: capitalize; }
 
 /* Quick-pick row: top 3 players (full-width row inside .flow-player-grid) */
 .flow-quickpick-row {
