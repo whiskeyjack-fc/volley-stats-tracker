@@ -955,7 +955,7 @@ const RallyFlow = (() => {
   function updateLineupButton() {
     const size = getActiveLineup().size;
     const cnt = section("lineup-count");
-    if (cnt) cnt.textContent = `${size}/7`;
+    if (cnt) cnt.textContent = `${size}/8`;
     const badge = section("lineup-count-badge");
     if (badge) badge.textContent = `${size} / 8`;
   }
