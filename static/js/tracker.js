@@ -957,7 +957,7 @@ const RallyFlow = (() => {
     const cnt = section("lineup-count");
     if (cnt) cnt.textContent = `${size}/7`;
     const badge = section("lineup-count-badge");
-    if (badge) badge.textContent = `${size} / 7`;
+    if (badge) badge.textContent = `${size} / 8`;
   }
 
   function renderLineupPanel() {
@@ -985,13 +985,13 @@ const RallyFlow = (() => {
         const lu = getActiveLineup();
         if (lu.has(pid)) {
           lu.delete(pid);
-        } else if (lu.size < 7) {
+        } else if (lu.size < 8) {
           lu.add(pid);
         }
         tile.classList.toggle("active", lu.has(pid));
         updateLineupButton();
         const badge = section("lineup-count-badge");
-        if (badge) badge.textContent = `${lu.size} / 7`;
+        if (badge) badge.textContent = `${lu.size} / 8`;
         saveLineups();
       });
       grid.appendChild(tile);
