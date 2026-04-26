@@ -1593,7 +1593,7 @@ const RallyFlow = (() => {
     const count = lastSavedBuf.length;
     const delta = { home: 0, opp: 0 };
     const _scoreOwn = new Set(["serve.ace", "attack.kill", "block.kill"]);
-    const _scoreErr = new Set(["serve.error", "attack.error", "receive.error", "freeball.error", "fault.fault", "ball_error.ball_error"]);
+    const _scoreErr = new Set(["serve.error", "attack.error", "block.error", "receive.error", "freeball.error", "fault.fault", "ball_error.ball_error"]);
     for (const action of lastSavedBuf) {
       const key   = action.stat + "." + action.result;
       const isOpp = action.pid === "opponent";
