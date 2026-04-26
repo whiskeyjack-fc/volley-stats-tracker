@@ -1482,7 +1482,12 @@ body.modal-open { overflow: hidden; }
   margin-top: 0.5rem;
 }
 .flow-footer {
-  padding: 0.5rem 0 1rem;
+  padding: 0.4rem 0 0.2rem;
+}
+
+.flow-footer #flow-back-btn {
+  padding: 0.55rem 1.4rem;
+  font-size: 1rem;
 }
 
 /* ── Lineup bar & panel ───────────────────────────── */
