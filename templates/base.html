@@ -38,11 +38,16 @@
     <a class="logo" href="{{ url_for('index') }}">🏐 VolleyStats</a>
     <nav class="main-nav">
       {% if current_user.is_authenticated %}
+      <span class="nav-group-label">Management</span>
+      <a href="{{ url_for('roster_list') }}">Roster</a>
       <a href="{{ url_for('team_list') }}">Teams</a>
+      {% if can_view_all() %}<a href="{{ url_for('training_group_list') }}">Training Groups</a>{% endif %}
+      <span class="nav-sep"></span>
+      <span class="nav-group-label">Stats</span>
       <a href="{{ url_for('index') }}">Games</a>
       <a href="{{ url_for('player_report') }}">Players</a>
       <a href="{{ url_for('season_list') }}">Seasons</a>
-      {% if current_user.role == 'admin' %}<a href="{{ url_for('admin_users') }}">Admin</a>{% endif %}
+      {% if can_view_all() %}<a href="{{ url_for('admin_users') }}">Users</a>{% endif %}
       <span class="nav-user">{{ current_user.email }} <span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span></span>
       <form method="post" action="{{ url_for('logout') }}" style="display:inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

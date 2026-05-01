@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Roster — VolleyStats{% endblock %}
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+<div class="page-header">
+  <h1>Roster</h1>
+  {% if can_view_all() %}
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a href="{{ url_for('roster_import') }}" class="btn btn-outline btn-sm">⬆ Import CSV</a>
+    <a href="{{ url_for('roster_new') }}" class="btn btn-primary">＋ New Player</a>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Filter bar ─────────────────────────────────────────────────────────── #}
+<form method="get" id="filter-rows" class="filter-bar" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.25rem;align-items:center">
+  <input type="text" name="q" value="{{ q_filter }}"
+         placeholder="Search name…"
+         style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                color:var(--fg);padding:.35rem .65rem;font-size:0.9rem;min-width:150px" />
+
+  <select name="status"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                 color:var(--fg);padding:.35rem .65rem;font-size:0.9rem">
+    <option value="">All statuses</option>
+    {% for s in ['active','prospect','trial','alumni','inactive'] %}
+    <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s|capitalize }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="position"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                 color:var(--fg);padding:.35rem .65rem;font-size:0.9rem">
+    <option value="">All positions</option>
+    {% for p in ['setter','libero','outside','opposite','middle','ds'] %}
+    <option value="{{ p }}" {% if position_filter == p %}selected{% endif %}>{{ p|capitalize }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="team"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                 color:var(--fg);padding:.35rem .65rem;font-size:0.9rem">
+    <option value="">All teams</option>
+    {% for t in teams %}
+    <option value="{{ t.id }}" {% if team_filter == t.id %}selected{% endif %}>{{ t.name }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="group"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                 color:var(--fg);padding:.35rem .65rem;font-size:0.9rem">
+    <option value="">All groups</option>
+    {% for g in groups %}
+    <option value="{{ g.id }}" {% if group_filter == g.id %}selected{% endif %}>{{ g.name }}</option>
+    {% endfor %}
+  </select>
+
+  <button type="submit" class="btn btn-outline btn-sm">Filter</button>
+  {% if status_filter or position_filter or team_filter or group_filter or request.args.get('q') %}
+  <a href="{{ url_for('roster_list') }}" class="btn btn-sm" style="opacity:0.7">✕ Clear</a>
+  {% endif %}
+</form>
+
+{# ── Results ─────────────────────────────────────────────────────────────── #}
+{% if not profiles %}
+<div class="card" style="text-align:center;padding:2.5rem 1rem">
+  <p style="color:var(--gray);margin-bottom:1rem">No players found.</p>
+  {% if can_view_all() %}
+  <a href="{{ url_for('roster_new') }}" class="btn btn-primary">＋ New Player</a>
+  {% endif %}
+</div>
+{% else %}
+<div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Status</th>
+        <th>Positions</th>
+        <th>DOB</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in profiles %}
+      <tr style="cursor:pointer" onclick="location.href='{{ url_for('roster_detail', profile_id=p.id) }}'">
+        <td style="color:var(--muted)">{{ p.number or '—' }}</td>
+        <td><a href="{{ url_for('roster_detail', profile_id=p.id) }}" style="font-weight:600">{{ p.first_name }} {{ p.last_name }}</a></td>
+        <td>
+          <span class="status-badge status-{{ p.status }}">{{ p.status }}</span>
+        </td>
+        <td style="font-size:0.82rem;color:var(--muted)">
+          {% if p.positions %}
+            {% for pos in p.positions.split(',') %}
+            <span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);
+                         border-radius:999px;padding:.1em .45em;font-size:0.72rem;margin:1px">{{ pos.strip()|capitalize }}</span>
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+        <td style="color:var(--muted);font-size:0.85rem">{{ p.date_of_birth or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p style="font-size:0.82rem;color:var(--muted);margin-top:0.5rem">{{ profiles|length }} player{{ 's' if profiles|length != 1 }}</p>
+{% endif %}
+
+<style>
+.status-badge {
+  display: inline-block;
+  padding: .15em .55em;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.status-active   { background:#1e4d2b; color:#6fcf97; }
+.status-prospect { background:#1e3a5f; color:#7ab3e0; }
+.status-trial    { background:#3d2e00; color:#f0c040; }
+.status-alumni   { background:#2a2a2a; color:#aaa; }
+.status-inactive { background:#2a2a2a; color:#666; }
+@media (max-width:600px) {
+  .filter-bar { flex-direction:column; align-items:stretch; }
+  .filter-bar select, .filter-bar input { width:100%; }
+  .table th:nth-child(4), .table td:nth-child(4),
+  .table th:nth-child(5), .table td:nth-child(5) { display:none; }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.first_name }} {{ profile.last_name }} — VolleyStats{% endblock %}
+{% block content %}
+
+{# ── Flash messages ──────────────────────────────────────────────────────── #}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+{# ── Profile header ──────────────────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.75rem">
+    <div>
+      <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.4rem">
+        {% if profile.number %}
+        <span style="font-size:1.7rem;font-weight:800;color:var(--accent)">#{{ profile.number }}</span>
+        {% endif %}
+        <h1 style="font-size:1.5rem;font-weight:700;margin:0">{{ profile.first_name }} {{ profile.last_name }}</h1>
+        <span class="status-badge status-{{ profile.status }}">{{ profile.status }}</span>
+      </div>
+      {% if profile.date_of_birth %}
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">DOB: {{ profile.date_of_birth }}</p>
+      {% endif %}
+      {# Position pills #}
+      {% if profile.positions %}
+      <div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.5rem">
+        {% for pos in profile.positions.split(',') %}
+        <span class="pos-pill">{{ pos.strip()|capitalize }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {# Tags #}
+      {% set tag_list = profile.tags | from_json %}
+      {% if tag_list %}
+      <div style="display:flex;flex-wrap:wrap;gap:0.3rem">
+        {% for tag in tag_list %}
+        <span style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;
+                     padding:.1em .5em;font-size:0.72rem;color:var(--muted)">{{ tag }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    {% if can_view_all() %}
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-start">
+      <a href="{{ url_for('roster_edit', profile_id=profile.id) }}" class="btn btn-outline btn-sm">✎ Edit</a>
+      <form method="POST" action="{{ url_for('roster_delete', profile_id=profile.id) }}"
+            onsubmit="return confirm('Delete {{ profile.first_name }} {{ profile.last_name }}? This cannot be undone.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  {# Team & coaching badges #}
+  {% if current_teams or coaching_teams %}
+  <div style="margin-top:0.85rem;display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+    {% for t in current_teams %}
+    <span style="background:var(--surface2);border:1px solid var(--accent);border-radius:999px;
+                 padding:.2em .65em;font-size:0.8rem;color:var(--accent)">{{ t.name }}</span>
+    {% endfor %}
+    {% for ct in coaching_teams %}
+    <span style="background:var(--surface2);border:1px solid var(--green);border-radius:999px;
+                 padding:.2em .65em;font-size:0.8rem;color:var(--green)">🎓 Coaches: {{ ct.name }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# Notes #}
+  {% if profile.notes %}
+  <div style="margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid var(--border)">
+    <p style="font-size:0.85rem;color:var(--muted);white-space:pre-wrap">{{ profile.notes }}</p>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Remarks ─────────────────────────────────────────────────────────────── #}
+<div class="card">
+  <h2>Remarks</h2>
+
+  {# Tab bar #}
+  <div class="tab-bar" style="margin-bottom:1rem">
+    <button class="tab-btn active" data-tab="all">All</button>
+    <button class="tab-btn" data-tab="general">General</button>
+    <button class="tab-btn" data-tab="training">Training</button>
+    {% if can_view_all() %}
+    <button class="tab-btn" data-tab="scouting">Scouting</button>
+    <button class="tab-btn" data-tab="injury">Injury</button>
+    <button class="tab-btn" data-tab="followup">Follow-up</button>
+    {% endif %}
+  </div>
+
+  {# Remarks list #}
+  <div id="remarks-list">
+    {% if not remarks %}
+    <p style="color:var(--muted);font-size:0.9rem">No remarks yet.</p>
+    {% else %}
+    {% for r in remarks %}
+    <div class="remark-item" data-type="{{ r.remark_type }}"
+         style="border-left:3px solid var(--remark-{{ r.remark_type }}, var(--border));
+                padding:.6rem .75rem;margin-bottom:.65rem;background:var(--surface2);
+                border-radius:0 var(--radius) var(--radius) 0;position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.3rem;margin-bottom:.3rem">
+        <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
+          <span class="remark-type-badge remark-{{ r.remark_type }}">{{ r.remark_type }}</span>
+          {% if r.is_private %}<span style="font-size:0.68rem;color:var(--red);margin-left:.3rem">🔒 private</span>{% endif %}
+          {% if r.due_date %}<span style="color:var(--muted);font-size:0.72rem;margin-left:.4rem">due {{ r.due_date }}</span>{% endif %}
+        </span>
+        <span style="font-size:0.75rem;color:var(--muted)">{{ r.author_email or 'unknown' }} · {{ r.created_at[:10] }}</span>
+      </div>
+      <p style="margin:0;font-size:0.9rem;white-space:pre-wrap">{{ r.content }}</p>
+      {% if can_view_all() %}
+      <form method="POST" action="{{ url_for('roster_delete_remark', profile_id=profile.id, remark_id=r.id) }}"
+            style="position:absolute;top:.5rem;right:.5rem"
+            onsubmit="return confirm('Delete this remark?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm btn-danger" style="padding:.15rem .4rem;font-size:0.7rem">✕</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  {# Add-remark form #}
+  {% if can_add_remark %}
+  <details style="margin-top:1rem">
+    <summary style="cursor:pointer;color:var(--accent);font-size:0.9rem;font-weight:600;list-style:none;padding:.4rem 0">
+      ＋ Add remark
+    </summary>
+    <form method="POST" action="{{ url_for('roster_add_remark', profile_id=profile.id) }}"
+          style="margin-top:.75rem;display:flex;flex-direction:column;gap:.6rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end">
+        <label style="flex:1;min-width:130px">
+          <span style="font-size:0.8rem;color:var(--muted)">Type</span>
+          <select name="remark_type"
+                  style="display:block;width:100%;background:var(--surface2);border:1px solid var(--border);
+                         border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem">
+            <option value="general">General</option>
+            <option value="training">Training</option>
+            {% if can_view_all() %}
+            <option value="scouting">Scouting</option>
+            <option value="injury">Injury</option>
+            <option value="followup">Follow-up</option>
+            {% endif %}
+          </select>
+        </label>
+        <label id="due-date-field" style="display:none;flex:1;min-width:130px">
+          <span style="font-size:0.8rem;color:var(--muted)">Due date</span>
+          <input type="date" name="due_date"
+                 style="display:block;width:100%;background:var(--surface2);border:1px solid var(--border);
+                        border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem" />
+        </label>
+        {% if can_view_all() %}
+        <label style="display:flex;align-items:center;gap:.35rem;font-size:0.85rem;cursor:pointer;padding-bottom:.35rem">
+          <input type="checkbox" name="is_private"> Private
+        </label>
+        {% endif %}
+      </div>
+      <textarea name="content" rows="3" placeholder="Remark text…" required
+                style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                       color:var(--fg);padding:.4rem .55rem;font-size:0.9rem;resize:vertical"></textarea>
+      <div>
+        <button type="submit" class="btn btn-primary btn-sm">Save Remark</button>
+      </div>
+    </form>
+  </details>
+  {% endif %}
+</div>
+
+<div style="margin-top:0.75rem">
+  <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Back to Roster</a>
+</div>
+
+<style>
+.pos-pill {
+  display:inline-block;background:var(--surface2);border:1px solid var(--border);
+  border-radius:999px;padding:.15em .55em;font-size:0.78rem;color:var(--fg);
+}
+.status-badge { display:inline-block;padding:.15em .55em;border-radius:999px;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em; }
+.status-active   { background:#1e4d2b; color:#6fcf97; }
+.status-prospect { background:#1e3a5f; color:#7ab3e0; }
+.status-trial    { background:#3d2e00; color:#f0c040; }
+.status-alumni   { background:#2a2a2a; color:#aaa; }
+.status-inactive { background:#2a2a2a; color:#666; }
+.remark-type-badge {
+  display:inline-block;padding:.1em .4em;border-radius:4px;font-size:0.7rem;font-weight:700;
+}
+.remark-general  { background:#1e2a1e; color:#6fcf97; }
+.remark-training { background:#1e3a5f; color:#7ab3e0; }
+.remark-scouting { background:#3d1e5f; color:#c07ae0; }
+.remark-injury   { background:#4d1e1e; color:#e07a7a; }
+.remark-followup { background:#3d2e00; color:#f0c040; }
+</style>
+
+<script>
+(function () {
+  const tabs = document.querySelectorAll('.tab-btn');
+  const items = document.querySelectorAll('.remark-item');
+
+  function applyTab(tab) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    items.forEach(item => {
+      item.style.display = (tab === 'all' || item.dataset.type === tab) ? '' : 'none';
+    });
+    localStorage.setItem('roster-remark-tab-{{ profile.id }}', tab);
+  }
+
+  tabs.forEach(btn => btn.addEventListener('click', () => applyTab(btn.dataset.tab)));
+  const saved = localStorage.getItem('roster-remark-tab-{{ profile.id }}');
+  if (saved) applyTab(saved);
+
+  // Show/hide due-date field based on remark type
+  const typeSelect = document.querySelector('[name="remark_type"]');
+  const dueDateField = document.getElementById('due-date-field');
+  if (typeSelect && dueDateField) {
+    function toggleDueDate() {
+      dueDateField.style.display = typeSelect.value === 'followup' ? '' : 'none';
+    }
+    typeSelect.addEventListener('change', toggleDueDate);
+    toggleDueDate();
+  }
+})();
+</script>
+{% endblock %}

@@ -19,6 +19,7 @@
       <tr style="border-bottom:1px solid var(--border)">
         <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Email</th>
         <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Role</th>
+        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Player Profile</th>
         <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Registered</th>
         <th style="padding:.6rem .5rem"></th>
       </tr>
@@ -30,8 +31,33 @@
         <td style="padding:.65rem .5rem">
           <span class="role-badge role-{{ u.role }}">{{ u.role }}</span>
         </td>
+        <td style="padding:.65rem .5rem">
+          {% if u.profile_id %}
+          <a href="{{ url_for('roster_detail', profile_id=u.profile_id) }}"
+             style="font-size:0.85rem">#{{ u.profile_id }}</a>
+          {% else %}
+          <span style="color:var(--muted);font-size:0.82rem">—</span>
+          {% endif %}
+          {# Link / unlink form — coordinator/admin #}
+          <form method="POST" action="{{ url_for('admin_link_profile', user_id=u.id) }}"
+                style="display:inline-flex;gap:.3rem;align-items:center;margin-left:.4rem">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select name="profile_id"
+                    style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                           color:var(--fg);padding:.2rem .4rem;font-size:0.8rem;max-width:160px">
+              <option value="">— unlink —</option>
+              {% for p in profiles %}
+              <option value="{{ p.id }}" {% if u.profile_id == p.id %}selected{% endif %}>
+                #{{ p.id }} {{ p.first_name }} {{ p.last_name }}
+              </option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-sm" style="font-size:0.78rem;padding:.2rem .5rem">Link</button>
+          </form>
+        </td>
         <td style="padding:.65rem .5rem;color:var(--muted)">{{ u.created_at[:10] }}</td>
         <td style="padding:.65rem .5rem">
+          {% if current_user.role == 'admin' %}
           <form method="post" action="{{ url_for('admin_set_role', user_id=u.id) }}" style="display:flex;gap:.4rem;align-items:center">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label for="role-{{ u.id }}" class="sr-only">Role for {{ u.email }}</label>
@@ -42,6 +68,7 @@
             </select>
             <button type="submit" class="btn btn-sm">Save</button>
           </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -49,3 +76,4 @@
   </table>
 </div>
 {% endblock %}
+

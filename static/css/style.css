@@ -48,9 +48,11 @@ header {
 }
 .logo { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 .logo:hover { text-decoration: none; }
-.main-nav { display: flex; gap: 1rem; align-items: center; }
+.main-nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
 .main-nav a { color: var(--gray); font-size: 0.9rem; font-weight: 600; }
 .main-nav a:hover { color: var(--text); text-decoration: none; }
+.nav-group-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); opacity: .6; }
+.nav-sep { width: 1px; height: 1.1em; background: var(--border); display: inline-block; }
 .nav-user { color: var(--gray); font-size: 0.85rem; margin-left: 0.5rem; }
 .role-badge { display:inline-block; padding:.15em .5em; border-radius:999px; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
 .role-badge.role-trainer     { background: #1e3a5f; color: #7ab3e0; }

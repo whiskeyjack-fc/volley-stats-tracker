@@ -3,32 +3,80 @@
 {% block content %}
 <div class="page-header">
   <h1>Club Teams</h1>
+  {% if can_view_all() %}
   <a href="{{ url_for('new_team') }}" class="btn btn-primary">＋ New Team</a>
+  {% endif %}
 </div>
 
 {% if not teams %}
 <div class="card" style="text-align:center;padding:2.5rem 1rem">
   <p style="color:var(--gray);margin-bottom:1rem">No teams yet. Create a team to pre-fill rosters when setting up new games.</p>
+  {% if can_view_all() %}
   <a href="{{ url_for('new_team') }}" class="btn btn-primary">＋ New Team</a>
+  {% endif %}
 </div>
 {% else %}
 <div class="team-cards">
   {% for t in teams %}
-  <div class="team-card-item">
-    <div class="team-card-info">
-      <span class="team-card-name">{{ t.name }}</span>
-      <span class="team-card-count">{{ team_player_counts[t.id] }} player{{ 's' if team_player_counts[t.id] != 1 else '' }}</span>
+  <div class="team-card-item" style="flex-direction:column;align-items:stretch;gap:.65rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+      <div class="team-card-info">
+        <span class="team-card-name">{{ t.name }}</span>
+        <span class="team-card-count">{{ team_player_counts[t.id] }} player{{ 's' if team_player_counts[t.id] != 1 else '' }}</span>
+      </div>
+      {% if can_view_all() %}
+      <div class="team-card-actions">
+        <a href="{{ url_for('edit_team', team_id=t.id) }}" class="btn btn-sm btn-outline">Edit</a>
+        <form method="POST" action="{{ url_for('delete_team', team_id=t.id) }}" style="display:inline"
+              onsubmit="return confirm('Delete {{ t.name|e }}? This cannot be undone.')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+        </form>
+      </div>
+      {% endif %}
     </div>
-    <div class="team-card-actions">
-      <a href="{{ url_for('edit_team', team_id=t.id) }}" class="btn btn-sm btn-outline">Edit</a>
-      <form method="POST" action="{{ url_for('delete_team', team_id=t.id) }}" style="display:inline"
-            onsubmit="return confirm('Delete {{ t.name|e }}? This cannot be undone.')">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-      </form>
+
+    {# Assigned trainers #}
+    <div style="border-top:1px solid var(--border);padding-top:.5rem">
+      <span style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600">Trainers</span>
+      <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.35rem;align-items:center">
+        {% if team_trainers[t.id] %}
+          {% for tr in team_trainers[t.id] %}
+          <span style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;
+                       padding:.15em .55em;font-size:0.78rem;display:inline-flex;align-items:center;gap:.3rem">
+            {{ tr.email }}
+            {% if can_view_all() %}
+            <form method="POST" action="{{ url_for('team_remove_trainer', team_id=t.id, user_id=tr.id) }}"
+                  style="display:inline;margin:0"
+                  onsubmit="return confirm('Remove {{ tr.email|e }} from {{ t.name|e }}?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit"
+                      style="background:none;border:none;color:var(--red);cursor:pointer;padding:0;font-size:.85rem;line-height:1"
+                      title="Remove trainer">✕</button>
+            </form>
+            {% endif %}
+          </span>
+          {% endfor %}
+        {% else %}
+          <span style="color:var(--muted);font-size:0.82rem">None assigned</span>
+        {% endif %}
+
+        {% if can_view_all() %}
+        {# Add trainer inline form #}
+        <form method="POST" action="{{ url_for('team_add_trainer', team_id=t.id) }}"
+              style="display:inline-flex;gap:.3rem;align-items:center;margin-left:.25rem">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="number" name="user_id" min="1" placeholder="User ID" required
+                 style="width:80px;background:var(--surface2);border:1px solid var(--border);
+                        border-radius:var(--radius);color:var(--fg);padding:.2rem .4rem;font-size:0.8rem" />
+          <button type="submit" class="btn btn-sm btn-outline" style="font-size:0.78rem;padding:.2rem .5rem">＋ Add</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
   </div>
   {% endfor %}
 </div>
 {% endif %}
 {% endblock %}
+

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{% if profile %}Edit {{ profile.first_name }} {{ profile.last_name }}{% else %}New Player{% endif %} — VolleyStats{% endblock %}
+{% block content %}
+<h1 style="font-size:1.4rem;font-weight:700;margin-bottom:1.25rem">
+  {% if profile %}Edit Player{% else %}New Player{% endif %}
+</h1>
+
+{% if error %}
+<div class="auth-error" style="margin-bottom:1rem">{{ error }}</div>
+{% endif %}
+
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <section class="card" style="margin-bottom:1rem">
+    <h2>Basic Info</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <label>
+        <span class="field-label">First Name <span style="color:var(--red)">*</span></span>
+        <input type="text" name="first_name" required
+               value="{{ profile.first_name if profile else '' }}" placeholder="First name" />
+      </label>
+      <label>
+        <span class="field-label">Last Name <span style="color:var(--red)">*</span></span>
+        <input type="text" name="last_name" required
+               value="{{ profile.last_name if profile else '' }}" placeholder="Last name" />
+      </label>
+      <label>
+        <span class="field-label">Date of Birth</span>
+        <input type="date" name="date_of_birth"
+               value="{{ profile.date_of_birth if profile else '' }}" />
+      </label>
+      <label>
+        <span class="field-label">Jersey #</span>
+        <input type="text" name="number" maxlength="10"
+               value="{{ profile.number if profile else '' }}" placeholder="e.g. 7" />
+      </label>
+    </div>
+
+    <div style="margin-top:.75rem">
+      <label>
+        <span class="field-label">Status</span>
+        <select name="status"
+                style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                       color:var(--fg);padding:.35rem .5rem;font-size:0.9rem">
+          {% for s in ['active','prospect','trial','alumni','inactive'] %}
+          <option value="{{ s }}" {% if profile and profile.status == s %}selected{% endif %}>{{ s|capitalize }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section class="card" style="margin-bottom:1rem">
+    <h2>Positions</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:.6rem">
+      {% set cur_positions = (profile.positions or '').split(',') | map('trim') | list if profile else [] %}
+      {% for pos in ['setter','libero','outside','opposite','middle','ds'] %}
+      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;
+                    background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                    padding:.3rem .65rem;font-size:0.88rem;
+                    transition:border-color .15s,background .15s">
+        <input type="checkbox" name="positions_check" value="{{ pos }}"
+               {% if pos in cur_positions %}checked{% endif %}
+               onchange="syncPositions()"
+               style="accent-color:var(--accent)"> {{ pos|capitalize }}
+      </label>
+      {% endfor %}
+    </div>
+    {# Hidden field that gets populated by JS #}
+    <input type="hidden" name="positions" id="positions-hidden"
+           value="{{ profile.positions or '' if profile else '' }}" />
+  </section>
+
+  <section class="card" style="margin-bottom:1rem">
+    <h2>Tags</h2>
+    <label>
+      <span class="field-label">Tags (comma-separated)</span>
+      <input type="text" name="tags"
+             value="{{ profile.tags | from_json | join(', ') if profile and profile.tags else '' }}"
+             placeholder="e.g. U18, national, transfer" />
+    </label>
+  </section>
+
+  <section class="card" style="margin-bottom:1rem">
+    <h2>Notes</h2>
+    <textarea name="notes" rows="4" placeholder="Internal notes…"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);
+                     border-radius:var(--radius);color:var(--fg);padding:.4rem .55rem;
+                     font-size:0.9rem;resize:vertical;box-sizing:border-box">{{ profile.notes or '' if profile else '' }}</textarea>
+  </section>
+
+  <div class="form-actions" style="gap:.75rem">
+    <a href="{{ url_for('roster_detail', profile_id=profile.id) if profile else url_for('roster_list') }}"
+       class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary btn-lg">
+      {% if profile %}Save Changes{% else %}Create Player{% endif %}
+    </button>
+  </div>
+</form>
+
+<style>
+.field-label { display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em; }
+input[type="text"], input[type="date"] {
+  width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+  color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box;
+}
+input:focus, select:focus, textarea:focus { border-color:var(--accent);outline:none; }
+@media (max-width:600px) {
+  section.card div[style*="grid"] { grid-template-columns:1fr; }
+}
+</style>
+
+<script>
+function syncPositions() {
+  const checked = Array.from(document.querySelectorAll('[name="positions_check"]:checked'))
+    .map(cb => cb.value);
+  document.getElementById('positions-hidden').value = checked.join(',');
+}
+// Init on load
+syncPositions();
+</script>
+{% endblock %}
