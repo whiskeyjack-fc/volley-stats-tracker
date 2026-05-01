@@ -13,9 +13,9 @@ VolleyStats is a Flask 3.x / SQLite volleyball statistics tracker. A single mono
 | Backend routes + logic | `app.py` |
 | Live tracking JS | `static/js/tracker.js` |
 | Styles | `static/css/style.css` |
-| Templates (13) | `templates/` — `base.html`, `track.html`, `report.html`, `season_report.html`, `player_report.html`, … |
+| Templates (20) | `templates/` — `base.html`, `track.html`, `report.html`, `season_report.html`, `player_report.html`, `roster_list.html`, `roster_detail.html`, `roster_form.html`, `roster_import.html`, `training_groups.html`, `training_group_detail.html`, `training_group_form.html`, … |
 
-**DB tables:** `users` · `games` · `players` · `sets` · `events` · `seasons` · `club_teams` · `club_team_players`
+**DB tables:** `users` · `games` · `players` · `sets` · `events` · `seasons` · `club_teams` · `club_team_players` · `player_profiles` · `player_remarks` · `training_groups` · `training_group_players` · `club_team_trainers`
 
 **Stat pipeline:**
 ```
@@ -31,6 +31,8 @@ events → build_player_stats() → agg_team_stats() → build_chart_data() → 
 | `build_chart_data(game_rows)` | Chart-ready arrays; X-axis = games |
 | `build_comparison_data(...)` | Multi-player cross-game comparison |
 | `_uid_cond()` | Returns `(sql_fragment, params)` for user-scoped queries |
+| `_team_cond()` | Returns `(sql_fragment, params)` scoping `club_teams` to trainer's assigned teams; no-op for coordinator/admin |
+| `_resolve_profile_id(first, last)` | Normalises `first+" "+last` and returns matching `player_profiles.id` or `None` |
 
 For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/copilot-instructions.md).
 
@@ -46,6 +48,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 | **Chart canvas IDs must be `{slug}-{chartName}`** | Both the template and `initPlayerCharts(slug, data)` must match exactly |
 | **DB migrations are non-destructive** | `ALTER TABLE … ADD COLUMN IF NOT EXISTS` only; never DROP columns |
 | **Tracking JS stays in `tracker.js`** | Report/chart JS lives inside each template's own `<script>` block; pages don't share runtime JS |
+| **Use `_team_cond()` for every `club_teams` query** | Trainers see only their assigned teams via `club_team_trainers`; coordinators/admins get no filter — mirrors `_uid_cond()` but for team scope |
 | **Player identity = `name.strip().lower()`** | Applied at both insert time and query time; no alias matching |
 | **`sqlite3.Row` row factory on every connection** | Set in `get_db()`; forgetting it breaks downstream `dict()` calls silently |
 | **Keep line endings as LF** | CRLF in JS/HTML/Python files breaks string-matching tools (replace, grep, patch); enforce with `.gitattributes`: `* text=auto eol=lf` |
@@ -85,11 +88,14 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 > Use this section to capture ongoing ideas, active work, and design decisions. Keep it current.
 
 ### Ideas / Backlog
-
+- Wire `/api/roster/search` typeahead to training-group add-player form (currently uses raw numeric ID input)
+- Fix `edit_team()` to use `can_view_all()` guard instead of `_uid_cond()` — trainers who originally created a team can currently still access the edit page
+- Re-render `name`/`description` values in `training_group_form.html` on validation error
 
 ### Active Work
 
 
 ### Decisions Made
+- Player management feature (roster, remarks, training groups, club_team_trainers) shipped on `feature/player-scouting`; trainer assignment UI lives on `team_list.html` (not `team_form.html`) — more user-friendly in practice
 
 

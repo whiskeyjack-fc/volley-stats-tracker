@@ -17,6 +17,7 @@
 - New cards and panels must use `--surface`, `--border`, and `--radius` CSS variables.
 - All new pages and components must be responsive — test at mobile width (≤ 600 px) and verify the layout does not overflow horizontally.
 - Interactive controls (buttons, chips) must have a visible hover state using the existing transition pattern (`opacity`, `color`, `background`).
+- Nav sections use `.nav-group-label` (plain text divider) and `.nav-sep` (horizontal rule) CSS classes to separate groups. Do not use dropdowns for top-level navigation.
 
 ## API & Backend
 - All API endpoints (`/api/...`) must return JSON and use appropriate HTTP status codes.
