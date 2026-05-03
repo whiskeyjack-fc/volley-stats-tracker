@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import filter_select %}
 {% block title %}Games — VolleyStats{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -15,16 +16,24 @@
   </div>
 </div>
 
-{% if teams %}
-<div class="season-btns" style="margin-bottom:1rem">
-  <a class="btn btn-sm {% if not active_team %}btn-primary{% else %}btn-outline{% endif %}"
-     href="{{ url_for('index') }}">All Teams</a>
-  {% for t in teams %}
-  <a class="btn btn-sm {% if active_team == t %}btn-primary{% else %}btn-outline{% endif %}"
-     href="{{ url_for('index', team=t) }}">{{ t }}</a>
-  {% endfor %}
-</div>
-{% endif %}
+<form method="get" class="filter-bar">
+  {% call filter_select('season', 'All seasons') %}
+    {% for s in seasons %}
+    <option value="{{ s }}" {% if active_season == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('team', 'All teams') %}
+    {% for t in teams %}
+    <option value="{{ t.team_name }}" {% if active_team == t.team_name %}selected{% endif %}>{{ t.short_name or t.team_name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  <button type="submit" class="btn btn-outline btn-sm">Filter</button>
+  {% if active_team or active_season %}
+  <a href="{{ url_for('index') }}" class="btn btn-sm" style="opacity:0.7">✕ Clear</a>
+  {% endif %}
+</form>
 
 {% if games %}
 <table class="table">
@@ -42,7 +51,7 @@
     <tr>
       <td>{{ g.played_at }}</td>
       <td>{% if g.season %}<span class="season-tag">{{ g.season }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td>{{ g.team_name }}</td>
+      <td>{{ g.team_short_name or g.team_name }}</td>
       <td>{{ g.opponent }}</td>
       <td class="actions">
         <a class="btn btn-sm" href="{{ url_for('track', game_id=g.id) }}">Track</a>

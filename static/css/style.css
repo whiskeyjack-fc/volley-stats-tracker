@@ -395,6 +395,43 @@ button.set-chip { font: inherit; line-height: 1; }
   pointer-events: none;
 }
 
+/* ── Unified form-based filter bar ──────────────────────────── */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  align-items: center;
+}
+.filter-search {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: .35rem .65rem;
+  font-size: 0.9rem;
+  width: 160px;
+  max-width: 160px;
+  flex-shrink: 0;
+}
+.filter-select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: .2rem .45rem;
+  font-size: 0.8rem;
+  max-width: 130px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.filter-select:focus { outline: none; border-color: var(--accent); }
+@media (max-width: 600px) {
+  .filter-bar { gap: 0.4rem; }
+  .filter-search { min-width: 0; width: 100%; }
+  .filter-select { font-size: 0.78rem; }
+}
+
 /* ── Filter bar collapse toggle ─────────────────────────────── */
 .filter-rows-wrap {
   display: grid;

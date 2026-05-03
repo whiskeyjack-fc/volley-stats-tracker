@@ -22,6 +22,8 @@
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
       <div class="team-card-info">
         <span class="team-card-name">{{ t.name }}</span>
+        {% if t.short_name %}<span style="font-size:0.78rem;color:var(--accent);font-weight:600">{{ t.short_name }}</span>{% endif %}
+        {% if t.division %}<span style="font-size:0.75rem;color:var(--muted)">{{ t.division }}</span>{% endif %}
         <span class="team-card-count">{{ team_player_counts[t.id] }} player{{ 's' if team_player_counts[t.id] != 1 else '' }}</span>
       </div>
       {% if can_view_all() %}
@@ -36,11 +38,11 @@
       {% endif %}
     </div>
 
-    {# Assigned trainers #}
+    {# Team Staff: trainer users + non-player roster members #}
     <div style="border-top:1px solid var(--border);padding-top:.5rem">
-      <span style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600">Trainers</span>
+      <span style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600">Team Staff</span>
       <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.35rem;align-items:center">
-        {% if team_trainers[t.id] %}
+        {% if team_trainers[t.id] or team_non_players[t.id] %}
           {% for tr in team_trainers[t.id] %}
           <span style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;
                        padding:.15em .55em;font-size:0.78rem;display:inline-flex;align-items:center;gap:.3rem">
@@ -57,21 +59,19 @@
             {% endif %}
           </span>
           {% endfor %}
+          {% for m in team_non_players[t.id] %}
+          <span style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;
+                       padding:.15em .55em;font-size:0.78rem;display:inline-flex;align-items:center;gap:.3rem">
+            {{ m.name }}
+            {% if m.roles %}
+            <span style="font-size:0.7rem;color:var(--muted)">· {{ m.roles.split(',') | map('trim') | map('replace', '_', ' ') | join(', ') | title }}</span>
+            {% endif %}
+          </span>
+          {% endfor %}
         {% else %}
           <span style="color:var(--muted);font-size:0.82rem">None assigned</span>
         {% endif %}
 
-        {% if can_view_all() %}
-        {# Add trainer inline form #}
-        <form method="POST" action="{{ url_for('team_add_trainer', team_id=t.id) }}"
-              style="display:inline-flex;gap:.3rem;align-items:center;margin-left:.25rem">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="number" name="user_id" min="1" placeholder="User ID" required
-                 style="width:80px;background:var(--surface2);border:1px solid var(--border);
-                        border-radius:var(--radius);color:var(--fg);padding:.2rem .4rem;font-size:0.8rem" />
-          <button type="submit" class="btn btn-sm btn-outline" style="font-size:0.78rem;padding:.2rem .5rem">＋ Add</button>
-        </form>
-        {% endif %}
       </div>
     </div>
   </div>

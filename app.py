@@ -45,19 +45,20 @@ limiter = Limiter(
 
 
 class User(UserMixin):
-    def __init__(self, id, email, role='trainer'):
+    def __init__(self, id, email, role='trainer', profile_id=None):
         self.id = id
         self.email = email
         self.role = role
+        self.profile_id = profile_id
 
 
 @login_manager.user_loader
 def load_user(user_id):
     db_conn = sqlite3.connect(DATABASE)
     db_conn.row_factory = sqlite3.Row
-    row = db_conn.execute("SELECT id, email, role FROM users WHERE id=?", (int(user_id),)).fetchone()
+    row = db_conn.execute("SELECT id, email, role, profile_id FROM users WHERE id=?", (int(user_id),)).fetchone()
     db_conn.close()
-    return User(row["id"], row["email"], row["role"]) if row else None
+    return User(row["id"], row["email"], row["role"], row["profile_id"]) if row else None
 
 
 def can_view_all():
@@ -78,10 +79,24 @@ def _uid_cond():
 
 def _team_cond():
     """Return (sql AND fragment, params) scoping club_teams queries to trainer's assigned teams.
+    A trainer has access to a team if they appear in club_team_trainers OR their linked
+    player_profile has a non-player role in club_team_players for that team.
     Returns ('', []) for coordinator/admin roles who see all teams."""
     if can_view_all():
         return "", []
-    return " AND id IN (SELECT team_id FROM club_team_trainers WHERE user_id=?)", [current_user.id]
+    uid = current_user.id
+    profile_id = getattr(current_user, "profile_id", None)
+    if profile_id:
+        return (
+            " AND id IN ("
+            "SELECT team_id FROM club_team_trainers WHERE user_id=?"
+            " UNION "
+            "SELECT team_id FROM club_team_players "
+            "WHERE profile_id=? AND roles IS NOT NULL AND roles!='' AND roles NOT LIKE '%player%'"
+            ")",
+            [uid, profile_id],
+        )
+    return " AND id IN (SELECT team_id FROM club_team_trainers WHERE user_id=?)", [uid]
 
 def _resolve_profile_id(first, last):
     """Return profile_id matching normalized full name (first+" "+last), or None."""
@@ -255,7 +270,8 @@ def migrate_db():
             name TEXT NOT NULL,
             number TEXT
         )""",
-        "INSERT OR IGNORE INTO seasons (name) SELECT DISTINCT season FROM games WHERE season != ''",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_seasons_null_user ON seasons(name) WHERE user_id IS NULL",
+        "INSERT OR IGNORE INTO seasons (name) SELECT DISTINCT season FROM games WHERE season != '' AND season NOT IN (SELECT name FROM seasons)",
         # user accounts
         "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'trainer')",
         "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'trainer'",
@@ -307,6 +323,16 @@ def migrate_db():
         "ALTER TABLE players ADD COLUMN profile_id INTEGER REFERENCES player_profiles(id)",
         "ALTER TABLE club_team_players ADD COLUMN profile_id INTEGER REFERENCES player_profiles(id)",
         "ALTER TABLE users ADD COLUMN profile_id INTEGER REFERENCES player_profiles(id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_club_team_players_profile ON club_team_players(team_id, profile_id) WHERE profile_id IS NOT NULL",
+        "ALTER TABLE player_profiles ADD COLUMN federation_id TEXT",
+        "ALTER TABLE club_teams ADD COLUMN division TEXT",
+        "ALTER TABLE club_teams ADD COLUMN short_name TEXT",
+        "ALTER TABLE club_team_players ADD COLUMN season_id INTEGER REFERENCES seasons(id)",
+        "DROP INDEX IF EXISTS uq_club_team_players_profile",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_ctp_season ON club_team_players(team_id, season_id, profile_id) WHERE profile_id IS NOT NULL AND season_id IS NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_ctp_legacy ON club_team_players(team_id, profile_id) WHERE profile_id IS NOT NULL AND season_id IS NULL",
+        "ALTER TABLE club_team_players ADD COLUMN roles TEXT",
+        "ALTER TABLE player_profiles ADD COLUMN is_staff INTEGER NOT NULL DEFAULT 0",
     ]:
         try:
             db.execute(sql)
@@ -388,6 +414,17 @@ def migrate_db():
 
 # ── constants ────────────────────────────────────────────────────────────────
 
+TEAM_MEMBER_ROLES = [
+    ('player',          'Player'),
+    ('head_coach',      'Head Coach'),
+    ('assistant_coach', 'Assistant Coach'),
+    ('team_manager',    'Team Manager'),
+    ('medical',         'Medical'),
+    ('scorer',          'Scorer'),
+    ('marker',          'Marker'),
+    ('video_analyst',   'Video Analyst'),
+]
+
 STAT_RESULTS = {
     "serve":    ["error", "1-serve", "2-serve", "3-serve", "ace"],
     "receive":  ["error", "1-receive", "2-receive", "3-receive", "overpass"],
@@ -437,6 +474,47 @@ def _calc_stat_counts(events, stat, results):
         weighted = sum(cnt[r] * w.get(r, 0) for r in results)
         cnt["quality"] = round(weighted / cnt["total"], 2) if cnt["total"] else 0.0
     return cnt
+
+
+_NAME_PARTICLES = {"van", "de", "den", "der", "ter", "ten", "op"}
+
+def _make_display_names(player_stats):
+    """Return display labels for a player_stats list.
+
+    Each label is the first name only when that first name is unique among all
+    players in the list.  If two or more players share a first name the label
+    becomes  FirstName + abbreviated last name, where every particle word is
+    shortened to its initial letter and the core surname word is shortened to
+    its capitalised initial (e.g. "Jan v. d. B.").
+    Names in player_stats are stored lowercase; this function returns
+    properly-cased labels.
+    """
+    def _parse(name_lower):
+        parts = name_lower.strip().split()
+        if not parts:
+            return "", [], None
+        first = parts[0]
+        rest = parts[1:]
+        i = 0
+        while i < len(rest) - 1 and rest[i] in _NAME_PARTICLES:
+            i += 1
+        return first, rest[:i], rest[i] if i < len(rest) else None
+
+    parsed = [_parse(ps["name"].strip().lower()) for ps in player_stats]
+    first_counts = {}
+    for first, _, _ in parsed:
+        first_counts[first] = first_counts.get(first, 0) + 1
+
+    result = []
+    for first, particles, core in parsed:
+        if first_counts[first] > 1 and (particles or core):
+            abbr = [p[0] + "." for p in particles]
+            if core:
+                abbr.append(core[0].upper() + ".")
+            result.append(first.title() + " " + " ".join(abbr))
+        else:
+            result.append(first.title())
+    return result
 
 
 def build_player_stats(events, players):
@@ -575,11 +653,11 @@ def login():
         password = request.form.get("password", "")
         db = get_db()
         row = db.execute(
-            "SELECT id, email, password_hash, role FROM users WHERE email=?", (email,)
+            "SELECT id, email, password_hash, role, profile_id FROM users WHERE email=?", (email,)
         ).fetchone()
         if not row or not check_password_hash(row["password_hash"], password):
             return render_template("login.html", error="Invalid email or password.")
-        login_user(User(row["id"], row["email"], row["role"]))
+        login_user(User(row["id"], row["email"], row["role"], row["profile_id"]))
         next_url = request.args.get("next") or ""
         if not next_url.startswith("/"):
             next_url = url_for("index")
@@ -600,80 +678,93 @@ def logout():
 def index():
     db = get_db()
     ucond, uparams = _uid_cond()
-    teams = [r["team_name"] for r in db.execute(
-        f"SELECT DISTINCT team_name FROM games WHERE team_name != ''{ucond} ORDER BY team_name COLLATE NOCASE",
+    teams_rows = db.execute(
+        f"SELECT DISTINCT g.team_name, ct.short_name FROM games g "
+        f"LEFT JOIN club_teams ct ON ct.name = g.team_name "
+        f"WHERE g.team_name != ''{ucond.replace('user_id', 'g.user_id')} ORDER BY g.team_name COLLATE NOCASE",
         uparams
-    ).fetchall()]
-    active_team = request.args.get("team", "")
-    if active_team and active_team not in teams:
-        active_team = ""
-    if active_team:
-        games = db.execute(
-            f"SELECT * FROM games WHERE team_name=?{ucond} ORDER BY played_at DESC, id DESC",
-            [active_team] + uparams
-        ).fetchall()
-    else:
-        games = db.execute(
-            f"SELECT * FROM games WHERE 1=1{ucond} ORDER BY played_at DESC, id DESC",
-            uparams
-        ).fetchall()
+    ).fetchall()
+    teams = [dict(r) for r in teams_rows]
     seasons = [s["season"] for s in db.execute(
         f"SELECT DISTINCT season FROM games WHERE season != ''{ucond} ORDER BY season DESC",
         uparams
     ).fetchall()]
-    return render_template("index.html", games=games, seasons=seasons, teams=teams, active_team=active_team)
+    active_team   = request.args.get("team", "")
+    active_season = request.args.get("season", "")
+    if active_team and active_team not in [t["team_name"] for t in teams]:
+        active_team = ""
+    if active_season and active_season not in seasons:
+        active_season = ""
+    where = "WHERE 1=1"
+    params = list(uparams)
+    if active_team:
+        where += " AND g.team_name=?"
+        params.append(active_team)
+    if active_season:
+        where += " AND g.season=?"
+        params.append(active_season)
+    games = db.execute(
+        f"SELECT g.*, ct.short_name AS team_short_name FROM games g "
+        f"LEFT JOIN club_teams ct ON ct.name = g.team_name "
+        f"{where}{ucond.replace('user_id', 'g.user_id')} ORDER BY g.played_at DESC, g.id DESC",
+        params
+    ).fetchall()
+    return render_template("index.html", games=games, seasons=seasons, teams=teams,
+                           active_team=active_team, active_season=active_season)
 
 
 @app.route("/games/new", methods=["GET", "POST"])
 @login_required
 def new_game():
+    db = get_db()
+    ucond, uparams = _uid_cond()
+    tcond, tparams = _team_cond()
+    season_objs = [dict(s) for s in db.execute(
+        f"SELECT id, name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
+    ).fetchall()]
+    seasons = [s["name"] for s in season_objs]
+    season_id_map = {s["name"]: s["id"] for s in season_objs}
+    club_teams = [dict(t) for t in db.execute(
+        f"SELECT id, name, short_name FROM club_teams WHERE 1=1{tcond} ORDER BY name COLLATE NOCASE", tparams
+    ).fetchall()]
+    all_profiles = [dict(r) for r in db.execute(
+        "SELECT id, first_name, last_name, number FROM player_profiles "
+        "WHERE status='active' ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE"
+    ).fetchall()]
     if request.method == "POST":
         team   = request.form["team_name"].strip()
         opp    = request.form["opponent"].strip()
         played = request.form.get("played_at") or datetime.now().strftime("%Y-%m-%d")
         season = request.form.get("season", "").strip()
-        db = get_db()
         cur = db.execute(
             "INSERT INTO games (user_id, season, team_name, opponent, played_at) VALUES (?,?,?,?,?)",
             (current_user.id, season, team, opp, played)
         )
         game_id = cur.lastrowid
-
-        numbers = request.form.getlist("player_number")
-        names   = request.form.getlist("player_name")
         try:
-            for num, name in zip(numbers, names):
-                name = name.strip().lower()
-                if name:
+            for pid_str in request.form.getlist("player_profile_id"):
+                pid_str = pid_str.strip()
+                if not pid_str:
+                    continue
+                profile = db.execute(
+                    "SELECT first_name, last_name, number FROM player_profiles WHERE id=?",
+                    (int(pid_str),)
+                ).fetchone()
+                if profile:
+                    pname = (profile["first_name"] + " " + profile["last_name"]).strip().lower()
                     pcur = db.execute(
-                        "INSERT INTO players (game_id, name, number) VALUES (?,?,?)",
-                        (game_id, name, num.strip())
+                        "INSERT INTO players (game_id, name, number, profile_id) VALUES (?,?,?,?)",
+                        (game_id, pname, profile["number"] or "", int(pid_str))
                     )
-                    parts = name.split(None, 1)
-                    prof_id = _resolve_profile_id(
-                        parts[0], parts[1] if len(parts) > 1 else ""
-                    )
-                    if prof_id:
-                        db.execute(
-                            "UPDATE players SET profile_id=? WHERE id=?",
-                            (prof_id, pcur.lastrowid)
-                        )
             db.commit()
         except Exception:
             db.rollback()
             return render_template("game_setup.html", error="Failed to save players. Please try again.",
-                                   seasons=[], club_teams=[])
+                                   seasons=seasons, club_teams=club_teams, all_profiles=all_profiles,
+                                   season_id_map=season_id_map)
         return redirect(url_for("track", game_id=game_id))
-    db = get_db()
-    ucond, uparams = _uid_cond()
-    tcond, tparams = _team_cond()
-    seasons = [s["name"] for s in db.execute(
-        f"SELECT DISTINCT name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
-    ).fetchall()]
-    club_teams = [dict(t) for t in db.execute(
-        f"SELECT id, name FROM club_teams WHERE 1=1{tcond} ORDER BY name COLLATE NOCASE", tparams
-    ).fetchall()]
-    return render_template("game_setup.html", seasons=seasons, club_teams=club_teams)
+    return render_template("game_setup.html", seasons=seasons, club_teams=club_teams, all_profiles=all_profiles,
+                           season_id_map=season_id_map)
 
 
 @app.route("/games/<int:game_id>/track")
@@ -942,7 +1033,13 @@ def report(game_id):
     game    = db.execute(f"SELECT * FROM games WHERE id=?{ucond}", [game_id] + uparams).fetchone()
     if not game:
         return "Game not found", 404
-    players = db.execute("SELECT * FROM players WHERE game_id=? ORDER BY name COLLATE NOCASE", (game_id,)).fetchall()
+    players = db.execute(
+        "SELECT p.* FROM players p"
+        " LEFT JOIN player_profiles pp ON pp.id = p.profile_id"
+        " WHERE p.game_id=? AND (p.profile_id IS NULL OR pp.is_staff=0)"
+        " ORDER BY p.name COLLATE NOCASE",
+        (game_id,)
+    ).fetchall()
     all_events = [dict(e) for e in db.execute("SELECT * FROM events WHERE game_id=?", (game_id,)).fetchall()]
     sets    = db.execute("SELECT * FROM sets WHERE game_id=? ORDER BY created_at", (game_id,)).fetchall()
 
@@ -959,6 +1056,9 @@ def report(game_id):
         events = all_events
 
     player_stats = build_player_stats(events, players)
+    _display_names = _make_display_names(player_stats)
+    for ps, dn in zip(player_stats, _display_names):
+        ps["display_name"] = dn
 
     opp_evts = [e for e in events if e["player_id"] is None]
     opp_stats = {}
@@ -977,9 +1077,8 @@ def report(game_id):
         opp_stats[stat] = cnt
 
     # Chart.js data
-    player_names = [ps["name"].title() for ps in player_stats]
     chart_data = {
-        "players": player_names,
+        "players": [ps["display_name"] for ps in player_stats],
         "stat_totals": {
             stat: {
                 r: [ps["stats"][stat][r] for ps in player_stats]
@@ -1036,7 +1135,7 @@ def report(game_id):
             s_events = [e for e in all_events if e["set_id"] == s["id"]]
             s_player_stats = build_player_stats(s_events, players)
             s_chart_data = {
-                "players": [ps["name"].title() for ps in s_player_stats],
+                "players": _display_names,
                 "stat_totals": {
                     stat: {
                         r: [ps["stats"][stat][r] for ps in s_player_stats]
@@ -1124,6 +1223,11 @@ def season_report(season):
         {g["team_name"] for g in all_season_games if g["team_name"]},
         key=str.lower,
     )
+    team_short_names_rows = db.execute(
+        "SELECT name, short_name FROM club_teams WHERE name IN (%s)" % ",".join("?" * len(teams)),
+        teams,
+    ).fetchall() if teams else []
+    team_short_names = {r["name"]: r["short_name"] for r in team_short_names_rows if r["short_name"]}
 
     if active_team and active_team in teams:
         games = [g for g in all_season_games if g["team_name"] == active_team]
@@ -1250,6 +1354,7 @@ def season_report(season):
         stat_negative={k: list(v) for k, v in STAT_NEGATIVE.items()},
         teams=teams,
         active_team=active_team,
+        team_short_names=team_short_names,
     )
 
 
@@ -1259,7 +1364,6 @@ def player_report():
     db = get_db()
     active_season    = request.args.get("season", "")
     active_team      = request.args.get("team", "")       # game team_name filter
-    active_club_team = request.args.get("club_team", "")  # club roster filter (by name)
     active_set_type  = request.args.get("type")
     active_players   = request.args.getlist("player")
     selected_game_ids = set(int(x) for x in request.args.getlist("game") if x.isdigit())
@@ -1273,43 +1377,17 @@ def player_report():
         f"SELECT DISTINCT team_name FROM games WHERE team_name != ''{ucond} ORDER BY team_name COLLATE NOCASE",
         uparams
     ).fetchall()]
-    tcond, tparams = _team_cond()
-    all_club_teams = [dict(t) for t in db.execute(
-        f"SELECT id, name FROM club_teams WHERE 1=1{tcond} ORDER BY name COLLATE NOCASE",
-        tparams
-    ).fetchall()]
 
     # Build base params dict (excludes game selection; used for chip URLs)
     def _base_params(**overrides):
         p = {}
         if active_season:    p["season"]    = active_season
         if active_team:      p["team"]      = active_team
-        if active_club_team: p["club_team"] = active_club_team
         if active_set_type:  p["type"]      = active_set_type
         if active_players:   p["player"]    = list(active_players)
         p.update({k: v for k, v in overrides.items() if v is not None})
         # drop keys explicitly set to "" or empty list
         return {k: v for k, v in p.items() if v != "" and v != []}
-
-    def _base_params_no_games(**overrides):
-        """Like _base_params but always drops `game` selections."""
-        return _base_params(**overrides)
-
-    season_urls = {
-        "all": url_for("player_report", **_base_params(season="")),
-    }
-    season_urls.update({s: url_for("player_report", **_base_params(season=s)) for s in all_seasons})
-
-    team_urls = {
-        "all": url_for("player_report", **_base_params(team="")),
-    }
-    team_urls.update({t: url_for("player_report", **_base_params(team=t)) for t in all_game_teams})
-
-    club_team_urls = {
-        "all": url_for("player_report", **_base_params(club_team="")),
-    }
-    club_team_urls.update({ct["name"]: url_for("player_report", **_base_params(club_team=ct["name"]))
-                           for ct in all_club_teams})
 
     filter_urls = {
         "all":     url_for("player_report", **_base_params(type="")),
@@ -1334,42 +1412,10 @@ def player_report():
         f"SELECT * FROM games {where} ORDER BY played_at ASC, id ASC", params
     ).fetchall()
 
-    # Build roster filter from club team (normalized names)
-    roster_names = None  # None = no filter
-    if active_club_team:
-        club_row = db.execute(
-            f"SELECT id FROM club_teams WHERE name=?{tcond}", [active_club_team] + tparams
-        ).fetchone()
-        if club_row:
-            roster_rows = db.execute(
-                "SELECT name FROM club_team_players WHERE team_id=?", (club_row["id"],)
-            ).fetchall()
-            roster_names = {r["name"].strip().lower() for r in roster_rows}
-
-    # Game toggle URLs — toggling a game_id in/out of selected_game_ids
-    def _game_toggle_url(gid):
-        new_sel = selected_game_ids.symmetric_difference({gid})
-        p = _base_params_no_games()
-        for g in new_sel:
-            p.setdefault("game", [])
-            if isinstance(p["game"], list):
-                p["game"].append(str(g))
-            else:
-                p["game"] = [p["game"], str(g)]
-        return url_for("player_report", **p)
-
-    game_chips = []
-    for g in all_candidate_games:
-        gid = g["id"]
-        new_sel = selected_game_ids.symmetric_difference({gid})
-        base_p = _base_params_no_games()
-        base_p["game"] = [str(x) for x in new_sel]
-        game_chips.append({
-            "id":        gid,
-            "label":     f"{g['played_at']} vs {g['opponent']}",
-            "active":    gid in selected_game_ids,
-            "toggle_url": url_for("player_report", **base_p),
-        })
+    candidate_games = [
+        {"id": g["id"], "played_at": g["played_at"], "opponent": g["opponent"]}
+        for g in all_candidate_games
+    ]
 
     # Determine which games are actually used
     if selected_game_ids:
@@ -1384,13 +1430,12 @@ def player_report():
             player_chips=[], player_urls={},
             active_players=active_players, is_comparison=False,
             comparison_data_js=None, clear_comparison_url=None,
-            all_seasons=all_seasons, all_game_teams=all_game_teams, all_club_teams=all_club_teams,
+            all_seasons=all_seasons, all_game_teams=all_game_teams,
             active_season=active_season, active_team=active_team,
-            active_club_team=active_club_team, active_set_type=active_set_type,
+            active_set_type=active_set_type,
             has_main=False, has_reserve=False,
-            filter_urls=filter_urls, season_urls=season_urls,
-            team_urls=team_urls, club_team_urls=club_team_urls,
-            game_chips=game_chips, selected_game_ids=list(selected_game_ids),
+            filter_urls=filter_urls,
+            candidate_games=candidate_games, selected_game_ids=list(selected_game_ids),
             stat_results=STAT_RESULTS, quality_stats=set(STAT_QUALITY_WEIGHTS),
             stat_positive={k: list(v) for k, v in STAT_POSITIVE.items()},
             stat_negative={k: list(v) for k, v in STAT_NEGATIVE.items()},
@@ -1410,7 +1455,11 @@ def player_report():
         f"SELECT * FROM events WHERE game_id IN ({placeholders})", game_ids
     ).fetchall()]
     all_players = db.execute(
-        f"SELECT * FROM players WHERE game_id IN ({placeholders}) ORDER BY name COLLATE NOCASE", game_ids
+        "SELECT p.* FROM players p"
+        " LEFT JOIN player_profiles pp ON pp.id = p.profile_id"
+        f" WHERE p.game_id IN ({placeholders}) AND (p.profile_id IS NULL OR pp.is_staff=0)"
+        " ORDER BY p.name COLLATE NOCASE",
+        game_ids
     ).fetchall()
 
     has_main    = any(s["set_type"] == "main"    for s in all_sets)
@@ -1426,8 +1475,6 @@ def player_report():
     name_to_records = {}
     for p in all_players:
         key = p["name"].strip().lower()
-        if roster_names is not None and key not in roster_names:
-            continue
         if key not in name_to_records:
             name_to_records[key] = []
         name_to_records[key].append({
@@ -1511,6 +1558,9 @@ def player_report():
 
     # Build player filter chips and toggle URLs
     player_chips = [{"name": p["name"], "number": p["number"], "slug": p["slug"]} for p in players_data]
+    _chip_display_names = _make_display_names(player_chips)
+    for chip, dn in zip(player_chips, _chip_display_names):
+        chip["display_name"] = dn
     valid_slugs = {c["slug"] for c in player_chips}
     active_players = [s for s in active_players if s in valid_slugs]
     if not active_players:
@@ -1564,18 +1614,13 @@ def player_report():
         clear_comparison_url=clear_comparison_url,
         all_seasons=all_seasons,
         all_game_teams=all_game_teams,
-        all_club_teams=all_club_teams,
         active_season=active_season,
         active_team=active_team,
-        active_club_team=active_club_team,
         active_set_type=active_set_type,
         has_main=has_main,
         has_reserve=has_reserve,
         filter_urls=filter_urls,
-        season_urls=season_urls,
-        team_urls=team_urls,
-        club_team_urls=club_team_urls,
-        game_chips=game_chips,
+        candidate_games=candidate_games,
         selected_game_ids=list(selected_game_ids),
         stat_results=STAT_RESULTS,
         quality_stats=set(STAT_QUALITY_WEIGHTS),
@@ -1625,6 +1670,11 @@ def edit_game(game_id):
     if not game:
         return "Game not found", 404
 
+    all_profiles = [dict(r) for r in db.execute(
+        "SELECT id, first_name, last_name, number FROM player_profiles "
+        "WHERE status='active' ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE"
+    ).fetchall()]
+
     if request.method == "POST":
         team   = request.form["team_name"].strip()
         opp    = request.form["opponent"].strip()
@@ -1637,26 +1687,26 @@ def edit_game(game_id):
         if cur.rowcount == 0:
             return "Game not found", 404
 
-        # Rebuild players: delete all then re-insert from form
         db.execute("DELETE FROM players WHERE game_id=?", (game_id,))
-        numbers = request.form.getlist("player_number")
-        names   = request.form.getlist("player_name")
-        for num, name in zip(numbers, names):
-            name = name.strip().lower()
-            if name:
-                pcur = db.execute(
-                    "INSERT INTO players (game_id, name, number) VALUES (?,?,?)",
-                    (game_id, name, num.strip())
+        seen_profiles = set()
+        for pid_str in request.form.getlist("player_profile_id"):
+            pid_str = pid_str.strip()
+            if not pid_str:
+                continue
+            pid = int(pid_str)
+            if pid in seen_profiles:
+                continue
+            seen_profiles.add(pid)
+            profile = db.execute(
+                "SELECT first_name, last_name, number FROM player_profiles WHERE id=?",
+                (pid,)
+            ).fetchone()
+            if profile:
+                pname = (profile["first_name"] + " " + profile["last_name"]).strip().lower()
+                db.execute(
+                    "INSERT INTO players (game_id, name, number, profile_id) VALUES (?,?,?,?)",
+                    (game_id, pname, profile["number"] or "", pid)
                 )
-                parts = name.split(None, 1)
-                prof_id = _resolve_profile_id(
-                    parts[0], parts[1] if len(parts) > 1 else ""
-                )
-                if prof_id:
-                    db.execute(
-                        "UPDATE players SET profile_id=? WHERE id=?",
-                        (prof_id, pcur.lastrowid)
-                    )
         db.commit()
         return redirect(url_for("index"))
 
@@ -1668,7 +1718,7 @@ def edit_game(game_id):
         uparams
     ).fetchall()]
     return render_template("edit_game.html", game=game, players=players,
-                           existing_seasons=existing_seasons)
+                           existing_seasons=existing_seasons, all_profiles=all_profiles)
 
 
 @app.route("/games/<int:game_id>/delete", methods=["POST"])
@@ -1701,6 +1751,7 @@ def team_list():
     ).fetchall()
     team_player_counts = {}
     team_trainers = {}
+    team_non_players = {}
     for t in teams:
         cnt = db.execute(
             "SELECT COUNT(*) AS c FROM club_team_players WHERE team_id=?", (t["id"],)
@@ -1713,9 +1764,22 @@ def team_list():
             (t["id"],)
         ).fetchall()
         team_trainers[t["id"]] = [dict(tr) for tr in trainers]
+        non_players = db.execute(
+            "SELECT ctp.name, ctp.roles FROM club_team_players ctp "
+            "WHERE ctp.team_id=? AND ctp.roles IS NOT NULL AND ctp.roles != '' "
+            "AND ctp.roles NOT LIKE '%player%' "
+            "ORDER BY ctp.name COLLATE NOCASE",
+            (t["id"],)
+        ).fetchall()
+        team_non_players[t["id"]] = [dict(r) for r in non_players]
+    all_trainers = db.execute(
+        "SELECT id, email FROM users WHERE role='trainer' ORDER BY email COLLATE NOCASE"
+    ).fetchall()
     return render_template("team_list.html", teams=teams,
                            team_player_counts=team_player_counts,
-                           team_trainers=team_trainers)
+                           team_trainers=team_trainers,
+                           team_non_players=team_non_players,
+                           all_trainers=all_trainers)
 
 
 @app.route("/teams/new", methods=["GET", "POST"])
@@ -1723,32 +1787,64 @@ def team_list():
 def new_team():
     if not can_view_all():
         return "Forbidden", 403
+    db = get_db()
+    ucond, uparams = _uid_cond()
+    all_profiles = [dict(r) for r in db.execute(
+        "SELECT id, first_name, last_name, number FROM player_profiles "
+        "WHERE status='active' ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE"
+    ).fetchall()]
+    seasons = [dict(s) for s in db.execute(
+        f"SELECT id, name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
+    ).fetchall()]
     if request.method == "POST":
-        name = request.form.get("team_name", "").strip()
+        name          = request.form.get("team_name", "").strip()
+        division      = request.form.get("division", "").strip() or None
+        short_name    = request.form.get("short_name", "").strip() or None
+        season_id_str = request.form.get("season_id", "").strip()
+        season_id     = int(season_id_str) if season_id_str.isdigit() else None
         if not name:
-            return render_template("team_form.html", team=None, players=[], error="Team name is required.")
-        db = get_db()
+            return render_template("team_form.html", team=None, players=[], all_profiles=all_profiles,
+                                   seasons=seasons, selected_season_id=None, error="Team name is required.",
+                                   team_member_roles=TEAM_MEMBER_ROLES)
         try:
-            cur = db.execute("INSERT INTO club_teams (user_id, name) VALUES (?,?)", (current_user.id, name))
+            cur = db.execute("INSERT INTO club_teams (user_id, name, division, short_name) VALUES (?,?,?,?)", (current_user.id, name, division, short_name))
             team_id = cur.lastrowid
-            numbers = request.form.getlist("player_number")
-            names   = request.form.getlist("player_name")
-            for num, pname in zip(numbers, names):
-                pname = pname.strip().lower()
-                if pname:
+            seen_profiles = set()
+            pid_list   = request.form.getlist("player_profile_id")
+            roles_list = request.form.getlist("player_roles")
+            for i, pid_str in enumerate(pid_list):
+                pid_str = pid_str.strip()
+                if not pid_str:
+                    continue
+                pid = int(pid_str)
+                if pid in seen_profiles:
+                    continue
+                seen_profiles.add(pid)
+                roles = roles_list[i].strip() if i < len(roles_list) else "player"
+                if not roles:
+                    roles = "player"
+                profile = db.execute(
+                    "SELECT first_name, last_name, number FROM player_profiles WHERE id=?",
+                    (pid,)
+                ).fetchone()
+                if profile:
+                    pname = (profile["first_name"] + " " + profile["last_name"]).strip().lower()
                     db.execute(
-                        "INSERT INTO club_team_players (team_id, name, number) VALUES (?,?,?)",
-                        (team_id, pname, num.strip())
+                        "INSERT OR IGNORE INTO club_team_players (team_id, name, number, profile_id, season_id, roles) VALUES (?,?,?,?,?,?)",
+                        (team_id, pname, profile["number"] or "", pid, season_id, roles)
                     )
             db.commit()
         except sqlite3.IntegrityError:
             db.rollback()
-            return render_template("team_form.html", team=None, players=[], error="A team with this name already exists.")
+            return render_template("team_form.html", team=None, players=[], all_profiles=all_profiles,
+                                   seasons=seasons, selected_season_id=None, error="A team with this name already exists.",
+                                   team_member_roles=TEAM_MEMBER_ROLES)
         except Exception:
             db.rollback()
             raise
         return redirect(url_for("team_list"))
-    return render_template("team_form.html", team=None, players=[])
+    return render_template("team_form.html", team=None, players=[], all_profiles=all_profiles,
+                           seasons=seasons, selected_season_id=None, team_member_roles=TEAM_MEMBER_ROLES)
 
 
 @app.route("/teams/<int:team_id>/edit", methods=["GET", "POST"])
@@ -1759,39 +1855,90 @@ def edit_team(team_id):
     team = db.execute(f"SELECT * FROM club_teams WHERE id=?{ucond}", [team_id] + uparams).fetchone()
     if not team:
         return "Team not found", 404
+    all_profiles = [dict(r) for r in db.execute(
+        "SELECT id, first_name, last_name, number FROM player_profiles "
+        "WHERE status='active' ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE"
+    ).fetchall()]
+    seasons = [dict(s) for s in db.execute(
+        f"SELECT id, name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
+    ).fetchall()]
     if request.method == "POST":
-        name = request.form.get("team_name", "").strip()
-        players = db.execute(
-            "SELECT * FROM club_team_players WHERE team_id=? ORDER BY name COLLATE NOCASE", (team_id,)
-        ).fetchall()
+        name          = request.form.get("team_name", "").strip()
+        division      = request.form.get("division", "").strip() or None
+        short_name    = request.form.get("short_name", "").strip() or None
+        season_id_str = request.form.get("season_id", "").strip()
+        season_id     = int(season_id_str) if season_id_str.isdigit() else None
+        if season_id:
+            players = db.execute(
+                "SELECT * FROM club_team_players WHERE team_id=? AND season_id=? ORDER BY name COLLATE NOCASE",
+                (team_id, season_id)
+            ).fetchall()
+        else:
+            players = db.execute(
+                "SELECT * FROM club_team_players WHERE team_id=? AND season_id IS NULL ORDER BY name COLLATE NOCASE",
+                (team_id,)
+            ).fetchall()
+        selected_season_id = season_id
         if not name:
-            return render_template("team_form.html", team=team, players=players, error="Team name is required.")
+            return render_template("team_form.html", team=team, players=players, all_profiles=all_profiles,
+                                   seasons=seasons, selected_season_id=selected_season_id, error="Team name is required.",
+                                   team_member_roles=TEAM_MEMBER_ROLES)
         try:
-            cur = db.execute("UPDATE club_teams SET name=? WHERE id=?", (name, team_id))
+            cur = db.execute("UPDATE club_teams SET name=?, division=?, short_name=? WHERE id=?", (name, division, short_name, team_id))
             if cur.rowcount == 0:
                 return "Team not found", 404
-            db.execute("DELETE FROM club_team_players WHERE team_id=?", (team_id,))
-            numbers = request.form.getlist("player_number")
-            names   = request.form.getlist("player_name")
-            for num, pname in zip(numbers, names):
-                pname = pname.strip().lower()
-                if pname:
+            if season_id:
+                db.execute("DELETE FROM club_team_players WHERE team_id=? AND season_id=?", (team_id, season_id))
+            else:
+                db.execute("DELETE FROM club_team_players WHERE team_id=? AND season_id IS NULL", (team_id,))
+            seen_profiles = set()
+            pid_list   = request.form.getlist("player_profile_id")
+            roles_list = request.form.getlist("player_roles")
+            for i, pid_str in enumerate(pid_list):
+                pid_str = pid_str.strip()
+                if not pid_str:
+                    continue
+                pid = int(pid_str)
+                if pid in seen_profiles:
+                    continue
+                seen_profiles.add(pid)
+                roles = roles_list[i].strip() if i < len(roles_list) else "player"
+                if not roles:
+                    roles = "player"
+                profile = db.execute(
+                    "SELECT first_name, last_name, number FROM player_profiles WHERE id=?",
+                    (pid,)
+                ).fetchone()
+                if profile:
+                    pname = (profile["first_name"] + " " + profile["last_name"]).strip().lower()
                     db.execute(
-                        "INSERT INTO club_team_players (team_id, name, number) VALUES (?,?,?)",
-                        (team_id, pname, num.strip())
+                        "INSERT OR IGNORE INTO club_team_players (team_id, name, number, profile_id, season_id, roles) VALUES (?,?,?,?,?,?)",
+                        (team_id, pname, profile["number"] or "", pid, season_id, roles)
                     )
             db.commit()
         except sqlite3.IntegrityError:
             db.rollback()
-            return render_template("team_form.html", team=team, players=players, error="A team with this name already exists.")
+            return render_template("team_form.html", team=team, players=players, all_profiles=all_profiles,
+                                   seasons=seasons, selected_season_id=selected_season_id, error="A team with this name already exists.",
+                                   team_member_roles=TEAM_MEMBER_ROLES)
         except Exception:
             db.rollback()
             raise
         return redirect(url_for("team_list"))
-    players = db.execute(
-        "SELECT * FROM club_team_players WHERE team_id=? ORDER BY name COLLATE NOCASE", (team_id,)
-    ).fetchall()
-    return render_template("team_form.html", team=team, players=players)
+    selected_season_id = request.args.get("season_id", type=int)
+    if selected_season_id:
+        players = db.execute(
+            "SELECT * FROM club_team_players WHERE team_id=? AND season_id=? ORDER BY name COLLATE NOCASE",
+            (team_id, selected_season_id)
+        ).fetchall()
+    else:
+        players = db.execute(
+            "SELECT * FROM club_team_players WHERE team_id=? AND season_id IS NULL ORDER BY name COLLATE NOCASE",
+            (team_id,)
+        ).fetchall()
+    return render_template("team_form.html", team=team, players=players, all_profiles=all_profiles,
+                           seasons=seasons, selected_season_id=selected_season_id,
+                           team_member_roles=TEAM_MEMBER_ROLES)
 
 
 @app.route("/teams/<int:team_id>/delete", methods=["POST"])
@@ -1820,10 +1967,17 @@ def api_team_players(team_id):
     tcond, tparams = _team_cond()
     if not db.execute(f"SELECT id FROM club_teams WHERE id=?{tcond}", [team_id] + tparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
-    players = db.execute(
-        "SELECT name, number FROM club_team_players WHERE team_id=? ORDER BY name COLLATE NOCASE",
-        (team_id,)
-    ).fetchall()
+    season_id = request.args.get("season_id", type=int)
+    if season_id is not None:
+        players = db.execute(
+            "SELECT name, number, profile_id FROM club_team_players WHERE team_id=? AND season_id=? ORDER BY name COLLATE NOCASE",
+            (team_id, season_id)
+        ).fetchall()
+    else:
+        players = db.execute(
+            "SELECT name, number, profile_id FROM club_team_players WHERE team_id=? AND season_id IS NULL ORDER BY name COLLATE NOCASE",
+            (team_id,)
+        ).fetchall()
     return jsonify([dict(p) for p in players])
 
 
@@ -1880,6 +2034,24 @@ def admin_set_role(user_id):
     return redirect(url_for("admin_users"))
 
 
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@login_required
+def admin_delete_user(user_id):
+    if not is_admin():
+        return "Forbidden", 403
+    if user_id == current_user.id:
+        flash("You cannot delete your own account.", "error")
+        return redirect(url_for("admin_users"))
+    db = get_db()
+    if not db.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone():
+        return "User not found", 404
+    db.execute("DELETE FROM club_team_trainers WHERE user_id=?", (user_id,))
+    db.execute("DELETE FROM users WHERE id=?", (user_id,))
+    db.commit()
+    flash("User deleted.", "success")
+    return redirect(url_for("admin_users"))
+
+
 @app.route("/admin/users/<int:user_id>/profile", methods=["POST"])
 @login_required
 def admin_link_profile(user_id):
@@ -1904,11 +2076,13 @@ def admin_link_profile(user_id):
 @login_required
 def roster_list():
     db = get_db()
-    q        = request.args.get("q", "").strip()
-    status   = request.args.get("status", "")
-    position = request.args.get("position", "")
-    team     = request.args.get("team", type=int)
-    group    = request.args.get("group", type=int)
+    q         = request.args.get("q", "").strip()
+    status    = request.args.get("status", "")
+    position  = request.args.get("position", "")
+    tag       = request.args.get("tag", "").strip()
+    team      = request.args.get("team", type=int)
+    group     = request.args.get("group", type=int)
+    season_id = request.args.get("season_id", type=int)
 
     sql    = "SELECT * FROM player_profiles WHERE 1=1"
     params = []
@@ -1921,36 +2095,73 @@ def roster_list():
     if position:
         sql    += " AND (',' || positions || ',') LIKE ?"
         params += [f"%,{position},%"]
-    if team:
+    if tag:
+        sql    += ' AND tags LIKE ?'
+        params += [f'%"{tag}"%']
+    if team and season_id:
+        sql    += " AND id IN (SELECT profile_id FROM club_team_players WHERE team_id=? AND season_id=? AND profile_id IS NOT NULL)"
+        params += [team, season_id]
+    elif team:
         sql    += " AND id IN (SELECT profile_id FROM club_team_players WHERE team_id=? AND profile_id IS NOT NULL)"
         params += [team]
+    elif season_id:
+        sql    += " AND id IN (SELECT profile_id FROM club_team_players WHERE season_id=? AND profile_id IS NOT NULL)"
+        params += [season_id]
     if group:
         sql    += " AND id IN (SELECT player_id FROM training_group_players WHERE group_id=?)"
         params += [group]
     sql += " ORDER BY last_name, first_name"
     profiles = db.execute(sql, params).fetchall()
 
-    # Attach current teams to each profile
+    # Attach teams to each profile (season-filtered when a season is active)
     teams_by_pid = {}
-    for row in db.execute(
-        "SELECT ctp.profile_id, ct.id, ct.name FROM club_team_players ctp "
-        "JOIN club_teams ct ON ct.id = ctp.team_id WHERE ctp.profile_id IS NOT NULL"
-    ).fetchall():
-        teams_by_pid.setdefault(row["profile_id"], []).append({"id": row["id"], "name": row["name"]})
+    if season_id:
+        teams_rows = db.execute(
+            "SELECT ctp.profile_id, ct.id, ct.name, ct.short_name, ctp.roles FROM club_team_players ctp "
+            "JOIN club_teams ct ON ct.id = ctp.team_id "
+            "WHERE ctp.profile_id IS NOT NULL AND ctp.season_id=?",
+            (season_id,)
+        ).fetchall()
+    else:
+        teams_rows = db.execute(
+            "SELECT ctp.profile_id, ct.id, ct.name, ct.short_name, ctp.roles FROM club_team_players ctp "
+            "JOIN club_teams ct ON ct.id = ctp.team_id WHERE ctp.profile_id IS NOT NULL"
+        ).fetchall()
+    for row in teams_rows:
+        teams_by_pid.setdefault(row["profile_id"], []).append({"id": row["id"], "name": row["name"], "short_name": row["short_name"], "roles": row["roles"]})
 
-    all_teams  = db.execute("SELECT id, name FROM club_teams ORDER BY name").fetchall()
+    ucond, uparams = _uid_cond()
+    all_seasons = [dict(s) for s in db.execute(
+        f"SELECT id, name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
+    ).fetchall()]
+    all_teams  = db.execute("SELECT id, name, short_name FROM club_teams ORDER BY name").fetchall()
     all_groups = db.execute("SELECT id, name FROM training_groups ORDER BY name").fetchall()
+
+    # Collect all distinct tags for the filter dropdown
+    all_tags_set = set()
+    for row in db.execute("SELECT tags FROM player_profiles WHERE tags IS NOT NULL").fetchall():
+        try:
+            for t in (json.loads(row["tags"]) or []):
+                if t:
+                    all_tags_set.add(t.strip())
+        except Exception:
+            pass
+    all_tags = sorted(all_tags_set)
 
     return render_template("roster_list.html",
         profiles=profiles,
         teams_by_pid=teams_by_pid,
         teams=all_teams,
         groups=all_groups,
+        seasons=all_seasons,
+        all_tags=all_tags,
         q_filter=q,
         status_filter=status,
         position_filter=position,
+        tag_filter=tag,
         team_filter=team,
         group_filter=group,
+        season_filter=season_id,
     )
 
 
@@ -1964,24 +2175,26 @@ def roster_new():
         last  = request.form.get("last_name", "").strip()
         if not first or not last:
             return render_template("roster_form.html", profile=None, error="First and last name are required.")
-        dob       = request.form.get("date_of_birth", "").strip() or None
-        number    = request.form.get("number", "").strip() or None
-        status    = request.form.get("status", "active").strip()
+        dob           = request.form.get("date_of_birth", "").strip() or None
+        number        = request.form.get("number", "").strip() or None
+        status        = request.form.get("status", "active").strip()
         if status not in ("active", "prospect", "trial", "alumni", "inactive"):
             status = "active"
-        positions = request.form.get("positions", "").strip() or None
-        tags_raw  = request.form.get("tags", "").strip()
-        tags      = json.dumps([t.strip() for t in tags_raw.split(",") if t.strip()]) if tags_raw else None
-        notes     = request.form.get("notes", "").strip() or None
+        positions     = request.form.get("positions", "").strip() or None
+        tags_raw      = request.form.get("tags", "").strip()
+        tags          = json.dumps([t.strip() for t in tags_raw.split(",") if t.strip()]) if tags_raw else None
+        notes         = request.form.get("notes", "").strip() or None
+        federation_id = request.form.get("federation_id", "").strip() or None
+        is_staff      = 1 if request.form.get("is_staff") else 0
         now = datetime.now(UTC).isoformat()
         db = get_db()
         cur = db.execute(
             "INSERT INTO player_profiles "
             "(first_name, last_name, date_of_birth, number, status, positions, tags, notes, "
-            " created_by, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " federation_id, is_staff, created_by, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (first, last, dob, number, status, positions, tags, notes,
-             current_user.id, now, now)
+             federation_id, is_staff, current_user.id, now, now)
         )
         db.commit()
         return redirect(url_for("roster_detail", profile_id=cur.lastrowid))
@@ -2019,6 +2232,7 @@ def roster_import():
                         "status":        status,
                         "positions":     (row_dict.get("positions", "") or "").strip() or None,
                         "tags":          tags,
+                        "federation_id": (row_dict.get("federation_id", "") or "").strip() or None,
                     })
             except Exception:
                 return "CSV parse error — ensure file is UTF-8 encoded.", 400
@@ -2054,12 +2268,13 @@ def roster_import():
                     db.execute(
                         "INSERT INTO player_profiles "
                         "(first_name, last_name, date_of_birth, number, status, positions, tags, "
-                        " created_by, created_at, updated_at) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        " federation_id, created_by, created_at, updated_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         (row["first_name"], row["last_name"],
                          row.get("date_of_birth"), row.get("number"),
                          row.get("status", "active"),
                          row.get("positions"), row.get("tags"),
+                         row.get("federation_id"),
                          current_user.id, now, now)
                     )
                     inserted += 1
@@ -2073,6 +2288,106 @@ def roster_import():
     # GET: show preview if available, else upload form
     preview = session.get("import_preview")
     return render_template("roster_import.html", preview=preview)
+
+
+@app.route("/roster/import-federation", methods=["GET", "POST"])
+@login_required
+def roster_import_federation():
+    if not can_view_all():
+        return "Forbidden", 403
+
+    import re as _re
+
+    # Regex: optional K-prefix, jersey number, federation card #, last_name, first_name,
+    # nationality (discarded), DOB DD/MM/YYYY
+    # Last name may consist of multiple words (e.g. "Van Damme"); greedy .+ captures
+    # everything up to the first name, then nationality ([A-Z]{2,3}) anchors the boundary.
+    _LINE_RE = _re.compile(
+        r"^(K\s+)?(\d+)\s+(\d+)\s+(.+)\s+(\S+)\s+[A-Z]{2,3}\s+(\d{2}/\d{2}/\d{4})\s*$"
+    )
+
+    if request.method == "POST":
+        if request.form.get("paste_text") is not None and not request.form.get("confirm_import"):
+            # Step 1: parse pasted text → build preview
+            raw = request.form.get("paste_text", "")
+            rows = []
+            for line in raw.splitlines():
+                line = line.strip()
+                m = _LINE_RE.match(line)
+                if not m:
+                    continue
+                kern_flag, number, fed_id, last_name, first_name, dob_raw = m.groups()
+                try:
+                    dob = datetime.strptime(dob_raw, "%d/%m/%Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    dob = None
+                tag_list = ["kern"] if kern_flag else []
+                tags = json.dumps(tag_list) if tag_list else None
+                rows.append({
+                    "first_name":    first_name,
+                    "last_name":     last_name,
+                    "date_of_birth": dob,
+                    "number":        number,
+                    "status":        "active",
+                    "federation_id": fed_id,
+                    "tags":          tags,
+                })
+            if not rows:
+                return render_template("roster_import_federation.html", preview=None,
+                                       error="No valid player lines found. Check the format.")
+            db = get_db()
+            existing_norms = {
+                r[0] for r in db.execute(
+                    "SELECT lower(first_name) || ' ' || lower(last_name) FROM player_profiles"
+                ).fetchall()
+            }
+            seen_in_file = set()
+            for row in rows:
+                norm = (row["first_name"] + " " + row["last_name"]).strip().lower()
+                row["_norm"]      = norm
+                row["_duplicate"] = norm in existing_norms or norm in seen_in_file
+                seen_in_file.add(norm)
+            session["federation_preview"] = rows
+            return redirect(url_for("roster_import_federation"))
+
+        if request.form.get("confirm_import") == "1":
+            # Step 2: insert non-duplicate rows
+            rows     = session.pop("federation_preview", [])
+            inserted = 0
+            skipped  = 0
+            if not rows:
+                return redirect(url_for("roster_list"))
+            db  = get_db()
+            now = datetime.now(UTC).isoformat()
+            try:
+                for row in rows:
+                    if row.get("_duplicate"):
+                        skipped += 1
+                        continue
+                    db.execute(
+                        "INSERT INTO player_profiles "
+                        "(first_name, last_name, date_of_birth, number, status, tags, "
+                        " federation_id, created_by, created_at, updated_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        (row["first_name"], row["last_name"],
+                         row.get("date_of_birth"), row.get("number"),
+                         row.get("status", "active"),
+                         row.get("tags"), row.get("federation_id"),
+                         current_user.id, now, now)
+                    )
+                    inserted += 1
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
+            flash(f"Import complete: {inserted} inserted, {skipped} skipped (duplicate).")
+            return redirect(url_for("roster_list"))
+        return "Bad request", 400
+
+    if request.args.get("reset"):
+        session.pop("federation_preview", None)
+    preview = session.get("federation_preview")
+    return render_template("roster_import_federation.html", preview=preview, error=None)
 
 
 @app.route("/roster/<int:profile_id>")
@@ -2113,11 +2428,14 @@ def roster_detail(profile_id):
         ).fetchone()
         can_add = bool(assigned)
 
-    # Current teams for this player
+    # Current teams for this player (with season info and roles)
     current_teams = db.execute(
-        "SELECT ct.id, ct.name FROM club_team_players ctp "
+        "SELECT ct.id, ct.name, ct.short_name, s.name AS season_name, ctp.roles "
+        "FROM club_team_players ctp "
         "JOIN club_teams ct ON ct.id = ctp.team_id "
-        "WHERE ctp.profile_id=?",
+        "LEFT JOIN seasons s ON s.id = ctp.season_id "
+        "WHERE ctp.profile_id=? "
+        "ORDER BY COALESCE(s.name, '') DESC, ct.name COLLATE NOCASE",
         (profile_id,)
     ).fetchall()
 
@@ -2157,22 +2475,24 @@ def roster_edit(profile_id):
         last  = request.form.get("last_name", "").strip()
         if not first or not last:
             return render_template("roster_form.html", profile=profile, error="First and last name are required.")
-        dob       = request.form.get("date_of_birth", "").strip() or None
-        number    = request.form.get("number", "").strip() or None
-        status    = request.form.get("status", "active").strip()
+        dob           = request.form.get("date_of_birth", "").strip() or None
+        number        = request.form.get("number", "").strip() or None
+        status        = request.form.get("status", "active").strip()
         if status not in ("active", "prospect", "trial", "alumni", "inactive"):
             status = "active"
-        positions = request.form.get("positions", "").strip() or None
-        tags_raw  = request.form.get("tags", "").strip()
-        tags      = json.dumps([t.strip() for t in tags_raw.split(",") if t.strip()]) if tags_raw else None
-        notes     = request.form.get("notes", "").strip() or None
+        positions     = request.form.get("positions", "").strip() or None
+        tags_raw      = request.form.get("tags", "").strip()
+        tags          = json.dumps([t.strip() for t in tags_raw.split(",") if t.strip()]) if tags_raw else None
+        notes         = request.form.get("notes", "").strip() or None
+        federation_id = request.form.get("federation_id", "").strip() or None
+        is_staff      = 1 if request.form.get("is_staff") else 0
         now = datetime.now(UTC).isoformat()
         cur = db.execute(
             "UPDATE player_profiles "
             "SET first_name=?, last_name=?, date_of_birth=?, number=?, "
-            "    status=?, positions=?, tags=?, notes=?, updated_at=? "
+            "    status=?, positions=?, tags=?, notes=?, federation_id=?, is_staff=?, updated_at=? "
             "WHERE id=?",
-            (first, last, dob, number, status, positions, tags, notes, now, profile_id)
+            (first, last, dob, number, status, positions, tags, notes, federation_id, is_staff, now, profile_id)
         )
         db.commit()
         if cur.rowcount == 0:
@@ -2335,7 +2655,7 @@ def training_group_new():
     return render_template("training_group_form.html", error=None)
 
 
-@app.route("/training-groups/<int:group_id>")
+@app.route("/training-groups/<int:group_id>", methods=["GET", "POST"])
 @login_required
 def training_group_detail(group_id):
     if not can_view_all():
@@ -2344,51 +2664,70 @@ def training_group_detail(group_id):
     group = db.execute("SELECT * FROM training_groups WHERE id=?", (group_id,)).fetchone()
     if not group:
         return "Group not found", 404
+    all_profiles = [dict(r) for r in db.execute(
+        "SELECT id, first_name, last_name, number FROM player_profiles "
+        "WHERE status='active' ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE"
+    ).fetchall()]
+    if request.method == "POST":
+        group_name = request.form.get("group_name", "").strip()
+        description = request.form.get("description", "").strip()
+        if not group_name:
+            players = db.execute(
+                "SELECT pp.* FROM training_group_players tgp "
+                "JOIN player_profiles pp ON pp.id = tgp.player_id "
+                "WHERE tgp.group_id=? ORDER BY pp.last_name, pp.first_name",
+                (group_id,)
+            ).fetchall()
+            player_rows = [dict(p) | {"profile_id": p["id"]} for p in players]
+            return render_template("training_group_detail.html", group=group, players=player_rows,
+                                   all_profiles=all_profiles, error="Group name is required.")
+        seen = set()
+        new_ids = []
+        for pid_str in request.form.getlist("player_profile_id"):
+            pid_str = pid_str.strip()
+            if not pid_str:
+                continue
+            pid = int(pid_str)
+            if pid not in seen:
+                seen.add(pid)
+                new_ids.append(pid)
+        try:
+            db.execute(
+                "UPDATE training_groups SET name=?, description=? WHERE id=?",
+                (group_name, description or None, group_id)
+            )
+            db.execute("DELETE FROM training_group_players WHERE group_id=?", (group_id,))
+            for pid in new_ids:
+                db.execute(
+                    "INSERT OR IGNORE INTO training_group_players (group_id, player_id) VALUES (?,?)",
+                    (group_id, pid)
+                )
+            db.commit()
+        except sqlite3.IntegrityError:
+            db.rollback()
+            players = db.execute(
+                "SELECT pp.* FROM training_group_players tgp "
+                "JOIN player_profiles pp ON pp.id = tgp.player_id "
+                "WHERE tgp.group_id=? ORDER BY pp.last_name, pp.first_name",
+                (group_id,)
+            ).fetchall()
+            player_rows = [dict(p) | {"profile_id": p["id"]} for p in players]
+            return render_template("training_group_detail.html", group=group, players=player_rows,
+                                   all_profiles=all_profiles, error="A group with this name already exists.")
+        except Exception:
+            db.rollback()
+            raise
+        return redirect(url_for("training_group_detail", group_id=group_id))
     players = db.execute(
         "SELECT pp.* FROM training_group_players tgp "
         "JOIN player_profiles pp ON pp.id = tgp.player_id "
         "WHERE tgp.group_id=? ORDER BY pp.last_name, pp.first_name",
         (group_id,)
     ).fetchall()
-    return render_template("training_group_detail.html", group=group, players=players)
-
-
-@app.route("/training-groups/<int:group_id>/players/add", methods=["POST"])
-@login_required
-def training_group_add_player(group_id):
-    if not can_view_all():
-        return "Forbidden", 403
-    db = get_db()
-    if not db.execute("SELECT id FROM training_groups WHERE id=?", (group_id,)).fetchone():
-        return "Group not found", 404
-    player_id = request.form.get("player_id", type=int)
-    if not player_id:
-        return "player_id required", 400
-    if not db.execute("SELECT id FROM player_profiles WHERE id=?", (player_id,)).fetchone():
-        return "Player not found", 404
-    try:
-        db.execute(
-            "INSERT INTO training_group_players (group_id, player_id) VALUES (?,?)",
-            (group_id, player_id)
-        )
-        db.commit()
-    except sqlite3.IntegrityError:
-        db.rollback()  # player already in group — idempotent
-    return redirect(url_for("training_group_detail", group_id=group_id))
-
-
-@app.route("/training-groups/<int:group_id>/players/<int:player_id>/remove", methods=["POST"])
-@login_required
-def training_group_remove_player(group_id, player_id):
-    if not can_view_all():
-        return "Forbidden", 403
-    db = get_db()
-    db.execute(
-        "DELETE FROM training_group_players WHERE group_id=? AND player_id=?",
-        (group_id, player_id)
-    )
-    db.commit()
-    return redirect(url_for("training_group_detail", group_id=group_id))
+    # give each row a profile_id field so the player_roster_section macro can pre-select it
+    player_rows = [dict(p) | {"profile_id": p["id"]} for p in players]
+    return render_template("training_group_detail.html", group=group, players=player_rows,
+                           all_profiles=all_profiles)
 
 
 @app.route("/training-groups/<int:group_id>/delete", methods=["POST"])
@@ -2419,11 +2758,13 @@ def team_add_trainer(team_id):
     db = get_db()
     if not db.execute("SELECT id FROM club_teams WHERE id=?", (team_id,)).fetchone():
         return "Team not found", 404
-    user_id = request.form.get("user_id", type=int)
-    if not user_id:
-        return "user_id required", 400
-    if not db.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone():
+    trainer_email = request.form.get("trainer_email", "").strip().lower()
+    if not trainer_email:
+        return "trainer_email required", 400
+    row = db.execute("SELECT id FROM users WHERE LOWER(email)=?", (trainer_email,)).fetchone()
+    if not row:
         return "User not found", 404
+    user_id = row["id"]
     try:
         db.execute(
             "INSERT INTO club_team_trainers (team_id, user_id) VALUES (?,?)",

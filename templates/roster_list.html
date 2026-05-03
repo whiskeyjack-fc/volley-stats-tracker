@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import filter_select %}
 {% block title %}Roster — VolleyStats{% endblock %}
 {% block content %}
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -12,56 +13,56 @@
   {% if can_view_all() %}
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     <a href="{{ url_for('roster_import') }}" class="btn btn-outline btn-sm">⬆ Import CSV</a>
-    <a href="{{ url_for('roster_new') }}" class="btn btn-primary">＋ New Player</a>
+    <a href="{{ url_for('roster_import_federation') }}" class="btn btn-outline btn-sm">⬆ Import Federation List</a>
+    <a href="{{ url_for('roster_new') }}" class="btn btn-primary">＋ New Member</a>
   </div>
   {% endif %}
 </div>
 
 {# ── Filter bar ─────────────────────────────────────────────────────────── #}
-<form method="get" id="filter-rows" class="filter-bar" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.25rem;align-items:center">
+<form method="get" id="filter-rows" class="filter-bar">
   <input type="text" name="q" value="{{ q_filter }}"
          placeholder="Search name…"
-         style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-                color:var(--fg);padding:.35rem .65rem;font-size:0.9rem;min-width:150px" />
+         class="filter-search" />
 
-  <select name="status"
-          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-                 color:var(--fg);padding:.35rem .65rem;font-size:0.9rem">
-    <option value="">All statuses</option>
-    {% for s in ['active','prospect','trial','alumni','inactive'] %}
+  {% call filter_select('status', 'All statuses') %}
+    {% for s in ['active','inactive','injured'] %}
     <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s|capitalize }}</option>
     {% endfor %}
-  </select>
+  {% endcall %}
 
-  <select name="position"
-          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-                 color:var(--fg);padding:.35rem .65rem;font-size:0.9rem">
-    <option value="">All positions</option>
-    {% for p in ['setter','libero','outside','opposite','middle','ds'] %}
+  {% call filter_select('position', 'All positions') %}
+    {% for p in ['setter','libero','outside','opposite','middle'] %}
     <option value="{{ p }}" {% if position_filter == p %}selected{% endif %}>{{ p|capitalize }}</option>
     {% endfor %}
-  </select>
+  {% endcall %}
 
-  <select name="team"
-          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-                 color:var(--fg);padding:.35rem .65rem;font-size:0.9rem">
-    <option value="">All teams</option>
+  {% call filter_select('team', 'All teams') %}
     {% for t in teams %}
-    <option value="{{ t.id }}" {% if team_filter == t.id %}selected{% endif %}>{{ t.name }}</option>
+    <option value="{{ t.id }}" {% if team_filter == t.id %}selected{% endif %}>{{ t.short_name or t.name }}</option>
     {% endfor %}
-  </select>
+  {% endcall %}
 
-  <select name="group"
-          style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-                 color:var(--fg);padding:.35rem .65rem;font-size:0.9rem">
-    <option value="">All groups</option>
+  {% call filter_select('group', 'All groups') %}
     {% for g in groups %}
     <option value="{{ g.id }}" {% if group_filter == g.id %}selected{% endif %}>{{ g.name }}</option>
     {% endfor %}
-  </select>
+  {% endcall %}
+
+  {% call filter_select('season_id', 'All seasons') %}
+    {% for s in seasons %}
+    <option value="{{ s.id }}" {% if season_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('tag', 'All tags') %}
+    {% for t in all_tags %}
+    <option value="{{ t }}" {% if tag_filter == t %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  {% endcall %}
 
   <button type="submit" class="btn btn-outline btn-sm">Filter</button>
-  {% if status_filter or position_filter or team_filter or group_filter or request.args.get('q') %}
+  {% if status_filter or position_filter or tag_filter or team_filter or group_filter or season_filter or request.args.get('q') %}
   <a href="{{ url_for('roster_list') }}" class="btn btn-sm" style="opacity:0.7">✕ Clear</a>
   {% endif %}
 </form>
@@ -83,6 +84,8 @@
         <th>Name</th>
         <th>Status</th>
         <th>Positions</th>
+        <th>Tags</th>
+        <th>Team</th>
         <th>DOB</th>
       </tr>
     </thead>
@@ -99,6 +102,29 @@
             {% for pos in p.positions.split(',') %}
             <span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);
                          border-radius:999px;padding:.1em .45em;font-size:0.72rem;margin:1px">{{ pos.strip()|capitalize }}</span>
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+        <td style="font-size:0.82rem;color:var(--muted)">
+          {% if p.tags %}
+            {% for t in p.tags | from_json %}
+            <span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);
+                         border-radius:999px;padding:.1em .45em;font-size:0.72rem;margin:1px">{{ t }}</span>
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+        <td style="font-size:0.82rem;color:var(--muted)">
+          {% set pts = teams_by_pid.get(p.id, []) %}
+          {% if pts %}
+            {% for t in pts %}
+            <span style="display:inline-block;vertical-align:top;margin:1px">
+              <span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:.1em .45em;font-size:0.72rem">{{ t.short_name or t.name }}</span>
+              {% if t.roles %}
+                {% for role in t.roles.split(',') %}
+                <span class="rl-pill rl-{{ role.strip() }}">{{ role.strip().replace('_', ' ')|title }}</span>
+                {% endfor %}
+              {% endif %}
+            </span>
             {% endfor %}
           {% else %}—{% endif %}
         </td>
@@ -122,15 +148,26 @@
   letter-spacing: .04em;
 }
 .status-active   { background:#1e4d2b; color:#6fcf97; }
-.status-prospect { background:#1e3a5f; color:#7ab3e0; }
-.status-trial    { background:#3d2e00; color:#f0c040; }
-.status-alumni   { background:#2a2a2a; color:#aaa; }
 .status-inactive { background:#2a2a2a; color:#666; }
+.status-injured  { background:#4d1e1e; color:#e07a7a; }
+.rl-pill {
+  display:inline-block;border-radius:999px;padding:.1em .4em;
+  font-size:0.65rem;font-weight:600;letter-spacing:.03em;margin:1px;
+}
+.rl-player          { background:#1a2e3a; color:var(--accent);  border:1px solid var(--accent); }
+.rl-head_coach      { background:#1e4d2b; color:#6fcf97;        border:1px solid #6fcf97; }
+.rl-assistant_coach { background:#1b3a28; color:#52b87a;        border:1px solid #52b87a; }
+.rl-team_manager    { background:#2a2a1e; color:#d4c84a;        border:1px solid #d4c84a; }
+.rl-medical         { background:#4d1e1e; color:#e07a7a;        border:1px solid #e07a7a; }
+.rl-scorer          { background:#1e2040; color:#8899ee;        border:1px solid #8899ee; }
+.rl-marker          { background:#2a1e3a; color:#c07ae0;        border:1px solid #c07ae0; }
+.rl-video_analyst   { background:#1e2a2a; color:#7acece;        border:1px solid #7acece; }
 @media (max-width:600px) {
   .filter-bar { flex-direction:column; align-items:stretch; }
-  .filter-bar select, .filter-bar input { width:100%; }
+  .filter-search, .filter-select { width:100%; max-width:none; }
   .table th:nth-child(4), .table td:nth-child(4),
-  .table th:nth-child(5), .table td:nth-child(5) { display:none; }
+  .table th:nth-child(5), .table td:nth-child(5),
+  .table th:nth-child(6), .table td:nth-child(6) { display:none; }
 }
 </style>
 {% endblock %}

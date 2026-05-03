@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import filter_select %}
 {% block title %}Players — VolleyStats{% endblock %}
 {% block content %}
 
@@ -18,44 +19,40 @@
     </div>
   </div>
   <div class="filter-rows-wrap" id="filter-rows"><div class="filter-rows-inner">
-  {% if all_seasons | length > 0 %}
-  <div class="set-filter-bar">
-    <span class="set-label">Season:</span>
-    <a href="{{ season_urls['all'] }}" class="set-chip {% if not active_season %}active{% endif %}">All</a>
-    {% for s in all_seasons %}
-    <a href="{{ season_urls[s] }}" class="set-chip {% if s == active_season %}active{% endif %}">{{ s }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if all_game_teams | length > 1 %}
-  <div class="set-filter-bar">
-    <span class="set-label">Team:</span>
-    <a href="{{ team_urls['all'] }}" class="set-chip {% if not active_team %}active{% endif %}">All</a>
-    {% for t in all_game_teams %}
-    <a href="{{ team_urls[t] }}" class="set-chip {% if t == active_team %}active{% endif %}">{{ t }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if all_club_teams | length > 0 %}
-  <div class="set-filter-bar">
-    <span class="set-label">Roster:</span>
-    <a href="{{ club_team_urls['all'] }}" class="set-chip {% if not active_club_team %}active{% endif %}">All players</a>
-    {% for ct in all_club_teams %}
-    <a href="{{ club_team_urls[ct.name] }}" class="set-chip {% if ct.name == active_club_team %}active{% endif %}">{{ ct.name }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if game_chips %}
-  <div class="set-filter-bar" style="flex-wrap:wrap;">
-    <span class="set-label">Games:</span>
-    {% for chip in game_chips %}
-    <a href="{{ chip.toggle_url }}" class="set-chip {% if chip.active %}active{% endif %}">{{ chip.label }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
+  <form method="get" id="player-filter-form">
+    {% for p in active_players %}<input type="hidden" name="player" value="{{ p }}">{% endfor %}
+    {% if active_set_type %}<input type="hidden" name="type" value="{{ active_set_type }}">{% endif %}
+    {% if all_seasons | length > 0 or all_game_teams | length > 1 %}
+    <div class="filter-bar">
+      {% if all_seasons | length > 0 %}
+      {% call filter_select('season', 'All seasons') %}
+        {% for s in all_seasons %}
+        <option value="{{ s }}" {% if s == active_season %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      {% endcall %}
+      {% endif %}
+      {% if all_game_teams | length > 1 %}
+      {% call filter_select('team', 'All teams') %}
+        {% for t in all_game_teams %}
+        <option value="{{ t }}" {% if t == active_team %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      {% endcall %}
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if candidate_games %}
+    <div class="set-filter-bar" style="flex-wrap:wrap;">
+      <span class="set-label">Games:</span>
+      {% for g in candidate_games %}
+      <label class="set-chip game-chip-label{% if g.id in selected_game_ids %} active{% endif %}">
+        <input type="checkbox" name="game" value="{{ g.id }}" {% if g.id in selected_game_ids %}checked{% endif %} style="display:none">
+        {{ g.played_at }} vs {{ g.opponent }}
+      </label>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+    </div>
+    {% endif %}
+  </form>
 
   {% if has_main or has_reserve %}
   <div class="set-filter-bar">
@@ -82,7 +79,7 @@
     <span class="set-label">{% if is_comparison %}Compare:{% else %}Player:{% endif %}</span>
     {% for chip in player_chips %}
     <a href="{{ player_urls[chip.slug] }}" class="set-chip {% if chip.slug in active_players %}active{% endif %}">
-      {% if chip.number %}#{{ chip.number }} {% endif %}{{ chip.name }}
+      {% if chip.number %}#{{ chip.number }} {% endif %}{{ chip.display_name }}
     </a>
     {% endfor %}
     {% if is_comparison %}
@@ -102,17 +99,7 @@
 {% if not players_data %}
 <!-- ── Empty state ────────────────────────────────────────────────────── -->
 <div class="player-empty-state">
-  {% if active_club_team %}
-  <div class="player-empty-icon">👤</div>
-  <h2>No stats found for <span class="season-tag">{{ active_club_team }}</span> roster</h2>
-  <p>The selected roster players haven't recorded any events in the filtered games.</p>
-  <div class="player-empty-actions">
-    <a href="{{ club_team_urls['all'] }}" class="btn btn-outline">Show all players</a>
-    {% if active_season or active_team or selected_game_ids %}
-    <a href="{{ url_for('player_report', club_team=active_club_team) }}" class="btn btn-outline">Clear other filters</a>
-    {% endif %}
-  </div>
-  {% elif active_season or active_team or selected_game_ids %}
+  {% if active_season or active_team or selected_game_ids %}
   <div class="player-empty-icon">📊</div>
   <h2>No stats for current filter</h2>
   <p>No player events recorded in the selected games.</p>
@@ -1145,6 +1132,22 @@ document.querySelectorAll('.chart-card, .dual-chart-card').forEach(card => {
   btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 5V1h4M8 1h4v4M12 8v4H8M5 12H1V8"/></svg>`;
   btn.addEventListener('click', e => { e.stopPropagation(); openChartModal(card); });
   card.appendChild(btn);
+});
+// Game chip checkbox toggle — update active class on click
+document.querySelectorAll('.game-chip-label input[type="checkbox"]').forEach(function(cb) {
+  cb.addEventListener('change', function() {
+    cb.closest('.game-chip-label').classList.toggle('active', cb.checked);
+  });
+});
+// Clear game selection when season or team changes (fires before base.html auto-submit)
+document.querySelectorAll('#player-filter-form select.filter-select').forEach(function(sel) {
+  sel.addEventListener('change', function() {
+    document.querySelectorAll('#player-filter-form .game-chip-label').forEach(function(lbl) {
+      var cb = lbl.querySelector('input[type="checkbox"]');
+      cb.checked = false;
+      lbl.classList.remove('active');
+    });
+  });
 });
 initFilterToggle('filters_players');
 </script>

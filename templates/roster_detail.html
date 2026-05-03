@@ -23,6 +23,9 @@
       {% if profile.date_of_birth %}
       <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">DOB: {{ profile.date_of_birth }}</p>
       {% endif %}
+      {% if profile.federation_id %}
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">Federation ID: {{ profile.federation_id }}</p>
+      {% endif %}
       {# Position pills #}
       {% if profile.positions %}
       <div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.5rem">
@@ -57,10 +60,19 @@
 
   {# Team & coaching badges #}
   {% if current_teams or coaching_teams %}
-  <div style="margin-top:0.85rem;display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+  <div style="margin-top:0.85rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-start">
     {% for t in current_teams %}
-    <span style="background:var(--surface2);border:1px solid var(--accent);border-radius:999px;
-                 padding:.2em .65em;font-size:0.8rem;color:var(--accent)">{{ t.name }}</span>
+    <span style="display:inline-flex;flex-direction:column;gap:0.2rem;background:var(--surface2);border:1px solid var(--accent);
+                 border-radius:var(--radius);padding:.3rem .65rem;font-size:0.8rem;color:var(--accent)">
+      <span>{{ t.short_name or t.name }}{% if t.season_name %} <span style="font-size:0.72rem;opacity:0.7">({{ t.season_name }})</span>{% endif %}</span>
+      {% if t.roles %}
+      <span style="display:flex;flex-wrap:wrap;gap:0.2rem">
+        {% for role in t.roles.split(',') %}
+        <span class="role-pill role-{{ role.strip() }}">{{ role.strip().replace('_', ' ')|title }}</span>
+        {% endfor %}
+      </span>
+      {% endif %}
+    </span>
     {% endfor %}
     {% for ct in coaching_teams %}
     <span style="background:var(--surface2);border:1px solid var(--green);border-radius:999px;
@@ -183,10 +195,8 @@
 }
 .status-badge { display:inline-block;padding:.15em .55em;border-radius:999px;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em; }
 .status-active   { background:#1e4d2b; color:#6fcf97; }
-.status-prospect { background:#1e3a5f; color:#7ab3e0; }
-.status-trial    { background:#3d2e00; color:#f0c040; }
-.status-alumni   { background:#2a2a2a; color:#aaa; }
 .status-inactive { background:#2a2a2a; color:#666; }
+.status-injured  { background:#4d1e1e; color:#e07a7a; }
 .remark-type-badge {
   display:inline-block;padding:.1em .4em;border-radius:4px;font-size:0.7rem;font-weight:700;
 }
@@ -195,6 +205,18 @@
 .remark-scouting { background:#3d1e5f; color:#c07ae0; }
 .remark-injury   { background:#4d1e1e; color:#e07a7a; }
 .remark-followup { background:#3d2e00; color:#f0c040; }
+.role-pill {
+  display:inline-block;border-radius:999px;padding:.1em .45em;font-size:0.68rem;
+  font-weight:600;letter-spacing:.03em;
+}
+.role-player          { background:#1a2e3a; color:var(--accent); border:1px solid var(--accent); }
+.role-head_coach      { background:#1e4d2b; color:#6fcf97; border:1px solid #6fcf97; }
+.role-assistant_coach { background:#1b3a28; color:#52b87a; border:1px solid #52b87a; }
+.role-team_manager    { background:#2a2a1e; color:#d4c84a; border:1px solid #d4c84a; }
+.role-medical         { background:#4d1e1e; color:#e07a7a; border:1px solid #e07a7a; }
+.role-scorer          { background:#1e2040; color:#8899ee; border:1px solid #8899ee; }
+.role-marker          { background:#2a1e3a; color:#c07ae0; border:1px solid #c07ae0; }
+.role-video_analyst   { background:#1e2a2a; color:#7acece; border:1px solid #7acece; }
 </style>
 
 <script>

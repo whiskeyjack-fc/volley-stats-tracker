@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import filter_chips, filter_select %}
 {% block title %}Season {{ season }} — VolleyStats{% endblock %}
 {% block content %}
 
@@ -17,29 +18,26 @@
     </div>
   </div>
   <div class="filter-rows-wrap" id="filter-rows"><div class="filter-rows-inner">
-  {% if all_seasons | length > 1 %}
-  <div class="set-filter-bar">
-    <span class="set-label">Season:</span>
-    {% for s in all_seasons %}
-    <a href="{{ url_for('season_report', season=s, **({'team': active_team} if active_team else {})) }}"
-       class="set-chip {% if s == season %}active{% endif %}">{{ s }}</a>
-    {% endfor %}
+  {% if all_seasons | length > 0 or teams | length > 1 %}
+  <div class="filter-bar">
+    {% if all_seasons | length > 0 %}
+    {% call filter_select('season', 'All seasons') %}
+      {% for s in all_seasons %}
+      <option value="{{ s }}" {% if s == season %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    {% endcall %}
+    {% endif %}
+    {% if teams | length > 1 %}
+    {% call filter_select('team', 'All teams') %}
+      {% for t in teams %}
+      <option value="{{ t }}" {% if t == active_team %}selected{% endif %}>{{ team_short_names[t] if t in team_short_names else t }}</option>
+      {% endfor %}
+    {% endcall %}
+    {% endif %}
   </div>
   {% endif %}
-  {% if teams | length > 1 %}
-  <div class="set-filter-bar">
-    <span class="set-label">Team:</span>
-    <a href="{{ url_for('season_report', season=season, **({'type': active_set_type} if active_set_type else {})) }}"
-       class="set-chip {% if not active_team %}active{% endif %}">All</a>
-    {% for t in teams %}
-    <a href="{{ url_for('season_report', season=season, team=t, **({'type': active_set_type} if active_set_type else {})) }}"
-       class="set-chip {% if t == active_team %}active{% endif %}">{{ t }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
-  <div class="set-filter-bar">
+  {% call filter_chips('Type:' if (has_main or has_reserve) else '') %}
     {% if has_main or has_reserve %}
-    <span class="set-label">Type:</span>
     <a href="{{ filter_urls.all }}" class="set-chip {% if not active_set_type %}active{% endif %}">All</a>
     {% if has_main %}
     <a href="{{ filter_urls.main }}" class="set-chip {% if active_set_type == 'main' %}active{% endif %}">Main</a>
@@ -56,7 +54,7 @@
             title="{% if split_available %}Split charts by set{% else %}Available for Main or Reserve filter only{% endif %}">
       &#x229E; Split
     </button>
-  </div>
+  {% endcall %}
   </div></div>
 </div>
 
@@ -652,6 +650,24 @@ if (splitBtn && SPLIT_AVAILABLE) {
   });
 }
 initFilterToggle('filters_season');
+
+// Season/Team dropdowns — redirect to the correct URL on change
+(function() {
+  var seasonSel = document.querySelector('.filter-bar select[name="season"]');
+  var teamSel   = document.querySelector('.filter-bar select[name="team"]');
+  var activeType = {{ active_set_type | tojson }};
+  function navigate() {
+    var newSeason = seasonSel ? (seasonSel.value || {{ season | tojson }}) : {{ season | tojson }};
+    var newTeam   = teamSel ? teamSel.value : '';
+    var params = new URLSearchParams();
+    if (newTeam) params.set('team', newTeam);
+    if (activeType) params.set('type', activeType);
+    var qs = params.toString();
+    window.location.href = '/seasons/' + newSeason + (qs ? '?' + qs : '');
+  }
+  if (seasonSel) seasonSel.addEventListener('change', navigate);
+  if (teamSel)   teamSel.addEventListener('change', navigate);
+})();
 </script>
 {% endif %}
 {% endblock %}

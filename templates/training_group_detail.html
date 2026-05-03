@@ -1,13 +1,9 @@
 {% extends "base.html" %}
+{% from "_macros.html" import player_roster_section %}
 {% block title %}{{ group.name }} — VolleyStats{% endblock %}
 {% block content %}
 <div class="page-header">
-  <div>
-    <h1>{{ group.name }}</h1>
-    {% if group.description %}
-    <p style="color:var(--muted);font-size:0.88rem;margin:.2rem 0 0">{{ group.description }}</p>
-    {% endif %}
-  </div>
+  <h1>{{ group.name }}</h1>
   <div style="display:flex;gap:.5rem;flex-wrap:wrap">
     <a href="{{ url_for('training_group_list') }}" class="btn btn-outline btn-sm">← Groups</a>
     <form method="POST" action="{{ url_for('training_group_delete', group_id=group.id) }}"
@@ -18,67 +14,37 @@
   </div>
 </div>
 
-{# ── Player list ─────────────────────────────────────────────────────────── #}
-<div class="card" style="margin-bottom:1rem">
-  <h2>Players ({{ players|length }})</h2>
-  {% if not players %}
-  <p style="color:var(--muted);font-size:0.9rem">No players in this group yet.</p>
-  {% else %}
-  <table class="table">
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Name</th>
-        <th>Status</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for p in players %}
-      <tr>
-        <td style="color:var(--muted)">{{ p.number or '—' }}</td>
-        <td><a href="{{ url_for('roster_detail', profile_id=p.id) }}" style="font-weight:600">{{ p.first_name }} {{ p.last_name }}</a></td>
-        <td><span class="status-badge status-{{ p.status }}">{{ p.status }}</span></td>
-        <td>
-          <form method="POST" action="{{ url_for('training_group_remove_player', group_id=group.id, player_id=p.id) }}"
-                onsubmit="return confirm('Remove {{ p.first_name }} {{ p.last_name }} from this group?')">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-sm btn-danger" style="padding:.15rem .5rem">✕ Remove</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-</div>
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
 
-{# ── Add player ──────────────────────────────────────────────────────────── #}
-<div class="card">
-  <h2>Add Player</h2>
-  <form method="POST" action="{{ url_for('training_group_add_player', group_id=group.id) }}"
-        style="display:flex;flex-wrap:wrap;gap:.65rem;align-items:flex-end">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label style="flex:1;min-width:200px">
-      <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Player ID</span>
-      <input type="number" name="player_id" min="1" required placeholder="Profile ID"
-             style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-                    color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
-    </label>
-    <button type="submit" class="btn btn-primary">Add Player</button>
-  </form>
-  <p style="margin-top:.5rem;font-size:0.8rem;color:var(--muted)">
-    Enter the numeric profile ID. You can find it in the URL of the player's detail page
-    (e.g. <code>/roster/42</code> → ID is 42).
-  </p>
-</div>
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-<style>
-.status-badge { display:inline-block;padding:.15em .55em;border-radius:999px;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em; }
-.status-active   { background:#1e4d2b; color:#6fcf97; }
-.status-prospect { background:#1e3a5f; color:#7ab3e0; }
-.status-trial    { background:#3d2e00; color:#f0c040; }
-.status-alumni   { background:#2a2a2a; color:#aaa; }
-.status-inactive { background:#2a2a2a; color:#666; }
-</style>
+  <section class="card">
+    <h2>Group Info</h2>
+    <div class="field-row">
+      <label>Name
+        <input type="text" name="group_name" required value="{{ group.name }}"
+               placeholder="e.g. U18 Setters" />
+      </label>
+      <label>Description
+        <input type="text" name="description" value="{{ group.description or '' }}"
+               placeholder="Optional description…" />
+      </label>
+    </div>
+  </section>
+
+  {{ player_roster_section(players, all_profiles, title='Players') }}
+
+  <div class="form-actions" style="gap:0.75rem">
+    <a href="{{ url_for('training_group_list') }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary btn-lg">Save Changes</button>
+  </div>
+</form>
+
+<script src="{{ url_for('static', filename='js/player-picker.js') }}"></script>
+<script>
+  initPlayerPicker({{ all_profiles | tojson }});
+</script>
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import player_roster_section %}
 {% block title %}New Game — VolleyStats{% endblock %}
 {% block content %}
 <h1>New Game</h1>
@@ -27,7 +28,7 @@
         <select id="team-select">
           <option value="" data-id="">— Select team —</option>
           {% for t in club_teams %}
-          <option value="{{ t.name }}" data-id="{{ t.id }}">{{ t.name }}</option>
+          <option value="{{ t.name }}" data-id="{{ t.id }}">{{ t.short_name or t.name }}</option>
           {% endfor %}
           <option value="__new__" data-id="">＋ Add team…</option>
         </select>
@@ -50,59 +51,17 @@
     </div>
   </section>
 
-  <section class="card">
-    <h2>Your Players</h2>
-    <table class="table" id="players-table">
-      <thead>
-        <tr><th class="num-col">#</th><th>Name</th><th></th></tr>
-      </thead>
-      <tbody id="players-body">
-        <tr>
-          <td><input type="text" name="player_number" placeholder="#" /></td>
-          <td><input type="text" name="player_name" placeholder="Player name" /></td>
-          <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
-        </tr>
-      </tbody>
-    </table>
-    <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
-      <button type="button" class="btn btn-outline" id="add-player">+ Add Player</button>
-      <button type="button" class="btn btn-sm btn-danger" id="clear-players">Delete all players</button>
-    </div>
-  </section>
+  {{ player_roster_section([], all_profiles, title='Your Players') }}
 
   <div class="form-actions">
     <button type="submit" class="btn btn-primary btn-lg">Start Tracking →</button>
   </div>
 </form>
 
+<script src="{{ url_for('static', filename='js/player-picker.js') }}"></script>
 <script>
-  // ── Player rows ──────────────────────────────────────────────
-  document.getElementById("add-player").addEventListener("click", () => {
-    const tbody = document.getElementById("players-body");
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td><input type="text" name="player_number" placeholder="#" /></td>
-      <td><input type="text" name="player_name" placeholder="Player name" /></td>
-      <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>`;
-    tbody.appendChild(row);
-  });
-
-  document.getElementById("players-body").addEventListener("click", (e) => {
-    if (e.target.classList.contains("remove-row")) {
-      const rows = document.querySelectorAll("#players-body tr");
-      if (rows.length > 1) e.target.closest("tr").remove();
-    }
-  });
-
-  document.getElementById("clear-players").addEventListener("click", () => {
-    if (!confirm("Remove all players from the list?")) return;
-    document.getElementById("players-body").innerHTML =
-      '<tr>' +
-      '<td><input type="text" name="player_number" placeholder="#" /></td>' +
-      '<td><input type="text" name="player_name" placeholder="Player name" /></td>' +
-      '<td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>' +
-      '</tr>';
-  });
+  const seasonIdMap = {{ season_id_map | tojson }};
+  initPlayerPicker({{ all_profiles | tojson }}, { showClear: true, clearMsg: 'Remove all players from the list?', noDupCheck: true });
 
   const today = new Date().toISOString().slice(0, 10);
   const dateInput = document.querySelector('input[name="played_at"]');
@@ -115,19 +74,19 @@
       alert('Please select or add a team name.');
       return;
     }
-    // Duplicate player-name check: block if two names normalise to the same string
-    const nameInputs = document.querySelectorAll('#players-body input[name="player_name"]');
+    // Duplicate player check
+    const profileSelects = document.querySelectorAll('#players-body select[name="player_profile_id"]');
     const seen = new Set();
-    for (const input of nameInputs) {
-      const norm = input.value.trim().toLowerCase();
-      if (!norm) continue;
-      if (seen.has(norm)) {
+    for (const sel of profileSelects) {
+      const val = sel.value;
+      if (!val) continue;
+      if (seen.has(val)) {
         e.preventDefault();
-        input.focus();
-        alert('Duplicate player name: "' + input.value.trim() + '". Each player must have a unique name.');
+        sel.focus();
+        alert('Duplicate player: "' + sel.options[sel.selectedIndex].text.trim() + '". Each player must be unique.');
         return;
       }
-      seen.add(norm);
+      seen.add(val);
     }
   });
 
@@ -205,18 +164,6 @@
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  function titleCase(str) {
-    return String(str).replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  function emptyPlayerRow() {
-    return '<tr>' +
-      '<td><input type="text" name="player_number" placeholder="#" /></td>' +
-      '<td><input type="text" name="player_name" placeholder="Player name" /></td>' +
-      '<td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>' +
-      '</tr>';
-  }
-
   teamSelect.addEventListener('change', async () => {
     const selectedOpt = teamSelect.options[teamSelect.selectedIndex];
     const teamId = selectedOpt.dataset.id;
@@ -231,20 +178,19 @@
     teamValue.value = teamSelect.value;
     if (!teamId) return;
     try {
-      const res = await fetch(`/api/teams/${teamId}/players`);
+      const seasonName = seasonValue.value;
+      const sid = seasonIdMap[seasonName];
+      const apiUrl = sid ? `/api/teams/${teamId}/players?season_id=${sid}` : `/api/teams/${teamId}/players`;
+      const res = await fetch(apiUrl);
       const players = await res.json();
       if (!players.length) return;
       playersBody.innerHTML = '';
       players.forEach(p => {
-        const row = document.createElement('tr');
-        row.innerHTML =
-          `<td><input type="text" name="player_number" value="${escHtml(p.number || '')}" placeholder="#" /></td>` +
-          `<td><input type="text" name="player_name" value="${escHtml(titleCase(p.name))}" placeholder="Player name" /></td>` +
-          `<td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>`;
-        playersBody.appendChild(row);
+        playersBody.appendChild(_makePlayerRow(p.profile_id || null));
       });
-    } catch (e) {
-      console.error('Failed to fetch team players', e);
+      refreshSelects();
+    } catch (err) {
+      console.error('Failed to fetch team players', err);
     }
   });
 

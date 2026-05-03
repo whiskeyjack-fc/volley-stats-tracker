@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import player_roster_section %}
 {% block title %}{% if team %}Edit Team{% else %}New Team{% endif %} — VolleyStats{% endblock %}
 {% block content %}
 <h1>{% if team %}Edit Team{% else %}New Team{% endif %}</h1>
@@ -9,45 +10,58 @@
 
 <form method="POST">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
   <section class="card">
     <h2>Team Info</h2>
     <div class="field-row">
       <label>Team Name
         <input type="text" name="team_name" required value="{{ team.name if team else '' }}"
-               placeholder="e.g. Spikemasters" />
+               placeholder="e.g. VC Belvoc BELSELE B" />
+      </label>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem">
+      <label>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Short Name</span>
+        <input type="text" name="short_name" maxlength="20"
+               value="{{ team.short_name if team and team.short_name else '' }}"
+               placeholder="e.g. HP3"
+               style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
+      </label>
+      <label>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Division (federation)</span>
+        <input type="text" name="division" maxlength="60"
+               value="{{ team.division if team and team.division else '' }}"
+               placeholder="e.g. HEREN PROMO 3A"
+               style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
       </label>
     </div>
   </section>
 
+  {{ player_roster_section(players, all_profiles, title='Roster', show_roles=True, team_member_roles=team_member_roles) }}
+
+  {% if team %}
+  {# Season picker — navigates via GET so the roster reloads for the chosen season #}
   <section class="card">
-    <h2>Roster</h2>
-    <table class="table" id="players-table">
-      <thead>
-        <tr><th class="num-col">#</th><th>Name</th><th></th></tr>
-      </thead>
-      <tbody id="players-body">
-        {% if players %}
-          {% for p in players %}
-          <tr>
-            <td><input type="text" name="player_number" value="{{ p.number or '' }}" placeholder="#" /></td>
-            <td><input type="text" name="player_name" value="{{ p.name | title }}" placeholder="Player name" /></td>
-            <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
-          </tr>
-          {% endfor %}
-        {% else %}
-          <tr>
-            <td><input type="text" name="player_number" placeholder="#" /></td>
-            <td><input type="text" name="player_name" placeholder="Player name" /></td>
-            <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
-          </tr>
-        {% endif %}
-      </tbody>
-    </table>
-    <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
-      <button type="button" class="btn btn-outline" id="add-player">+ Add Player</button>
-      <button type="button" class="btn btn-sm btn-danger" id="clear-players">Delete all players</button>
-    </div>
+    <h2 class="chart-title">Roster Season</h2>
+    <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.75rem">
+      Select a season to manage who is on the roster for that season.
+      Edits only affect the selected season's rows.
+    </p>
+    <label>
+      <select onchange="window.location='{{ url_for('edit_team', team_id=team.id) }}' + (this.value ? '?season_id=' + this.value : '')">
+        <option value="" {% if not selected_season_id %}selected{% endif %}>— Legacy (no season) —</option>
+        {% for s in seasons %}
+        <option value="{{ s.id }}" {% if selected_season_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if not seasons %}
+    <p style="font-size:0.8rem;color:var(--muted);margin-top:0.5rem">
+      No seasons yet — create one when setting up a game first.
+    </p>
+    {% endif %}
   </section>
+  {% endif %}
 
   <div class="form-actions" style="gap:0.75rem">
     <a href="{{ url_for('team_list') }}" class="btn btn-outline">Cancel</a>
@@ -57,32 +71,53 @@
   </div>
 </form>
 
+<style>
+.roles-td { position: relative; min-width: 150px; }
+.roles-btn {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: .35rem .5rem;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color .15s;
+}
+.roles-btn:hover { border-color: var(--accent); }
+.roles-panel {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  z-index: 200;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .45rem .5rem;
+  min-width: 170px;
+  flex-direction: column;
+  gap: .15rem;
+  box-shadow: 0 4px 14px rgba(0,0,0,.4);
+}
+.roles-check-label {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: 0.83rem;
+  cursor: pointer;
+  padding: .2rem .3rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.roles-check-label:hover { background: var(--surface3, rgba(255,255,255,.06)); }
+</style>
+
+<script src="{{ url_for('static', filename='js/player-picker.js') }}"></script>
 <script>
-  document.getElementById("add-player").addEventListener("click", () => {
-    const tbody = document.getElementById("players-body");
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td><input type="text" name="player_number" placeholder="#" /></td>
-      <td><input type="text" name="player_name" placeholder="Player name" /></td>
-      <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>`;
-    tbody.appendChild(row);
-  });
-
-  document.getElementById("players-body").addEventListener("click", (e) => {
-    if (e.target.classList.contains("remove-row")) {
-      const rows = document.querySelectorAll("#players-body tr");
-      if (rows.length > 1) e.target.closest("tr").remove();
-    }
-  });
-
-  document.getElementById("clear-players").addEventListener("click", () => {
-    if (!confirm("Remove all players from the roster?")) return;
-    document.getElementById("players-body").innerHTML =
-      '<tr>' +
-      '<td><input type="text" name="player_number" placeholder="#" /></td>' +
-      '<td><input type="text" name="player_name" placeholder="Player name" /></td>' +
-      '<td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>' +
-      '</tr>';
-  });
+  initPlayerPicker({{ all_profiles | tojson }}, { showRoles: true });
 </script>
 {% endblock %}

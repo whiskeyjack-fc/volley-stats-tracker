@@ -40,34 +40,60 @@
           {% endif %}
           {# Link / unlink form — coordinator/admin #}
           <form method="POST" action="{{ url_for('admin_link_profile', user_id=u.id) }}"
-                style="display:inline-flex;gap:.3rem;align-items:center;margin-left:.4rem">
+                style="display:inline-flex;flex-direction:column;gap:.3rem;margin-left:.4rem">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <select name="profile_id"
-                    style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-                           color:var(--fg);padding:.2rem .4rem;font-size:0.8rem;max-width:160px">
-              <option value="">— unlink —</option>
-              {% for p in profiles %}
-              <option value="{{ p.id }}" {% if u.profile_id == p.id %}selected{% endif %}>
-                #{{ p.id }} {{ p.first_name }} {{ p.last_name }}
-              </option>
-              {% endfor %}
-            </select>
-            <button type="submit" class="btn btn-sm" style="font-size:0.78rem;padding:.2rem .5rem">Link</button>
+            <div style="display:flex;gap:.3rem;align-items:center">
+              <div class="profile-select-wrap" style="position:relative">
+                <input type="text" placeholder="Search profile…" autocomplete="off"
+                       class="profile-search"
+                       style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                              color:var(--fg);padding:.2rem .4rem;font-size:0.8rem;width:170px">
+                <select name="profile_id" class="profile-select"
+                        style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                               color:var(--fg);padding:.2rem .4rem;font-size:0.8rem;width:170px">
+                  <option value="">— unlink —</option>
+                  {% for p in profiles %}
+                  <option value="{{ p.id }}" {% if u.profile_id == p.id %}selected{% endif %}>
+                    #{{ p.id }} {{ p.first_name }} {{ p.last_name }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <button type="submit" class="btn btn-sm" style="font-size:0.78rem;padding:.2rem .5rem">Link</button>
+            </div>
           </form>
+          {% if u.profile_id %}
+          <form method="POST" action="{{ url_for('admin_link_profile', user_id=u.id) }}"
+                style="display:inline-flex;margin-left:.4rem">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="profile_id" value="">
+            <button type="submit" class="btn btn-sm"
+                    style="font-size:0.78rem;padding:.2rem .5rem;color:var(--muted);border-color:var(--muted)">Unlink</button>
+          </form>
+          {% endif %}
         </td>
         <td style="padding:.65rem .5rem;color:var(--muted)">{{ u.created_at[:10] }}</td>
         <td style="padding:.65rem .5rem">
           {% if current_user.role == 'admin' %}
-          <form method="post" action="{{ url_for('admin_set_role', user_id=u.id) }}" style="display:flex;gap:.4rem;align-items:center">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label for="role-{{ u.id }}" class="sr-only">Role for {{ u.email }}</label>
-            <select id="role-{{ u.id }}" name="role" style="background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .5rem;font-size:0.85rem">
-              <option value="trainer"     {% if u.role == 'trainer'     %}selected{% endif %}>trainer</option>
-              <option value="coordinator" {% if u.role == 'coordinator' %}selected{% endif %}>coordinator</option>
-              <option value="admin"       {% if u.role == 'admin'       %}selected{% endif %}>admin</option>
-            </select>
-            <button type="submit" class="btn btn-sm">Save</button>
-          </form>
+          <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+            <form method="post" action="{{ url_for('admin_set_role', user_id=u.id) }}" style="display:flex;gap:.4rem;align-items:center">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <label for="role-{{ u.id }}" class="sr-only">Role for {{ u.email }}</label>
+              <select id="role-{{ u.id }}" name="role" style="background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .5rem;font-size:0.85rem">
+                <option value="trainer"     {% if u.role == 'trainer'     %}selected{% endif %}>trainer</option>
+                <option value="coordinator" {% if u.role == 'coordinator' %}selected{% endif %}>coordinator</option>
+                <option value="admin"       {% if u.role == 'admin'       %}selected{% endif %}>admin</option>
+              </select>
+              <button type="submit" class="btn btn-sm">Save</button>
+            </form>
+            {% if u.id != current_user.id %}
+            <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}"
+                  onsubmit="return confirm('Delete ' + {{ u.email | tojson }} + '? This cannot be undone.')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm" style="color:var(--red);border-color:var(--red)">Delete</button>
+            </form>
+            {% endif %}
+          </div>
           {% endif %}
         </td>
       </tr>
@@ -75,5 +101,78 @@
     </tbody>
   </table>
 </div>
+
+<script>
+(function () {
+  var ALL_PROFILES = {{ profiles | map(attribute='id') | list | tojson }};
+  var PROFILE_LABELS = {};
+  {% for p in profiles %}
+  PROFILE_LABELS[{{ p.id }}] = "#{{ p.id }} {{ p.first_name | e }} {{ p.last_name | e }}";
+  {% endfor %}
+
+  document.querySelectorAll('.profile-select-wrap').forEach(function (wrap) {
+    var searchInput = wrap.querySelector('.profile-search');
+    var select      = wrap.querySelector('.profile-select');
+
+    // Show the currently selected profile name in the search box on load
+    var currentVal = select.value;
+    if (currentVal) {
+      searchInput.value = PROFILE_LABELS[currentVal] || '';
+    }
+
+    // When user types, filter options
+    searchInput.addEventListener('input', function () {
+      var q = searchInput.value.trim().toLowerCase();
+      rebuildOptions(select, q, currentVal);
+    });
+
+    // When user focuses the search box, clear it so they can type fresh
+    searchInput.addEventListener('focus', function () {
+      searchInput.value = '';
+      rebuildOptions(select, '', currentVal);
+      select.size = Math.min(8, select.options.length);
+      select.style.display = 'block';
+    });
+
+    // Keep search box in sync when user changes select directly
+    select.addEventListener('change', function () {
+      currentVal = select.value;
+      searchInput.value = currentVal ? (PROFILE_LABELS[currentVal] || '') : '';
+      select.size = 1;
+    });
+
+    // Collapse list on blur (small delay so click on option registers)
+    searchInput.addEventListener('blur', function () {
+      setTimeout(function () {
+        select.size = 1;
+        if (!select.value) { searchInput.value = ''; }
+        else { searchInput.value = PROFILE_LABELS[select.value] || ''; }
+      }, 200);
+    });
+  });
+
+  function rebuildOptions(select, q, currentVal) {
+    var prev = select.value || currentVal;
+    // Clear existing options
+    while (select.options.length > 0) select.remove(0);
+    // Always add unlink option
+    var blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = '— unlink —';
+    select.add(blank);
+    ALL_PROFILES.forEach(function (id) {
+      var label = PROFILE_LABELS[id] || '';
+      if (!q || label.toLowerCase().indexOf(q) !== -1) {
+        var opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = label;
+        if (String(id) === String(prev)) opt.selected = true;
+        select.add(opt);
+      }
+    });
+    select.size = Math.min(8, select.options.length);
+  }
+})();
+</script>
 {% endblock %}
 

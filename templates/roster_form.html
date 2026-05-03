@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{% if profile %}Edit {{ profile.first_name }} {{ profile.last_name }}{% else %}New Player{% endif %} — VolleyStats{% endblock %}
+{% block title %}{% if profile %}Edit {{ profile.first_name }} {{ profile.last_name }}{% else %}New Member{% endif %} — VolleyStats{% endblock %}
 {% block content %}
 <h1 style="font-size:1.4rem;font-weight:700;margin-bottom:1.25rem">
-  {% if profile %}Edit Player{% else %}New Player{% endif %}
+  {% if profile %}Edit Member{% else %}New Member{% endif %}
 </h1>
 
 {% if error %}
@@ -35,6 +35,11 @@
         <input type="text" name="number" maxlength="10"
                value="{{ profile.number if profile else '' }}" placeholder="e.g. 7" />
       </label>
+      <label>
+        <span class="field-label">Federation ID</span>
+        <input type="text" name="federation_id" maxlength="20"
+               value="{{ profile.federation_id if profile else '' }}" placeholder="e.g. 0035321" />
+      </label>
     </div>
 
     <div style="margin-top:.75rem">
@@ -43,10 +48,18 @@
         <select name="status"
                 style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
                        color:var(--fg);padding:.35rem .5rem;font-size:0.9rem">
-          {% for s in ['active','prospect','trial','alumni','inactive'] %}
+          {% for s in ['active','inactive','injured'] %}
           <option value="{{ s }}" {% if profile and profile.status == s %}selected{% endif %}>{{ s|capitalize }}</option>
           {% endfor %}
         </select>
+      </label>
+    </div>
+    <div style="margin-top:.75rem">
+      <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:0.9rem">
+        <input type="checkbox" name="is_staff"
+               {% if profile and profile.is_staff %}checked{% endif %}
+               style="accent-color:var(--accent)">
+        <span>Staff / non-player (hide from stats pages)</span>
       </label>
     </div>
   </section>
@@ -55,7 +68,7 @@
     <h2>Positions</h2>
     <div style="display:flex;flex-wrap:wrap;gap:.6rem">
       {% set cur_positions = (profile.positions or '').split(',') | map('trim') | list if profile else [] %}
-      {% for pos in ['setter','libero','outside','opposite','middle','ds'] %}
+      {% for pos in ['setter','libero','outside','opposite','middle'] %}
       <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;
                     background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
                     padding:.3rem .65rem;font-size:0.88rem;
@@ -94,7 +107,7 @@
     <a href="{{ url_for('roster_detail', profile_id=profile.id) if profile else url_for('roster_list') }}"
        class="btn btn-outline">Cancel</a>
     <button type="submit" class="btn btn-primary btn-lg">
-      {% if profile %}Save Changes{% else %}Create Player{% endif %}
+      {% if profile %}Save Changes{% else %}Create Member{% endif %}
     </button>
   </div>
 </form>

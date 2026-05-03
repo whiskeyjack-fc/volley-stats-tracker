@@ -47,7 +47,11 @@
       <a href="{{ url_for('index') }}">Games</a>
       <a href="{{ url_for('player_report') }}">Players</a>
       <a href="{{ url_for('season_list') }}">Seasons</a>
-      {% if can_view_all() %}<a href="{{ url_for('admin_users') }}">Users</a>{% endif %}
+      {% if is_admin() %}
+      <span class="nav-sep"></span>
+      <span class="nav-group-label">Admin</span>
+      <a href="{{ url_for('admin_users') }}">Users</a>
+      {% endif %}
       <span class="nav-user">{{ current_user.email }} <span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span></span>
       <form method="post" action="{{ url_for('logout') }}" style="display:inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -62,5 +66,18 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+  <script>
+    /* Auto-submit form-based filter bars when any select changes;
+       hide the submit button since selects auto-submit and text inputs submit on Enter */
+    document.querySelectorAll('.filter-bar select.filter-select').forEach(function(s) {
+      s.addEventListener('change', function() {
+        var form = s.closest('form');
+        if (form) form.submit();
+      });
+    });
+    document.querySelectorAll('.filter-bar button[type="submit"]').forEach(function(b) {
+      b.style.display = 'none';
+    });
+  </script>
 </body>
 </html>

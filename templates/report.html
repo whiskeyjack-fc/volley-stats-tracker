@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import filter_chips %}
 {% block title %}Report — {{ game.team_name }} vs {{ game.opponent }}{% endblock %}
 {% block content %}
 <div class="report-sticky-bar">
@@ -18,8 +19,7 @@
 {% if sets %}
 {% set has_main    = sets | selectattr('set_type','eq','main')    | list | length > 0 %}
 {% set has_reserve = sets | selectattr('set_type','eq','reserve') | list | length > 0 %}
-<div class="set-filter-bar">
-  <span class="set-label">Set:</span>
+{% call filter_chips('Set:') %}
   <a href="{{ url_for('report', game_id=game.id) }}"
      class="set-chip {% if not active_set_id and not active_set_type %}active{% endif %}">All</a>
   {% if has_main %}
@@ -45,7 +45,7 @@
           title="{% if split_available %}Split charts by set{% else %}Available for Main or Reserve filter only{% endif %}">
     &#x229E; Split
   </button>
-</div>
+{% endcall %}
 {% endif %}
 </div></div>
 </div>
@@ -135,7 +135,7 @@
       {% for ps in player_stats %}
       <tr>
         <td>{{ ps.number or '—' }}</td>
-        <td>{{ ps.name | title }}</td>
+        <td>{{ ps.display_name }}</td>
         {% if ps.stats[stat].total == 0 %}
         <td colspan="{{ results|length + (4 if stat in quality_stats else 3) }}" class="no-data">—</td>
         {% else %}

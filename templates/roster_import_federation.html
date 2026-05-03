@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Import Players — VolleyStats{% endblock %}
+{% block title %}Import Federation List — VolleyStats{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Import Players</h1>
+  <h1>Import Federation List</h1>
   <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Back to Roster</a>
 </div>
 
@@ -13,25 +13,33 @@
 {% endwith %}
 
 {% if not preview %}
-{# ── Step 1: Upload form ─────────────────────────────────────────────────── #}
+{# ── Step 1: Paste form ──────────────────────────────────────────────────── #}
 <div class="card">
-  <h2>Upload CSV</h2>
-  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:1rem">
-    Expected columns: <code>first_name</code>, <code>last_name</code>, <code>date_of_birth</code>,
-    <code>number</code>, <code>status</code>, <code>positions</code>, <code>tags</code>,
-    <code>federation_id</code>
+  <h2>Paste Federation List</h2>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:.5rem">
+    Copy the player rows from the federation PDF and paste them below.
+    Header lines (club name, competition, code) are ignored automatically.
   </p>
-  <form method="POST" enctype="multipart/form-data">
+  <p style="color:var(--muted);font-size:0.85rem;margin-bottom:1rem">
+    Expected line format: <code>[K] &lt;nr&gt; &lt;card#&gt; &lt;Familienaam&gt; &lt;Voornaam&gt; &lt;Nat&gt; &lt;DD/MM/YYYY&gt;</code><br>
+    Example: <code>K 15 0035321 Thierens Casper BEL 11/02/2007</code>
+  </p>
+
+  {% if error %}
+  <p class="auth-error">{{ error }}</p>
+  {% endif %}
+
+  <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end">
-      <label style="flex:1;min-width:200px">
-        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.03em">CSV File</span>
-        <input type="file" name="csv_file" accept=".csv,text/csv" required
-               style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-                      color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;width:100%;box-sizing:border-box" />
-      </label>
-      <button type="submit" class="btn btn-primary" style="align-self:flex-end">Upload &amp; Preview</button>
-    </div>
+    <label style="display:block;margin-bottom:.75rem">
+      <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.03em">Pasted Text</span>
+      <textarea name="paste_text" rows="18" required
+                placeholder="Paste here…"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);
+                       border-radius:var(--radius);color:var(--fg);padding:.4rem .55rem;
+                       font-size:0.88rem;font-family:monospace;resize:vertical;box-sizing:border-box"></textarea>
+    </label>
+    <button type="submit" class="btn btn-primary">Preview</button>
   </form>
 </div>
 
@@ -40,30 +48,33 @@
 <div class="card" style="margin-bottom:1rem">
   <h2>Preview — {{ preview|length }} row{{ 's' if preview|length != 1 }}</h2>
   <p style="color:var(--muted);font-size:0.88rem;margin-bottom:.75rem">
-    Review the rows below. Duplicates (matched by normalised full name) will be skipped.
+    Duplicates (matched by normalised full name) will be skipped.
   </p>
   <div style="overflow-x:auto">
     <table class="table">
       <thead>
         <tr>
+          <th>#</th>
           <th>First</th>
           <th>Last</th>
           <th>DOB</th>
-          <th>#</th>
-          <th>Status</th>
-          <th>Positions</th>
+          <th>Fed. ID</th>
+          <th>Tags</th>
           <th>Import</th>
         </tr>
       </thead>
       <tbody>
         {% for row in preview %}
         <tr style="opacity:{% if row._duplicate %}0.55{% else %}1{% endif %}">
+          <td style="color:var(--muted)">{{ row.number or '—' }}</td>
           <td>{{ row.first_name }}</td>
           <td>{{ row.last_name }}</td>
           <td style="color:var(--muted)">{{ row.date_of_birth or '—' }}</td>
-          <td style="color:var(--muted)">{{ row.number or '—' }}</td>
-          <td>{{ row.status }}</td>
-          <td style="font-size:0.82rem;color:var(--muted)">{{ row.positions or '—' }}</td>
+          <td style="color:var(--muted);font-family:monospace;font-size:0.82rem">{{ row.federation_id or '—' }}</td>
+          <td style="font-size:0.82rem;color:var(--muted)">
+            {% set tag_list = row.tags | from_json if row.tags else [] %}
+            {{ tag_list | join(', ') or '—' }}
+          </td>
           <td>
             {% if row._duplicate %}
             <span style="color:var(--red);font-weight:600;font-size:0.8rem">duplicate</span>
@@ -93,11 +104,8 @@
     <input type="hidden" name="confirm_import" value="1">
     <button type="submit" class="btn btn-primary">Confirm Import</button>
   </form>
-  <form method="POST" action="{{ url_for('roster_list') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {# Navigating away abandons the preview; the session key is cleaned up on next upload or confirm #}
-    <a href="{{ url_for('roster_list') }}" class="btn btn-outline">Cancel</a>
-  </form>
+  <a href="{{ url_for('roster_import_federation', reset=1) }}" class="btn btn-outline">Start Over</a>
+  <a href="{{ url_for('roster_list') }}" class="btn btn-outline">Cancel</a>
 </div>
 {% endif %}
 {% endblock %}

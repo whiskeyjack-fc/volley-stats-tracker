@@ -12,8 +12,9 @@ VolleyStats is a Flask 3.x / SQLite volleyball statistics tracker. A single mono
 |-------|-----------|
 | Backend routes + logic | `app.py` |
 | Live tracking JS | `static/js/tracker.js` |
+| Shared player-profile picker | `static/js/player-picker.js` |
 | Styles | `static/css/style.css` |
-| Templates (20) | `templates/` — `base.html`, `track.html`, `report.html`, `season_report.html`, `player_report.html`, `roster_list.html`, `roster_detail.html`, `roster_form.html`, `roster_import.html`, `training_groups.html`, `training_group_detail.html`, `training_group_form.html`, … |
+| Templates (21) | `templates/` — `base.html`, `_macros.html` (shared Jinja2 macros), `track.html`, `report.html`, `season_report.html`, `player_report.html`, `roster_list.html`, `roster_detail.html`, `roster_form.html`, `roster_import.html`, `training_groups.html`, `training_group_detail.html`, `training_group_form.html`, … |
 
 **DB tables:** `users` · `games` · `players` · `sets` · `events` · `seasons` · `club_teams` · `club_team_players` · `player_profiles` · `player_remarks` · `training_groups` · `training_group_players` · `club_team_trainers`
 
@@ -34,6 +35,12 @@ events → build_player_stats() → agg_team_stats() → build_chart_data() → 
 | `_team_cond()` | Returns `(sql_fragment, params)` scoping `club_teams` to trainer's assigned teams; no-op for coordinator/admin |
 | `_resolve_profile_id(first, last)` | Normalises `first+" "+last` and returns matching `player_profiles.id` or `None` |
 
+**Jinja2 macros (`templates/_macros.html`):**
+
+| Macro | Purpose |
+|-------|---------|
+| `filter_select(name, all_label)` | `<select class="filter-select">` wrapper; use `{% call %}` block for `<option>` rows |
+| `filter_chips(label)` | `.set-filter-bar` row of `.set-chip` anchors for URL-driven filters; use `{% call %}` block to provide all chip content; pass `""` to omit the label || `player_roster_section(players, all_profiles, title, show_clear, note)` | Players `<section>` card with a profile `<select>` per row; requires `player-picker.js` + `initPlayerPicker()` call on the embedding page |
 For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/copilot-instructions.md).
 
 ---
@@ -70,7 +77,8 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Chart label strings must use string concatenation, not template literals, when embedding user-supplied data** — a crafted player name like `` ${alert(1)} `` would execute as JS. Use `(p.number ? "#" + p.number + " " : "") + p.name`.
 - **`LOOP_OUTCOMES["fault"]` is intentionally empty** — fault auto-records after player selection; the `else if (loopStat === "fault")` branch in `onPlayerChosen` prevents falling through to an empty `renderOutcomeStep([])`. Do not remove that branch.
 - **Background sync: guard on queue length and treat `!r.ok` as a network failure** — skip `isOnline()`/`flushQueue()` when the queue is empty; `!r.ok` responses must increment the failure streak and trigger a toast, same as thrown exceptions.
-- **Duplicate player names must be caught client-side** — `game_setup.html`'s submit handler normalises with `.trim().toLowerCase()` and blocks submit on duplicates, mirroring the server-side identity rule.
+- **Duplicate player names must be caught client-side** — player-profile selects use `refreshSelects()` from `player-picker.js` to hide already-chosen profiles from other rows; the submit handler still checks for duplicates as a belt-and-braces guard.
+- **`INSERT OR IGNORE` alone does not prevent duplicates without a DB constraint** — `club_team_players` has `UNIQUE INDEX uq_club_team_players_profile (team_id, profile_id) WHERE profile_id IS NOT NULL`; always pair `INSERT OR IGNORE` with a Python seen-set loop so in-memory dedup is guaranteed even without the index.
 - **Flask-Limiter on `/login`** — configured with `storage_uri="memory://"` (resets on restart); apply `@limiter.limit(...)` only to routes that need it.
 - **Always validate user-supplied filter params against the actual data set** — a `?team=` param that doesn't match any team silently returns empty results; fetch the valid list and reset the param to `""` if not found.
 - **Wrap multi-row INSERT loops in explicit try/except + rollback** — a mid-loop failure (incl. in `edit_team`/`new_team`) leaves the parent-row INSERT committed with no children. Extend the `try` block to cover the entire sequence (parent INSERT + child loop + `db.commit()`); add `db.rollback()` in every `except` branch.
@@ -88,7 +96,6 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 > Use this section to capture ongoing ideas, active work, and design decisions. Keep it current.
 
 ### Ideas / Backlog
-- Wire `/api/roster/search` typeahead to training-group add-player form (currently uses raw numeric ID input)
 - Fix `edit_team()` to use `can_view_all()` guard instead of `_uid_cond()` — trainers who originally created a team can currently still access the edit page
 - Re-render `name`/`description` values in `training_group_form.html` on validation error
 
@@ -97,5 +104,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 
 ### Decisions Made
 - Player management feature (roster, remarks, training groups, club_team_trainers) shipped on `feature/player-scouting`; trainer assignment UI lives on `team_list.html` (not `team_form.html`) — more user-friendly in practice
+- Player selection on `team_form.html`, `game_setup.html`, and `edit_game.html` now uses `player_profiles` dropdowns (not free-text name/number inputs); `player-picker.js` + `player_roster_section` macro are the canonical way to add this UI to future pages
+- Trainer assignment on `team_list.html` uses an email-based `<select>` of users with `role='trainer'` (not a raw user ID input)
 
 
