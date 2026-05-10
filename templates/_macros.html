@@ -157,3 +157,60 @@
   {{ caller() }}
 </div>
 {% endmacro %}
+
+
+{# ── card_with_actions ────────────────────────────────────────────────────
+   Renders a .team-card-item card with a header row (entity name + optional
+   metadata on the left, Edit/Delete actions on the right).
+
+   Parameters:
+     name         — entity name displayed as .team-card-name (required)
+     edit_url     — href for the Edit button (required)
+     delete_url   — action URL for the Delete form (required)
+     show_actions — show the action group; default True
+     gap          — CSS gap for the .team-card-item wrapper; default '.65rem'
+     edit_label   — Edit button label; default 'Edit'
+     player_count — optional int; renders a .team-card-count span
+     short_name   — optional short-name badge (accent colour)
+     sub_label    — optional sub-label shown in muted colour (e.g. division)
+     description  — optional description text (muted, display:block)
+
+   Use {% call %} to provide an optional body section rendered below the
+   header row, still inside .team-card-item (e.g. a Team Staff panel).
+
+   Usage (no body):
+     {{ card_with_actions(name=t.name, edit_url=..., delete_url=...) }}
+
+   Usage (with body):
+     {% call card_with_actions(name=t.name, edit_url=..., delete_url=...) %}
+       <div style="border-top:1px solid var(--border);padding-top:.5rem">
+         ...
+       </div>
+     {% endcall %}
+#}
+{% macro card_with_actions(name, edit_url, delete_url, show_actions=True, gap='.65rem',
+                            edit_label='Edit', player_count=None, short_name=None,
+                            sub_label=None, description=None) %}
+<div class="team-card-item" style="flex-direction:column;align-items:stretch;gap:{{ gap }}">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+    <div class="team-card-info">
+      <span class="team-card-name">{{ name }}</span>
+      {% if short_name %}<span style="font-size:0.78rem;color:var(--accent);font-weight:600">{{ short_name }}</span>{% endif %}
+      {% if sub_label %}<span style="font-size:0.75rem;color:var(--muted)">{{ sub_label }}</span>{% endif %}
+      {% if player_count is not none %}<span class="team-card-count">{{ player_count }} player{{ 's' if player_count != 1 else '' }}</span>{% endif %}
+      {% if description %}<span style="font-size:0.82rem;color:var(--muted);display:block;margin-top:.2rem">{{ description }}</span>{% endif %}
+    </div>
+    {% if show_actions %}
+    <div class="team-card-actions">
+      <a href="{{ edit_url }}" class="btn btn-sm btn-outline">{{ edit_label }}</a>
+      <form method="POST" action="{{ delete_url }}" style="display:inline"
+            onsubmit="return confirm('Delete {{ name|e }}? This cannot be undone.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% if caller %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}

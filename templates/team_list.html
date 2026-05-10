@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import card_with_actions %}
 {% block title %}Club Teams — VolleyStats{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -18,25 +19,15 @@
 {% else %}
 <div class="team-cards">
   {% for t in teams %}
-  <div class="team-card-item" style="flex-direction:column;align-items:stretch;gap:.65rem">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
-      <div class="team-card-info">
-        <span class="team-card-name">{{ t.name }}</span>
-        {% if t.short_name %}<span style="font-size:0.78rem;color:var(--accent);font-weight:600">{{ t.short_name }}</span>{% endif %}
-        {% if t.division %}<span style="font-size:0.75rem;color:var(--muted)">{{ t.division }}</span>{% endif %}
-        <span class="team-card-count">{{ team_player_counts[t.id] }} player{{ 's' if team_player_counts[t.id] != 1 else '' }}</span>
-      </div>
-      {% if can_view_all() %}
-      <div class="team-card-actions">
-        <a href="{{ url_for('edit_team', team_id=t.id) }}" class="btn btn-sm btn-outline">Edit</a>
-        <form method="POST" action="{{ url_for('delete_team', team_id=t.id) }}" style="display:inline"
-              onsubmit="return confirm('Delete {{ t.name|e }}? This cannot be undone.')">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-        </form>
-      </div>
-      {% endif %}
-    </div>
+  {% call card_with_actions(
+      name=t.name,
+      edit_url=url_for('edit_team', team_id=t.id),
+      delete_url=url_for('delete_team', team_id=t.id),
+      show_actions=can_view_all(),
+      gap='.65rem',
+      player_count=team_player_counts[t.id],
+      short_name=t.season_short_name or t.short_name,
+      sub_label=(t.season_division or t.division or '') + (' · ' + t.season_name if t.season_name else '')) %}
 
     {# Team Staff: trainer users + non-player roster members #}
     <div style="border-top:1px solid var(--border);padding-top:.5rem">
@@ -74,7 +65,7 @@
 
       </div>
     </div>
-  </div>
+  {% endcall %}
   {% endfor %}
 </div>
 {% endif %}

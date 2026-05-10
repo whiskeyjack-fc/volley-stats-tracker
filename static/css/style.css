@@ -21,6 +21,51 @@
   --split-fill: rgba(255,255,255,0.04);
   --radius:     10px;
   --font:       'Segoe UI', system-ui, sans-serif;
+  /* general missing vars */
+  --muted:      #6b7280;
+  --text-muted: #9ca3af;
+  --surface3:   #2a2d3a;
+  --hover:      #2a2d3a;
+  /* stat-category accent colors */
+  --serve-accent:    #93c5fd;
+  --attack-accent:   #fdba74;
+  --receive-accent:  #6ee7b7;
+  --block-accent:    #c4b5fd;
+  --freeball-accent: #67e8f9;
+  /* status badge colors */
+  --status-active-bg:         #1e4d2b;
+  --status-active-fg:         #6fcf97;
+  --status-inactive-bg:       #2a2a2a;
+  --status-inactive-fg:       #666;
+  --status-injured-bg:        #4d1e1e;
+  --status-injured-fg:        #e07a7a;
+  /* role pill colors */
+  --role-player-bg:           #1a2e3a;
+  --role-head-coach-bg:       #1e4d2b;
+  --role-head-coach-fg:       #6fcf97;
+  --role-asst-coach-bg:       #1b3a28;
+  --role-asst-coach-fg:       #52b87a;
+  --role-team-manager-bg:     #2a2a1e;
+  --role-team-manager-fg:     #d4c84a;
+  --role-medical-bg:          #4d1e1e;
+  --role-medical-fg:          #e07a7a;
+  --role-scorer-bg:           #1e2040;
+  --role-scorer-fg:           #8899ee;
+  --role-marker-bg:           #2a1e3a;
+  --role-marker-fg:           #c07ae0;
+  --role-video-analyst-bg:    #1e2a2a;
+  --role-video-analyst-fg:    #7acece;
+  /* remark badge colors */
+  --remark-general-bg:        #1e2a1e;
+  --remark-general-fg:        #6fcf97;
+  --remark-training-bg:       #1e3a5f;
+  --remark-training-fg:       #7ab3e0;
+  --remark-scouting-bg:       #3d1e5f;
+  --remark-scouting-fg:       #c07ae0;
+  --remark-injury-bg:         #4d1e1e;
+  --remark-injury-fg:         #e07a7a;
+  --remark-followup-bg:       #3d2e00;
+  --remark-followup-fg:       #f0c040;
 }
 
 body {
@@ -108,8 +153,6 @@ main { max-width: 1600px; margin: 0 auto; padding: 1rem 1.25rem; }
   border-bottom: 1px solid var(--border);
   margin-bottom: 1rem;
 }
-.page-header h1 { font-size: 1.5rem; }
-.track-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 /* ── Card ───────────────────────────────────────────────────── */
 .card {
@@ -119,7 +162,7 @@ main { max-width: 1600px; margin: 0 auto; padding: 1rem 1.25rem; }
   padding: 1.25rem;
   margin-bottom: 1rem;
 }
-.card h2 { font-size: 1rem; color: var(--gray); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .05em; }
+.card h2 { font-size: 1rem; color: var(--gray); margin-top: 0; margin-bottom: .65rem; text-transform: uppercase; letter-spacing: .05em; }
 
 /* ── Table ──────────────────────────────────────────────────── */
 .table {
@@ -894,11 +937,11 @@ body.modal-open { overflow: hidden; }
 }
 
 /* ── Category band colours ─────────────────────────────────── */
-.stat-grid .stat-serve    { background: rgba(59,130,246,.22); color: #93c5fd; border-left: 3px solid #3b82f6; }
-.stat-grid .stat-attack   { background: rgba(249,115,22,.22); color: #fdba74; border-left: 3px solid #f97316; }
-.stat-grid .stat-receive  { background: rgba(16,185,129,.22); color: #6ee7b7; border-left: 3px solid #10b981; }
-.stat-grid .stat-block    { background: rgba(139,92,246,.22); color: #c4b5fd; border-left: 3px solid #8b5cf6; }
-.stat-grid .stat-freeball { background: rgba(6,182,212,.22);  color: #67e8f9; border-left: 3px solid #06b6d4; }
+.stat-grid .stat-serve    { background: rgba(59,130,246,.22); color: var(--serve-accent);    border-left: 3px solid #3b82f6; }
+.stat-grid .stat-attack   { background: rgba(249,115,22,.22); color: var(--attack-accent);   border-left: 3px solid #f97316; }
+.stat-grid .stat-receive  { background: rgba(16,185,129,.22); color: var(--receive-accent);  border-left: 3px solid #10b981; }
+.stat-grid .stat-block    { background: rgba(139,92,246,.22); color: var(--block-accent);    border-left: 3px solid #8b5cf6; }
+.stat-grid .stat-freeball { background: rgba(6,182,212,.22);  color: var(--freeball-accent); border-left: 3px solid #06b6d4; }
 .stat-grid .stat-fault    { background: rgba(244,63,94,.22);  color: #fda4af; border-left: 3px solid #f43f5e; }
 
 /* Colour-matched left borders for sub-headers and cells at group start */
@@ -1675,6 +1718,70 @@ body.modal-open { overflow: hidden; }
 .flow-type-receive { border-color: rgba(56,189,166,.55);  background: rgba(56,189,166,.07); }
 .flow-type-serve:hover   { border-color: #4f8ef7; background: rgba(79,142,247,.18); }
 .flow-type-receive:hover { border-color: #38bda6; background: rgba(56,189,166,.18); }
+
+/* ── Status / role / remark badges ──────────────────────────── */
+.status-badge {
+  display: inline-block;
+  padding: .15em .55em;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.status-active   { background: var(--status-active-bg);   color: var(--status-active-fg); }
+.status-inactive { background: var(--status-inactive-bg); color: var(--status-inactive-fg); }
+.status-injured  { background: var(--status-injured-bg);  color: var(--status-injured-fg); }
+
+.pos-pill {
+  display: inline-block; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 999px; padding: .15em .55em; font-size: 0.78rem; color: var(--fg);
+}
+
+.rl-pill {
+  display: inline-block; border-radius: 999px; padding: .1em .4em;
+  font-size: 0.65rem; font-weight: 600; letter-spacing: .03em; margin: 1px;
+}
+.rl-player          { background: var(--role-player-bg);        color: var(--accent);               border: 1px solid var(--accent); }
+.rl-head_coach      { background: var(--role-head-coach-bg);    color: var(--role-head-coach-fg);   border: 1px solid var(--role-head-coach-fg); }
+.rl-assistant_coach { background: var(--role-asst-coach-bg);    color: var(--role-asst-coach-fg);   border: 1px solid var(--role-asst-coach-fg); }
+.rl-team_manager    { background: var(--role-team-manager-bg);  color: var(--role-team-manager-fg); border: 1px solid var(--role-team-manager-fg); }
+.rl-medical         { background: var(--role-medical-bg);       color: var(--role-medical-fg);      border: 1px solid var(--role-medical-fg); }
+.rl-scorer          { background: var(--role-scorer-bg);        color: var(--role-scorer-fg);       border: 1px solid var(--role-scorer-fg); }
+.rl-marker          { background: var(--role-marker-bg);        color: var(--role-marker-fg);       border: 1px solid var(--role-marker-fg); }
+.rl-video_analyst   { background: var(--role-video-analyst-bg); color: var(--role-video-analyst-fg); border: 1px solid var(--role-video-analyst-fg); }
+
+.remark-type-badge {
+  display: inline-block; padding: .1em .4em; border-radius: 4px; font-size: 0.7rem; font-weight: 700;
+}
+.remark-general  { background: var(--remark-general-bg);  color: var(--remark-general-fg); }
+.remark-training { background: var(--remark-training-bg); color: var(--remark-training-fg); }
+.remark-scouting { background: var(--remark-scouting-bg); color: var(--remark-scouting-fg); }
+.remark-injury   { background: var(--remark-injury-bg);   color: var(--remark-injury-fg); }
+.remark-followup { background: var(--remark-followup-bg); color: var(--remark-followup-fg); }
+
+.role-pill {
+  display: inline-block; border-radius: 999px; padding: .1em .45em; font-size: 0.68rem;
+  font-weight: 600; letter-spacing: .03em;
+}
+.role-player          { background: var(--role-player-bg);        color: var(--accent);               border: 1px solid var(--accent); }
+.role-head_coach      { background: var(--role-head-coach-bg);    color: var(--role-head-coach-fg);   border: 1px solid var(--role-head-coach-fg); }
+.role-assistant_coach { background: var(--role-asst-coach-bg);    color: var(--role-asst-coach-fg);   border: 1px solid var(--role-asst-coach-fg); }
+.role-team_manager    { background: var(--role-team-manager-bg);  color: var(--role-team-manager-fg); border: 1px solid var(--role-team-manager-fg); }
+.role-medical         { background: var(--role-medical-bg);       color: var(--role-medical-fg);      border: 1px solid var(--role-medical-fg); }
+.role-scorer          { background: var(--role-scorer-bg);        color: var(--role-scorer-fg);       border: 1px solid var(--role-scorer-fg); }
+.role-marker          { background: var(--role-marker-bg);        color: var(--role-marker-fg);       border: 1px solid var(--role-marker-fg); }
+.role-video_analyst   { background: var(--role-video-analyst-bg); color: var(--role-video-analyst-fg); border: 1px solid var(--role-video-analyst-fg); }
+
+/* ── Player profile select ───────────────────────────────────── */
+.player-select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: .35rem .5rem;
+}
 
 .flow-event-log {
   max-height: 9rem;

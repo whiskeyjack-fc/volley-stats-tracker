@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import card_with_actions %}
 {% block title %}Training Groups — VolleyStats{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -20,25 +21,13 @@
 {% else %}
 <div class="team-cards">
   {% for g in groups %}
-  <div class="team-card-item" style="flex-direction:column;align-items:stretch;gap:.4rem">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
-      <div class="team-card-info">
-        <span class="team-card-name">{{ g.name }}</span>
-        <span class="team-card-count">{{ g.player_count }} player{{ 's' if g.player_count != 1 else '' }}</span>
-        {% if g.description %}
-        <span style="font-size:0.82rem;color:var(--muted);display:block;margin-top:.2rem">{{ g.description }}</span>
-        {% endif %}
-      </div>
-      <div class="team-card-actions">
-        <a href="{{ url_for('training_group_detail', group_id=g.id) }}" class="btn btn-sm btn-outline">Edit</a>
-        <form method="POST" action="{{ url_for('training_group_delete', group_id=g.id) }}" style="display:inline"
-              onsubmit="return confirm('Delete {{ g.name|e }}? This cannot be undone.')">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-        </form>
-      </div>
-    </div>
-  </div>
+  {{ card_with_actions(
+      name=g.name,
+      edit_url=url_for('training_group_detail', group_id=g.id),
+      delete_url=url_for('training_group_delete', group_id=g.id),
+      gap='.4rem',
+      player_count=g.player_count,
+      description=g.description) }}
   {% endfor %}
 </div>
 {% endif %}

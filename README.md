@@ -42,7 +42,8 @@ PlayerStats/
 ├── static/
 │   ├── css/style.css
 │   ├── js/tracker.js    # Tracking grid interactions (click, long-press, set bar)
-│   └── js/charts-common.js  # Shared chart constants: CAT_COLORS, RESULT_LABELS, axis defaults
+│   ├── js/charts-common.js  # Shared chart constants: CAT_COLORS, RESULT_LABELS, axis defaults
+│   └── js/charts-report.js  # Shared chart infrastructure (registry, plugins, modal, mkChart)
 └── README.md
 ```
 

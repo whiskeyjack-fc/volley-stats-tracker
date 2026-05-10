@@ -13,6 +13,7 @@ VolleyStats is a Flask 3.x / SQLite volleyball statistics tracker. A single mono
 | Backend routes + logic | `app.py` |
 | Live tracking JS | `static/js/tracker.js` |
 | Shared player-profile picker | `static/js/player-picker.js` |
+| Shared chart infrastructure | `static/js/charts-report.js` |
 | Styles | `static/css/style.css` |
 | Templates (21) | `templates/` — `base.html`, `_macros.html` (shared Jinja2 macros), `track.html`, `report.html`, `season_report.html`, `player_report.html`, `roster_list.html`, `roster_detail.html`, `roster_form.html`, `roster_import.html`, `training_groups.html`, `training_group_detail.html`, `training_group_form.html`, … |
 
@@ -34,6 +35,8 @@ events → build_player_stats() → agg_team_stats() → build_chart_data() → 
 | `_uid_cond()` | Returns `(sql_fragment, params)` for user-scoped queries |
 | `_team_cond()` | Returns `(sql_fragment, params)` scoping `club_teams` to trainer's assigned teams; no-op for coordinator/admin |
 | `_resolve_profile_id(first, last)` | Normalises `first+" "+last` and returns matching `player_profiles.id` or `None` |
+| `_collect_profile_ids(form_values)` | Extracts and deduplicates player profile IDs from a form POST |
+| `_save_profile(data, profile_id=None)` | Insert or update a player profile (used by `roster_new` and `roster_edit`) |
 
 **Jinja2 macros (`templates/_macros.html`):**
 
@@ -88,6 +91,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Inline `style="width:Npx"` on table columns breaks mobile** — use a CSS class with a responsive `@media (max-width: 600px)` override instead.
 - **Undefined CSS variables silently fall back to `inherit`** — always declare every variable explicitly in `:root`.
 - **Per-set score in the flow view uses `STAT_POSITIVE`/`STAT_NEGATIVE`** — `computeScoreFromStats()` drives the score bar; `_lastRallyDelta` lets `undoLastAutoSave()` reverse the score client-side without a round-trip.
+- **`ucond.replace('user_id', 'g.user_id')` is an anti-pattern** — use explicit table aliases in the SQL query instead; string-replacing a SQL fragment is fragile and breaks when the fragment changes.
 
 ---
 
@@ -96,7 +100,6 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 > Use this section to capture ongoing ideas, active work, and design decisions. Keep it current.
 
 ### Ideas / Backlog
-- Fix `edit_team()` to use `can_view_all()` guard instead of `_uid_cond()` — trainers who originally created a team can currently still access the edit page
 - Re-render `name`/`description` values in `training_group_form.html` on validation error
 
 ### Active Work

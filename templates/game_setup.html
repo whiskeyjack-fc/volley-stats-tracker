@@ -9,20 +9,10 @@
     <h2>Game Info</h2>
     <div class="field-row">
       <label>Season
-        <select id="season-select">
+        <select name="season" id="season-select">
           <option value="">— Select season —</option>
           {% for s in seasons %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
-          <option value="__new__">＋ Add season…</option>
         </select>
-        <input type="hidden" name="season" id="season-value" value="" />
-        <div id="new-season-inline" style="display:none;margin-top:0.5rem">
-          <div style="display:flex;gap:0.4rem;align-items:center">
-            <input type="text" id="new-season-input" placeholder="S25-S26" style="flex:1" />
-            <button type="button" class="btn btn-sm btn-primary" id="add-season-btn">Add</button>
-            <button type="button" class="btn btn-sm btn-outline" id="cancel-season-btn">✕</button>
-          </div>
-          <small id="season-error" style="color:var(--red);display:none">Format must be Sxx-Syy (e.g. S25-S26)</small>
-        </div>
       </label>
       <label>Your Team
         <select id="team-select">
@@ -88,66 +78,6 @@
       }
       seen.add(val);
     }
-  });
-
-  // ── Season dropdown ──────────────────────────────────────────
-  const seasonSelect     = document.getElementById('season-select');
-  const seasonValue      = document.getElementById('season-value');
-  const newSeasonInline  = document.getElementById('new-season-inline');
-  const newSeasonInput   = document.getElementById('new-season-input');
-  const addSeasonBtn     = document.getElementById('add-season-btn');
-  const cancelSeasonBtn  = document.getElementById('cancel-season-btn');
-  const seasonError      = document.getElementById('season-error');
-
-  seasonSelect.addEventListener('change', () => {
-    if (seasonSelect.value === '__new__') {
-      newSeasonInline.style.display = 'block';
-      newSeasonInput.focus();
-      seasonValue.value = '';
-    } else {
-      newSeasonInline.style.display = 'none';
-      seasonValue.value = seasonSelect.value;
-      seasonError.style.display = 'none';
-    }
-  });
-
-  addSeasonBtn.addEventListener('click', async () => {
-    const name = newSeasonInput.value.trim();
-    if (!/^S\d{2}-S\d{2}$/.test(name)) {
-      seasonError.style.display = 'block';
-      return;
-    }
-    seasonError.style.display = 'none';
-    try {
-      const res = await fetch('/api/seasons', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name})
-      });
-      if (!res.ok && res.status !== 409) {
-        const err = await res.json();
-        alert(err.error || 'Failed to add season');
-        return;
-      }
-      let opt = [...seasonSelect.options].find(o => o.value === name);
-      if (!opt) {
-        opt = new Option(name, name);
-        seasonSelect.insertBefore(opt, seasonSelect.lastElementChild);
-      }
-      seasonSelect.value = name;
-      seasonValue.value = name;
-      newSeasonInline.style.display = 'none';
-      newSeasonInput.value = '';
-    } catch (e) {
-      alert('Network error adding season');
-    }
-  });
-
-  cancelSeasonBtn.addEventListener('click', () => {
-    newSeasonInline.style.display = 'none';
-    seasonSelect.value = seasonValue.value || '';
-    newSeasonInput.value = '';
-    seasonError.style.display = 'none';
   });
 
   // ── Club team selector ───────────────────────────────────────

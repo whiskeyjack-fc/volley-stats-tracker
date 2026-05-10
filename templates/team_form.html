@@ -19,49 +19,47 @@
                placeholder="e.g. VC Belvoc BELSELE B" />
       </label>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr{% if team %} 1fr{% endif %};gap:.75rem;margin-top:.75rem">
       <label>
         <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Short Name</span>
         <input type="text" name="short_name" maxlength="20"
-               value="{{ team.short_name if team and team.short_name else '' }}"
+               value="{{ (season_info.short_name if season_info else None) or (team.short_name if team and team.short_name else '') }}"
                placeholder="e.g. HP3"
                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
       </label>
       <label>
-        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Division (federation)</span>
-        <input type="text" name="division" maxlength="60"
-               value="{{ team.division if team and team.division else '' }}"
-               placeholder="e.g. HEREN PROMO 3A"
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Division{% if selected_season_id %} <span style="font-weight:400;text-transform:none;letter-spacing:0">(separate multiple with /)</span>{% endif %}</span>
+        <input type="text" name="division" maxlength="120"
+               value="{{ (season_info.division if season_info else None) or (team.division if team and team.division else '') }}"
+               placeholder="{% if selected_season_id %}e.g. Promo 3A / Promo 3B{% else %}e.g. HEREN PROMO 3A{% endif %}"
                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
       </label>
+      {% if team %}
+      <label id="season-label">
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Roster Season</span>
+        <select id="season-select"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box">
+          <option value="" {% if not selected_season_id %}selected{% endif %}>— Select season —</option>
+          {% for s in seasons %}
+          <option value="{{ s.id }}" {% if selected_season_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
+          <option value="__new__">＋ Add season…</option>
+        </select>
+        <input type="hidden" id="season-id-value" value="{{ selected_season_id or '' }}" />
+        <div id="new-season-inline" style="display:none;margin-top:0.4rem">
+          <div style="display:flex;gap:0.4rem;align-items:center">
+            <input type="text" id="new-season-input" placeholder="S25-26" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem" />
+            <button type="button" class="btn btn-sm btn-primary" id="add-season-btn">Add</button>
+            <button type="button" class="btn btn-sm btn-outline" id="cancel-season-btn">✕</button>
+          </div>
+          <small id="season-error" style="color:var(--red);display:none">Format must be Sxx-yy (e.g. S25-26)</small>
+        </div>
+      </label>
+      {% endif %}
     </div>
   </section>
 
   {{ player_roster_section(players, all_profiles, title='Roster', show_roles=True, team_member_roles=team_member_roles) }}
-
-  {% if team %}
-  {# Season picker — navigates via GET so the roster reloads for the chosen season #}
-  <section class="card">
-    <h2 class="chart-title">Roster Season</h2>
-    <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.75rem">
-      Select a season to manage who is on the roster for that season.
-      Edits only affect the selected season's rows.
-    </p>
-    <label>
-      <select onchange="window.location='{{ url_for('edit_team', team_id=team.id) }}' + (this.value ? '?season_id=' + this.value : '')">
-        <option value="" {% if not selected_season_id %}selected{% endif %}>— Legacy (no season) —</option>
-        {% for s in seasons %}
-        <option value="{{ s.id }}" {% if selected_season_id == s.id %}selected{% endif %}>{{ s.name }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    {% if not seasons %}
-    <p style="font-size:0.8rem;color:var(--muted);margin-top:0.5rem">
-      No seasons yet — create one when setting up a game first.
-    </p>
-    {% endif %}
-  </section>
-  {% endif %}
 
   <div class="form-actions" style="gap:0.75rem">
     <a href="{{ url_for('team_list') }}" class="btn btn-outline">Cancel</a>
@@ -119,5 +117,70 @@
 <script src="{{ url_for('static', filename='js/player-picker.js') }}"></script>
 <script>
   initPlayerPicker({{ all_profiles | tojson }}, { showRoles: true });
+
+  {% if team %}
+  // ── Season selector with inline create ──────────────────────────
+  const seasonSelect    = document.getElementById('season-select');
+  const seasonIdValue   = document.getElementById('season-id-value');
+  const newSeasonInline = document.getElementById('new-season-inline');
+  const newSeasonInput  = document.getElementById('new-season-input');
+  const addSeasonBtn    = document.getElementById('add-season-btn');
+  const cancelSeasonBtn = document.getElementById('cancel-season-btn');
+  const seasonError     = document.getElementById('season-error');
+
+  seasonSelect.addEventListener('change', () => {
+    if (seasonSelect.value === '__new__') {
+      newSeasonInline.style.display = 'block';
+      newSeasonInput.focus();
+      seasonIdValue.value = '';
+    } else {
+      newSeasonInline.style.display = 'none';
+      seasonIdValue.value = seasonSelect.value;
+      seasonError.style.display = 'none';
+      // Navigate so the roster reloads for the chosen season
+      window.location = '{{ url_for("edit_team", team_id=team.id) }}' + (seasonSelect.value ? '?season_id=' + seasonSelect.value : '');
+    }
+  });
+
+  addSeasonBtn.addEventListener('click', async () => {
+    const name = newSeasonInput.value.trim();
+    if (!/^S\d{2}-\d{2}$/.test(name)) {
+      seasonError.style.display = 'block';
+      return;
+    }
+    seasonError.style.display = 'none';
+    try {
+      const res = await fetch('/api/seasons', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name})
+      });
+      if (!res.ok && res.status !== 409) {
+        const err = await res.json();
+        alert(err.error || 'Failed to add season');
+        return;
+      }
+      const data = await res.json();
+      let opt = [...seasonSelect.options].find(o => o.value === String(data.id));
+      if (!opt) {
+        opt = new Option(name, data.id);
+        seasonSelect.insertBefore(opt, seasonSelect.lastElementChild);
+      }
+      newSeasonInline.style.display = 'none';
+      newSeasonInput.value = '';
+      // Navigate to reload roster for the new season
+      window.location = '{{ url_for("edit_team", team_id=team.id) }}?season_id=' + data.id;
+    } catch (e) {
+      alert('Network error adding season');
+    }
+  });
+
+  cancelSeasonBtn.addEventListener('click', () => {
+    newSeasonInline.style.display = 'none';
+    seasonSelect.value = seasonIdValue.value || '';
+    newSeasonInput.value = '';
+    seasonError.style.display = 'none';
+  });
+  {% endif %}
 </script>
 {% endblock %}

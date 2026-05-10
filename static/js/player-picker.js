@@ -86,7 +86,7 @@ function _buildRolesCell(selectedRoles) {
 
 function _makePlayerRow(selectedId, selectedRoles) {
   const row = document.createElement('tr');
-  const profileCell = '<td><select name="player_profile_id" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem">' +
+  const profileCell = '<td><select name="player_profile_id" class="player-select">' +
     '<option value="">\u2014 select member \u2014</option>' +
     '</select></td>';
   const rolesCell = _showRoles ? _buildRolesCell(selectedRoles) : '';

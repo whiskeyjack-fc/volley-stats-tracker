@@ -66,21 +66,15 @@
 
   <section class="card" style="margin-bottom:1rem">
     <h2>Positions</h2>
-    <div style="display:flex;flex-wrap:wrap;gap:.6rem">
-      {% set cur_positions = (profile.positions or '').split(',') | map('trim') | list if profile else [] %}
+    {% set cur_positions = (profile.positions or '').split(',') | map('trim') | list if profile else [] %}
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem">
       {% for pos in ['setter','libero','outside','opposite','middle'] %}
-      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;
-                    background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
-                    padding:.3rem .65rem;font-size:0.88rem;
-                    transition:border-color .15s,background .15s">
-        <input type="checkbox" name="positions_check" value="{{ pos }}"
-               {% if pos in cur_positions %}checked{% endif %}
-               onchange="syncPositions()"
-               style="accent-color:var(--accent)"> {{ pos|capitalize }}
-      </label>
+      <button type="button" class="set-chip{% if pos in cur_positions %} active{% endif %}"
+              onclick="togglePos(this, '{{ pos }}')" data-pos="{{ pos }}">
+        {{ pos|capitalize }}
+      </button>
       {% endfor %}
     </div>
-    {# Hidden field that gets populated by JS #}
     <input type="hidden" name="positions" id="positions-hidden"
            value="{{ profile.positions or '' if profile else '' }}" />
   </section>
@@ -125,12 +119,10 @@ input:focus, select:focus, textarea:focus { border-color:var(--accent);outline:n
 </style>
 
 <script>
-function syncPositions() {
-  const checked = Array.from(document.querySelectorAll('[name="positions_check"]:checked'))
-    .map(cb => cb.value);
-  document.getElementById('positions-hidden').value = checked.join(',');
+function togglePos(btn, pos) {
+  btn.classList.toggle('active');
+  const active = Array.from(document.querySelectorAll('[data-pos].active')).map(b => b.dataset.pos);
+  document.getElementById('positions-hidden').value = active.join(',');
 }
-// Init on load
-syncPositions();
 </script>
 {% endblock %}
