@@ -146,6 +146,7 @@ def _save_profile(form, profile_id=None):
     status        = form.get("status", "active").strip()
     if status not in ("active", "prospect", "trial", "unknown", "inactive"):
         status = "active"
+    positions     = form.get("positions", "").strip() or None
     tags_raw      = form.get("tags", "").strip()
     tags          = json.dumps([t.strip() for t in tags_raw.split(",") if t.strip()]) if tags_raw else None
     notes         = form.get("notes", "").strip() or None
@@ -592,9 +593,10 @@ def migrate_db():
 
 
 KIT_MODELS   = ['dames', 'heren', 'kinder']
-KIT_TYPES    = ['wedstrijd', 'opwarm', 'training', 'short', 'libero', 'polo', 'vest', 'overig']
+KIT_TYPES    = ['wedstrijd', 'opwarm', 'training', 'short', 'libero', 'polo', 'vest', 'hoodie', 'overig']
 KIT_SIZES    = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '4XL',
-                '36', '38', '40', '5', '6', '7', '12/14', '16']
+                '4', '5', '6', '7', '8', '10/12', '12/14', '16',
+                '34', '36', '38', '40', '42', '44', '46', '48']
 KIT_STATUSES = ['in stock', 'assigned', 'lost', 'retired']
 KIT_STATES   = ['nieuw', 'misdruk', 'gebruikt', 'beschadigd']
 
