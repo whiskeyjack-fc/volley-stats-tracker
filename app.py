@@ -3615,7 +3615,6 @@ def kit_import_form():
         flash("CSV-bestand heeft geen datarijen.", "error")
         return render_template("kit_import.html", preview=None)
 
-    session['kit_import'] = preview
     return render_template("kit_import.html", preview=preview)
 
 
@@ -3623,7 +3622,15 @@ def kit_import_form():
 @login_required
 def kit_import_confirm():
     require_kit_access()
-    staged = session.pop('kit_import', None)
+    raw = request.form.get('preview_data', '')
+    if not raw:
+        flash("Importsessie verlopen. Upload het bestand opnieuw.", "error")
+        return redirect(url_for("kit_import_form"))
+    try:
+        staged = json.loads(raw)
+    except (ValueError, TypeError):
+        flash("Importsessie ongeldig. Upload het bestand opnieuw.", "error")
+        return redirect(url_for("kit_import_form"))
     if not staged:
         flash("Importsessie verlopen. Upload het bestand opnieuw.", "error")
         return redirect(url_for("kit_import_form"))

@@ -8,7 +8,7 @@
 {% endwith %}
 
 <div class="page-header">
-  <h1>Materiaalitems importeren</h1>
+  <h1>Materiaal importeren</h1>
   <a href="{{ url_for('kit_list') }}" class="btn btn-outline btn-sm">← Terug naar materiaallijst</a>
 </div>
 
@@ -20,7 +20,7 @@
     Upload een CSV-bestand om nieuwe items in te voegen of bestaande bij te werken.<br>
     Verplichte kolommen: <code>model, type, size, status, state</code>.<br>
     Laat <code>id</code> leeg voor een nieuw item; geef een bestaand <code>id</code> op om bij te werken.<br>
-    De kolom <code>remark</code> voegt een lognotitie toe als niet leeg (altijd leeg bij export).
+    De kolom <code>remark</code> voegt een lognotitie toe als deze niet leeg is (wordt niet meegenomen bij export).
   </p>
   <p style="margin-bottom:1.25rem">
     <a href="{{ url_for('kit_export') }}" class="btn btn-outline btn-sm">↓ Huidig export downloaden als sjabloon</a>
@@ -34,7 +34,7 @@
              style="display:block;margin-top:.3rem;color:var(--fg)">
     </label>
     <div>
-      <button type="submit" class="btn btn-primary">Voorvertoning importeren</button>
+      <button type="submit" class="btn btn-primary">Bestand voorvertonen</button>
     </div>
   </form>
 </div>
@@ -47,11 +47,11 @@
 
 <div class="card" style="margin-bottom:1rem">
   <p style="margin:0;font-size:0.9rem">
-    <strong>{{ preview | length }}</strong> rij(en) verwerkt —
-    <span style="color:var(--green)">{{ inserts }} invoeg(en)</span>,
-    <span style="color:var(--accent)">{{ updates }} bijwerking(en)</span>
+    <strong>{{ preview | length }}</strong> rijen verwerkt —
+    <span style="color:var(--green)">{{ inserts }} nieuw</span>,
+    <span style="color:var(--accent)">{{ updates }} bijgewerkt</span>
     {% if has_errors %}
-    · <span style="color:var(--red)">sommige rijen hebben waarschuwingen (zie hieronder; ze worden toch geïmporteerd met gecorrigeerde waarden)</span>
+    · <span style="color:var(--red)">sommige rijen bevatten waarschuwingen (zie hieronder; ze worden geïmporteerd met gecorrigeerde waarden)</span>
     {% endif %}
   </p>
 </div>
@@ -61,7 +61,7 @@
     <thead>
       <tr style="border-bottom:1px solid var(--border)">
         <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Rij</th>
-        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Op</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Actie</th>
         <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">ID</th>
         <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Model</th>
         <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Type</th>
@@ -127,8 +127,12 @@
 <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
   <form method="post" action="{{ url_for('kit_import_confirm') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="btn btn-primary">Import bevestigen</button>
+    <input type="hidden" name="preview_data" id="kit-preview-data">
+    <button type="submit" class="btn btn-primary">Importeren bevestigen</button>
   </form>
+  <script>
+    document.getElementById('kit-preview-data').value = JSON.stringify({{ preview | tojson }});
+  </script>
   <a href="{{ url_for('kit_import_form') }}" class="btn btn-outline btn-sm">Annuleren / opnieuw uploaden</a>
 </div>
 {% endif %}

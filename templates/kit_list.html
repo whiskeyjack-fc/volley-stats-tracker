@@ -3,11 +3,6 @@
 {% block title %}Materiaallijst — VolleyStats{% endblock %}
 {% block content %}
 {% set KIT_STATUS_NL = {'in stock': 'Op voorraad', 'assigned': 'Toegewezen', 'lost': 'Verloren', 'retired': 'Afgeschreven'} %}
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% for category, message in messages %}
-  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
-  {% endfor %}
-{% endwith %}
 
 <div class="sticky-page-header">
 <div class="page-header">
@@ -61,6 +56,12 @@
   <button type="submit" class="btn btn-sm">Filteren</button>
 </form>
 </div>{# /.sticky-page-header #}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
 
 <div class="table-scroll-wrap">
   <form method="post" action="{{ url_for('kit_bulk_delete') }}" id="bulk-form"
