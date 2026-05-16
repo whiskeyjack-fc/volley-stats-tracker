@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Track — {{ game.team_name }} vs {{ game.opponent }}{% endblock %}
+{% block title %}Bijhouden — {{ game.team_name }} vs {{ game.opponent }}{% endblock %}
 {% block content %}
 {% set abbrev = {
   'error':      'Err',
@@ -9,6 +9,7 @@
   '1-freeball': 'F1',  '2-freeball': 'F2',  '3-freeball': 'F3',
   'fault':      'Flt'
 } %}
+{% set stat_nl = {'serve': 'Opslag', 'attack': 'Aanval', 'receive': 'Receptie', 'block': 'Blok', 'freeball': 'Vrije bal', 'fault': 'Fout'} %}
 <div class="track-header">
   <div>
     <h1>{{ game.team_name }} <span class="vs">vs</span> {{ game.opponent }}</h1>
@@ -18,7 +19,7 @@
     <span id="sync-pill" class="sync-pill" style="display:none"></span>
     <button id="sync-now-btn" class="btn btn-sm btn-outline" style="display:none">↑ Sync</button>
     <button id="mode-toggle" class="btn btn-sm btn-primary">&#9889; Flow</button>
-    <a href="{{ url_for('report', game_id=game.id) }}" class="btn btn-primary">Report →</a>
+    <a href="{{ url_for('report', game_id=game.id) }}" class="btn btn-primary">Rapport →</a>
   </div>
 </div>
 
@@ -26,11 +27,11 @@
 <div class="set-bar" id="set-bar">
   <span class="set-label">Set:</span>
   <div id="set-tabs" class="set-tabs"></div>
-  <button class="btn btn-sm btn-outline" id="finish-set-btn" style="display:none" onclick="Tracker.finishCurrentSet()">✓ Finish</button>
+  <button class="btn btn-sm btn-outline" id="finish-set-btn" style="display:none" onclick="Tracker.finishCurrentSet()">✓ Klaar</button>
   <button class="btn btn-sm btn-primary" id="new-set-btn" onclick="Tracker.showNewSetPanel()">＋ Set</button>
 </div>
 <div class="new-set-panel hidden" id="new-set-panel">
-  <label>Number:
+  <label>Nummer:
     <select id="ns-number">
       <option value="1">1</option>
       <option value="2">2</option>
@@ -41,24 +42,24 @@
   </label>
   <label>Type:
     <select id="ns-type">
-      <option value="main">Main</option>
+      <option value="main">Hoofd</option>
       <option value="reserve">Reserve</option>
     </select>
   </label>
-  <button class="btn btn-sm btn-primary" onclick="Tracker.startNewSet()">Start</button>
-  <button class="btn btn-sm btn-outline" onclick="Tracker.hideNewSetPanel()">Cancel</button>
+  <button class="btn btn-sm btn-primary" onclick="Tracker.startNewSet()">Starten</button>
+  <button class="btn btn-sm btn-outline" onclick="Tracker.hideNewSetPanel()">Annuleren</button>
 </div>
 
-<p class="grid-hint">Click to add &nbsp;·&nbsp; Hold to remove</p>
+<p class="grid-hint">Klikken om toe te voegen &nbsp;·&nbsp; Vasthouden om te verwijderen</p>
 
 <div id="grid-section">
 <div class="grid-wrap">
 <table class="stat-grid">
   <thead>
     <tr class="group-row">
-      <th class="name-col" rowspan="2">Player</th>
+      <th class="name-col" rowspan="2">Speler</th>
       {% for stat, results in stat_results.items() %}
-      <th class="group-hdr stat-{{ stat }}" colspan="{{ results | length }}">{{ stat | title }}</th>
+      <th class="group-hdr stat-{{ stat }}" colspan="{{ results | length }}">{{ stat_nl.get(stat, stat | title) }}</th>
       {% endfor %}
     </tr>
     <tr class="result-row">
@@ -122,15 +123,15 @@
   <!-- Lineup panel (slide-down) -->
   <div id="lineup-panel" class="lineup-panel hidden">
     <div class="lineup-panel-header">
-      <span class="lineup-panel-title">On-court players <small>(max 8)</small></span>
+      <span class="lineup-panel-title">Spelers op het veld <small>(max 8)</small></span>
       <span id="lineup-count-badge" class="lineup-count-badge">0 / 8</span>
     </div>
     <div id="lineup-player-grid" class="lineup-player-grid"></div>
     <div class="lineup-panel-footer">
-      <button id="lineup-done-btn" class="btn btn-primary btn-sm">&#10003; Done</button>
+      <button id="lineup-done-btn" class="btn btn-primary btn-sm">&#10003; Klaar</button>
     </div>
   </div>
-  <div id="flow-score-bar" class="flow-score-bar hidden"><span class="score-team">Us</span><span id="score-home" class="score-val">0</span><span class="score-sep">–</span><span id="score-opp" class="score-val">0</span><span class="score-team">Them</span></div>
+  <div id="flow-score-bar" class="flow-score-bar hidden"><span class="score-team">Wij</span><span id="score-home" class="score-val">0</span><span class="score-sep">–</span><span id="score-opp" class="score-val">0</span><span class="score-team">Zij</span></div>
   <div id="team-totals-bar" class="team-totals-bar hidden">
     <span class="tot-item"><span class="tot-label">Srv Err</span> <span class="tot-val" id="tot-serve-err">0</span></span>
     <span class="tot-item"><span class="tot-label">Rcv Err</span> <span class="tot-val" id="tot-rcv-err">0</span></span>
@@ -146,40 +147,40 @@
 
   <!-- Back button -->
   <div class="flow-footer">
-    <button id="flow-back-btn" class="btn btn-outline">← Back</button>
+    <button id="flow-back-btn" class="btn btn-outline">← Terug</button>
   </div>
 
   <!-- Step: pick serve or receive -->
   <div id="flow-type-picker" class="flow-card">
-    <div class="flow-step-label">Start rally</div>
+    <div class="flow-step-label">Rally starten</div>
     <div id="flow-type-inner" class="flow-type-row"></div>
   </div>
 
   <!-- Step: pick player -->
   <div id="flow-player-step" class="flow-card hidden">
-    <div id="flow-player-label" class="flow-step-label">Who?</div>
+    <div id="flow-player-label" class="flow-step-label">Wie?</div>
     <div id="flow-player-inner" class="flow-player-grid"></div>
   </div>
 
   <!-- Step: pick loop action (Attack / Block / Freeball / Fault) -->
   <div id="flow-actions-step" class="flow-card hidden">
-    <div class="flow-step-label">Next action</div>
+    <div class="flow-step-label">Volgende actie</div>
     <div id="flow-actions-inner" class="flow-actions-row"></div>
   </div>
 
   <!-- Step: pick outcome -->
   <div id="flow-outcome-step" class="flow-card hidden">
-    <div id="flow-outcome-label" class="flow-step-label">Result</div>
+    <div id="flow-outcome-label" class="flow-step-label">Resultaat</div>
     <div id="flow-outcome-inner" class="flow-outcome-row"></div>
   </div>
 
   <!-- Confirm screen -->
   <div id="flow-confirm" class="flow-card hidden">
-    <div class="flow-step-label">Review rally &mdash; tap a step to edit</div>
+    <div class="flow-step-label">Rally bekijken &mdash; tik op een stap om te bewerken</div>
     <div id="flow-confirm-list" class="flow-confirm-list"></div>
     <div class="flow-confirm-actions">
-      <button id="flow-discard-btn" class="btn btn-outline btn-sm">✕ Discard</button>
-      <button id="flow-save-btn"    class="btn btn-primary btn-sm">✓ Save rally</button>
+      <button id="flow-discard-btn" class="btn btn-outline btn-sm">✕ Annuleren</button>
+      <button id="flow-save-btn"    class="btn btn-primary btn-sm">✓ Rally opslaan</button>
     </div>
   </div>
 

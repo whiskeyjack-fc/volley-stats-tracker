@@ -114,7 +114,7 @@ function openChartModal(card) {
     tc.id = topId + '-modal';
     topWrap.appendChild(tc);
     body.appendChild(topWrap);
-    const sep = Object.assign(document.createElement('div'), { className:'dual-sep', textContent:'Quality' });
+      const sep = Object.assign(document.createElement('div'), { className:'dual-sep', textContent:'Kwaliteit' });
     body.appendChild(sep);
     const qualWrap = Object.assign(document.createElement('div'), { className:'modal-chart-qual' });
     const qc = document.createElement('canvas');
@@ -153,8 +153,8 @@ function initChartModalListeners() {
   document.querySelectorAll('.chart-card, .dual-chart-card').forEach(card => {
     const btn = document.createElement('button');
     btn.className = 'chart-expand-btn';
-    btn.title = 'Focus chart';
-    btn.setAttribute('aria-label', 'Focus chart');
+    btn.title = 'Volledig scherm';
+    btn.setAttribute('aria-label', 'Volledig scherm');
     btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 5V1h4M8 1h4v4M12 8v4H8M5 12H1V8"/></svg>`;
     btn.addEventListener('click', e => { e.stopPropagation(); openChartModal(card); });
     card.appendChild(btn);

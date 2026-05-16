@@ -144,14 +144,36 @@ main { max-width: 1600px; margin: 0 auto; padding: 1rem 1.25rem; }
 .page-header h1 { font-size: 1.5rem; }
 .track-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
-/* Sticky wrapper for report page header + filter bar */
+/* Sticky wrapper for page header + filter bar / chips.
+   Use .sticky-page-header on any list or report page whose title and
+   filters should remain visible while scrolling the content below.
+   .report-sticky-bar is kept as an alias for existing report templates. */
+.sticky-page-header,
 .report-sticky-bar {
   position: sticky;
-  top: 49px;
+  top: var(--nav-h, 49px);
   z-index: 190;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
+  /* Pull the wrapper flush with the nav so it is already at its sticky
+     position when the page first loads — no gap to scroll through before
+     sticky kicks in, which eliminates the visual "shrink" at the top. */
+  margin-top: -1rem;   /* cancel <main>'s padding-top (1rem) */
+  padding-top: 1rem;   /* restore equivalent spacing inside the bar */
   margin-bottom: 1rem;
+}
+/* .page-header already carries padding-top: 1rem; suppress it inside the
+   sticky wrapper because the wrapper now provides that spacing itself. */
+.sticky-page-header .page-header,
+.report-sticky-bar   .page-header {
+  padding-top: 0;
+}
+/* When a .filter-bar lives directly inside a sticky wrapper, collapse its
+   own bottom margin — the wrapper's border-bottom + margin-bottom provide
+   the separation from the page content. */
+.sticky-page-header .filter-bar,
+.report-sticky-bar   .filter-bar {
+  margin-bottom: 0.75rem;
 }
 
 /* ── Card ───────────────────────────────────────────────────── */
@@ -515,6 +537,24 @@ button.set-chip { font: inherit; line-height: 1; }
   font-size: 0.85rem;
   color: var(--gray);
   z-index: 100;
+}
+
+/* ── Sticky column headers ─────────────────────────────────── */
+/* Wrap any list table in .table-scroll-wrap so the container itself
+   scrolls both axes. thead th with position:sticky;top:0 then freezes
+   reliably inside that container — no fighting with browser overflow rules.
+   max-height fills the available viewport below the nav + filter bar. */
+.table-scroll-wrap {
+  overflow: auto;
+  max-height: calc(100svh - var(--content-top, 120px) - 3rem);
+  margin-top: 1rem;
+}
+.sticky-col-head thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  box-shadow: 0 1px 0 var(--border); /* replaces tr border-bottom under sticky */
 }
 
 /* ── Report ─────────────────────────────────────────────────── */

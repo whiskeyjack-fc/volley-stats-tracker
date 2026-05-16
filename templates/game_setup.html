@@ -1,57 +1,58 @@
 {% extends "base.html" %}
 {% from "_macros.html" import player_roster_section %}
-{% block title %}New Game — VolleyStats{% endblock %}
+{% block title %}Nieuwe wedstrijd — VolleyStats{% endblock %}
 {% block content %}
-<h1>New Game</h1>
+<h1>Nieuwe wedstrijd</h1>
 <form method="POST" id="setup-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <section class="card">
-    <h2>Game Info</h2>
+    <h2>Wedstrijdinfo</h2>
     <div class="field-row">
-      <label>Season
+      <label>Seizoen
         <select name="season" id="season-select">
-          <option value="">— Select season —</option>
+          <option value="">— Selecteer seizoen —</option>
           {% for s in seasons %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
         </select>
       </label>
-      <label>Your Team
+      <label>Uw team
         <select id="team-select">
-          <option value="" data-id="">— Select team —</option>
+          <option value="" data-id="">— Selecteer team —</option>
           {% for t in club_teams %}
           <option value="{{ t.name }}" data-id="{{ t.id }}">{{ t.short_name or t.name }}</option>
           {% endfor %}
-          <option value="__new__" data-id="">＋ Add team…</option>
+          <option value="__new__" data-id="">️️️ Team toevoegen…</option>
         </select>
         <input type="hidden" name="team_name" id="team-value" value="" />
+        <input type="hidden" name="club_team_id" id="club-team-id-value" value="" />
         <div id="new-team-inline" style="display:none;margin-top:0.5rem">
           <div style="display:flex;gap:0.4rem;align-items:center">
-            <input type="text" id="new-team-input" placeholder="e.g. Spikemasters" style="flex:1" />
-            <button type="button" class="btn btn-sm btn-primary" id="add-team-btn">Add</button>
+            <input type="text" id="new-team-input" placeholder="bijv. Spikemasters" style="flex:1" />
+            <button type="button" class="btn btn-sm btn-primary" id="add-team-btn">Toevoegen</button>
             <button type="button" class="btn btn-sm btn-outline" id="cancel-team-btn">✕</button>
           </div>
-          <small id="team-error" style="color:var(--red);display:none">Team name cannot be empty</small>
+          <small id="team-error" style="color:var(--red);display:none">Teamnaam mag niet leeg zijn</small>
         </div>
       </label>
-      <label>Opponent
-        <input type="text" name="opponent" required placeholder="e.g. Blockers FC" />
+      <label>Tegenstander
+        <input type="text" name="opponent" required placeholder="bijv. Blockers FC" />
       </label>
-      <label>Date
+      <label>Datum
         <input type="date" name="played_at" value="{{ today }}" />
       </label>
     </div>
   </section>
 
-  {{ player_roster_section([], all_profiles, title='Your Players') }}
+  {{ player_roster_section([], all_profiles, title='Uw spelers') }}
 
   <div class="form-actions">
-    <button type="submit" class="btn btn-primary btn-lg">Start Tracking →</button>
+    <button type="submit" class="btn btn-primary btn-lg">Bijhouden starten →</button>
   </div>
 </form>
 
 <script src="{{ url_for('static', filename='js/player-picker.js') }}"></script>
 <script>
   const seasonIdMap = {{ season_id_map | tojson }};
-  initPlayerPicker({{ all_profiles | tojson }}, { showClear: true, clearMsg: 'Remove all players from the list?', noDupCheck: true });
+  initPlayerPicker({{ all_profiles | tojson }}, { showClear: true, clearMsg: 'Alle spelers van de lijst verwijderen?', noDupCheck: true });
 
   const today = new Date().toISOString().slice(0, 10);
   const dateInput = document.querySelector('input[name="played_at"]');
@@ -61,7 +62,7 @@
     if (!document.getElementById('team-value').value.trim()) {
       e.preventDefault();
       document.getElementById('team-select').focus();
-      alert('Please select or add a team name.');
+      alert('Selecteer of voeg een teamnaam toe.');
       return;
     }
     // Duplicate player check
@@ -73,7 +74,7 @@
       if (seen.has(val)) {
         e.preventDefault();
         sel.focus();
-        alert('Duplicate player: "' + sel.options[sel.selectedIndex].text.trim() + '". Each player must be unique.');
+        alert('Dubbele speler: "' + sel.options[sel.selectedIndex].text.trim() + '". Elke speler mag maar één keer voorkomen.');
         return;
       }
       seen.add(val);
@@ -101,11 +102,13 @@
       newTeamInline.style.display = 'block';
       newTeamInput.focus();
       teamValue.value = '';
+      document.getElementById('club-team-id-value').value = '';
       return;
     }
     newTeamInline.style.display = 'none';
     teamError.style.display = 'none';
     teamValue.value = teamSelect.value;
+    document.getElementById('club-team-id-value').value = teamId || '';
     if (!teamId) return;
     try {
       const seasonName = seasonValue.value;

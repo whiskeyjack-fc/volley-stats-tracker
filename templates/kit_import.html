@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Materiaal importeren — VolleyStats{% endblock %}
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+<div class="page-header">
+  <h1>Materiaalitems importeren</h1>
+  <a href="{{ url_for('kit_list') }}" class="btn btn-outline btn-sm">← Terug naar materiaallijst</a>
+</div>
+
+{% if not preview %}
+{# ── Upload form ───────────────────────────────────────────────────────────── #}
+<div class="card" style="max-width:520px">
+  <h2 style="margin-top:0">CSV uploaden</h2>
+  <p style="color:var(--muted);font-size:0.9rem;margin-bottom:1rem">
+    Upload een CSV-bestand om nieuwe items in te voegen of bestaande bij te werken.<br>
+    Verplichte kolommen: <code>model, type, size, status, state</code>.<br>
+    Laat <code>id</code> leeg voor een nieuw item; geef een bestaand <code>id</code> op om bij te werken.<br>
+    De kolom <code>remark</code> voegt een lognotitie toe als niet leeg (altijd leeg bij export).
+  </p>
+  <p style="margin-bottom:1.25rem">
+    <a href="{{ url_for('kit_export') }}" class="btn btn-outline btn-sm">↓ Huidig export downloaden als sjabloon</a>
+  </p>
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('kit_import_form') }}"
+        style="display:flex;flex-direction:column;gap:.75rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>
+      <span style="font-size:0.85rem;color:var(--muted)">CSV-bestand</span>
+      <input type="file" name="csv_file" accept=".csv"
+             style="display:block;margin-top:.3rem;color:var(--fg)">
+    </label>
+    <div>
+      <button type="submit" class="btn btn-primary">Voorvertoning importeren</button>
+    </div>
+  </form>
+</div>
+
+{% else %}
+{# ── Preview table ─────────────────────────────────────────────────────────── #}
+{% set has_errors = preview | selectattr('errors') | list | length > 0 %}
+{% set inserts = preview | selectattr('op', 'equalto', 'insert') | list | length %}
+{% set updates = preview | selectattr('op', 'equalto', 'update') | list | length %}
+
+<div class="card" style="margin-bottom:1rem">
+  <p style="margin:0;font-size:0.9rem">
+    <strong>{{ preview | length }}</strong> rij(en) verwerkt —
+    <span style="color:var(--green)">{{ inserts }} invoeg(en)</span>,
+    <span style="color:var(--accent)">{{ updates }} bijwerking(en)</span>
+    {% if has_errors %}
+    · <span style="color:var(--red)">sommige rijen hebben waarschuwingen (zie hieronder; ze worden toch geïmporteerd met gecorrigeerde waarden)</span>
+    {% endif %}
+  </p>
+</div>
+
+<div style="overflow-x:auto;margin-bottom:1rem">
+  <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Rij</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Op</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">ID</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Model</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Type</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Maat</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Nr.</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Naam</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Status</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Staat</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Lid</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Team</th>
+        <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Waarschuwingen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in preview %}
+      <tr style="border-bottom:1px solid var(--border);{% if row.errors %}background:color-mix(in srgb, var(--red) 8%, transparent){% endif %}">
+        <td style="padding:.5rem .5rem;color:var(--muted)">{{ row.line }}</td>
+        <td style="padding:.5rem .5rem">
+          <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;
+                       color:{% if row.op == 'insert' %}var(--green){% else %}var(--accent){% endif %}">
+            {{ row.op }}
+          </span>
+        </td>
+        <td style="padding:.5rem .5rem;color:var(--muted)">{{ row.id or '—' }}</td>
+        <td style="padding:.5rem .5rem">{{ row.model }}</td>
+        <td style="padding:.5rem .5rem">{{ row.type }}</td>
+        <td style="padding:.5rem .5rem">{{ row.size }}</td>
+        <td style="padding:.5rem .5rem;color:var(--muted)">{{ row.number or '—' }}</td>
+        <td style="padding:.5rem .5rem">{{ row.name_printed or '—' }}</td>
+        <td style="padding:.5rem .5rem">{{ row.status }}</td>
+        <td style="padding:.5rem .5rem">{{ row.state }}</td>
+        <td style="padding:.5rem .5rem">
+          {% if row.mem_display %}
+            {% if row.profile_id %}
+              {{ row.mem_display }}
+            {% else %}
+              <span style="color:var(--red)">{{ row.mem_display }}</span>
+            {% endif %}
+          {% else %}
+            <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+        <td style="padding:.5rem .5rem">
+          {% if row.team_display %}
+            {% if row.team_id %}
+              {{ row.team_display }}
+            {% else %}
+              <span style="color:var(--red)">{{ row.team_display }}</span>
+            {% endif %}
+          {% else %}
+            <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+        <td style="padding:.5rem .5rem;font-size:0.78rem;color:var(--red)">
+          {{ row.errors | join('; ') if row.errors else '' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
+  <form method="post" action="{{ url_for('kit_import_confirm') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-primary">Import bevestigen</button>
+  </form>
+  <a href="{{ url_for('kit_import_form') }}" class="btn btn-outline btn-sm">Annuleren / opnieuw uploaden</a>
+</div>
+{% endif %}
+
+{% endblock %}

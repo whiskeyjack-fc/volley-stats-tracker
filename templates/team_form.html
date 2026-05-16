@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% from "_macros.html" import player_roster_section %}
-{% block title %}{% if team %}Edit Team{% else %}New Team{% endif %} — VolleyStats{% endblock %}
+{% block title %}{% if team %}Team bewerken{% else %}Nieuw team{% endif %} — VolleyStats{% endblock %}
 {% block content %}
-<h1>{% if team %}Edit Team{% else %}New Team{% endif %}</h1>
+<h1>{% if team %}Team bewerken{% else %}Nieuw team{% endif %}</h1>
 
 {% if error %}
 <div class="error-banner">{{ error }}</div>
@@ -12,23 +12,23 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
   <section class="card">
-    <h2>Team Info</h2>
+    <h2>Teaminfo</h2>
     <div class="field-row">
-      <label>Team Name
+      <label>Teamnaam
         <input type="text" name="team_name" required value="{{ team.name if team else '' }}"
-               placeholder="e.g. VC Belvoc BELSELE B" />
+               placeholder="bijv. VC Belvoc BELSELE B" />
       </label>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr{% if team %} 1fr{% endif %};gap:.75rem;margin-top:.75rem">
       <label>
-        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Short Name</span>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Korte naam</span>
         <input type="text" name="short_name" maxlength="20"
                value="{{ (season_info.short_name if season_info else None) or (team.short_name if team and team.short_name else '') }}"
                placeholder="e.g. HP3"
                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
       </label>
       <label>
-        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Division{% if selected_season_id %} <span style="font-weight:400;text-transform:none;letter-spacing:0">(separate multiple with /)</span>{% endif %}</span>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Divisie{% if selected_season_id %} <span style="font-weight:400;text-transform:none;letter-spacing:0">(scheid meerdere met /)</span>{% endif %}</span>
         <input type="text" name="division" maxlength="120"
                value="{{ (season_info.division if season_info else None) or (team.division if team and team.division else '') }}"
                placeholder="{% if selected_season_id %}e.g. Promo 3A / Promo 3B{% else %}e.g. HEREN PROMO 3A{% endif %}"
@@ -36,35 +36,41 @@
       </label>
       {% if team %}
       <label id="season-label">
-        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Roster Season</span>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Roosterseizoen</span>
         <select id="season-select"
                 style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box">
-          <option value="" {% if not selected_season_id %}selected{% endif %}>— Select season —</option>
+          <option value="" {% if not selected_season_id %}selected{% endif %}>— Selecteer seizoen —</option>
           {% for s in seasons %}
           <option value="{{ s.id }}" {% if selected_season_id == s.id %}selected{% endif %}>{{ s.name }}</option>
           {% endfor %}
-          <option value="__new__">＋ Add season…</option>
+          <option value="__new__">＋ Seizoen toevoegen…</option>
         </select>
         <input type="hidden" id="season-id-value" value="{{ selected_season_id or '' }}" />
         <div id="new-season-inline" style="display:none;margin-top:0.4rem">
           <div style="display:flex;gap:0.4rem;align-items:center">
             <input type="text" id="new-season-input" placeholder="S25-26" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem" />
-            <button type="button" class="btn btn-sm btn-primary" id="add-season-btn">Add</button>
+            <button type="button" class="btn btn-sm btn-primary" id="add-season-btn">Toevoegen</button>
             <button type="button" class="btn btn-sm btn-outline" id="cancel-season-btn">✕</button>
           </div>
-          <small id="season-error" style="color:var(--red);display:none">Format must be Sxx-yy (e.g. S25-26)</small>
+          <small id="season-error" style="color:var(--red);display:none">Formaat moet Sxx-jj zijn (bijv. S25-26)</small>
         </div>
       </label>
       {% endif %}
     </div>
   </section>
 
-  {{ player_roster_section(players, all_profiles, title='Roster', show_roles=True, team_member_roles=team_member_roles) }}
+  {% if team and selected_season_id %}
+  {{ player_roster_section(players, all_profiles, title='Spelerslijst', show_roles=True, team_member_roles=team_member_roles) }}
+  {% elif team %}
+  <div class="card" style="text-align:center;padding:1.5rem 1rem;color:var(--muted);font-size:0.9rem">
+    Selecteer een seizoen om de spelerslijst te beheren.
+  </div>
+  {% endif %}
 
   <div class="form-actions" style="gap:0.75rem">
-    <a href="{{ url_for('team_list') }}" class="btn btn-outline">Cancel</a>
+    <a href="{{ url_for('team_list') }}" class="btn btn-outline">Annuleren</a>
     <button type="submit" class="btn btn-primary btn-lg">
-      {% if team %}Save Changes{% else %}Create Team{% endif %}
+      {% if team %}Wijzigingen opslaan{% else %}Team aanmaken{% endif %}
     </button>
   </div>
 </form>
@@ -116,7 +122,9 @@
 
 <script src="{{ url_for('static', filename='js/player-picker.js') }}"></script>
 <script>
+  {% if team and selected_season_id %}
   initPlayerPicker({{ all_profiles | tojson }}, { showRoles: true });
+  {% endif %}
 
   {% if team %}
   // ── Season selector with inline create ──────────────────────────

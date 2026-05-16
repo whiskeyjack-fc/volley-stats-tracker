@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Import Federation List — VolleyStats{% endblock %}
+{% block title %}Federatielijst importeren — VolleyStats{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Import Federation List</h1>
-  <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Back to Roster</a>
+  <h1>Federatielijst importeren</h1>
+  <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Terug naar ledenlijst</a>
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -15,10 +15,10 @@
 {% if not preview %}
 {# ── Step 1: Paste form ──────────────────────────────────────────────────── #}
 <div class="card">
-  <h2>Paste Federation List</h2>
+  <h2>Federatielijst plakken</h2>
   <p style="color:var(--muted);font-size:0.88rem;margin-bottom:.5rem">
-    Copy the player rows from the federation PDF and paste them below.
-    Header lines (club name, competition, code) are ignored automatically.
+    Kopieer de spelersrijen uit de federatie-PDF en plak ze hieronder.
+    Kopregels (clubnaam, competitie, code) worden automatisch genegeerd.
   </p>
   <p style="color:var(--muted);font-size:0.85rem;margin-bottom:1rem">
     Expected line format: <code>[K] &lt;nr&gt; &lt;card#&gt; &lt;Familienaam&gt; &lt;Voornaam&gt; &lt;Nat&gt; &lt;DD/MM/YYYY&gt;</code><br>
@@ -32,35 +32,35 @@
   <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label style="display:block;margin-bottom:.75rem">
-      <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.03em">Pasted Text</span>
+      <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.03em">Geplakte tekst</span>
       <textarea name="paste_text" rows="18" required
-                placeholder="Paste here…"
+                placeholder="Hier plakken…"
                 style="width:100%;background:var(--surface2);border:1px solid var(--border);
                        border-radius:var(--radius);color:var(--fg);padding:.4rem .55rem;
                        font-size:0.88rem;font-family:monospace;resize:vertical;box-sizing:border-box"></textarea>
     </label>
-    <button type="submit" class="btn btn-primary">Preview</button>
+    <button type="submit" class="btn btn-primary">Voorvertoning</button>
   </form>
 </div>
 
 {% else %}
 {# ── Step 2: Preview table ───────────────────────────────────────────────── #}
 <div class="card" style="margin-bottom:1rem">
-  <h2>Preview — {{ preview|length }} row{{ 's' if preview|length != 1 }}</h2>
+  <h2>Voorvertoning — {{ preview|length }} rij{{ 'en' if preview|length != 1 }}</h2>
   <p style="color:var(--muted);font-size:0.88rem;margin-bottom:.75rem">
-    Duplicates (matched by normalised full name) will be skipped.
+    Duplicaten (op basis van volledige naam) worden overgeslagen.
   </p>
   <div style="overflow-x:auto">
     <table class="table">
       <thead>
         <tr>
-          <th>#</th>
-          <th>First</th>
-          <th>Last</th>
-          <th>DOB</th>
-          <th>Fed. ID</th>
-          <th>Tags</th>
-          <th>Import</th>
+          <th>Nr.</th>
+          <th>Voornaam</th>
+          <th>Achternaam</th>
+          <th>Geb.datum</th>
+          <th>Stamnummer</th>
+          <th>Labels</th>
+          <th>Importeren</th>
         </tr>
       </thead>
       <tbody>
@@ -77,9 +77,9 @@
           </td>
           <td>
             {% if row._duplicate %}
-            <span style="color:var(--red);font-weight:600;font-size:0.8rem">duplicate</span>
+            <span style="color:var(--red);font-weight:600;font-size:0.8rem">duplicaat</span>
             {% else %}
-            <span style="color:var(--green);font-weight:600;font-size:0.8rem">new</span>
+            <span style="color:var(--green);font-weight:600;font-size:0.8rem">nieuw</span>
             {% endif %}
           </td>
         </tr>
@@ -91,10 +91,10 @@
   {% set new_count = preview | selectattr('_duplicate', 'equalto', false) | list | length %}
   {% set dup_count = preview | selectattr('_duplicate', 'equalto', true)  | list | length %}
   <p style="margin-top:.75rem;font-size:0.88rem;color:var(--muted)">
-    <span style="color:var(--green);font-weight:600">{{ new_count }} new</span>
-    will be inserted ·
-    <span style="color:var(--red)">{{ dup_count }} duplicate{{ 's' if dup_count != 1 }}</span>
-    will be skipped.
+    <span style="color:var(--green);font-weight:600">{{ new_count }} nieuw</span>
+    worden ingevoegd ·
+    <span style="color:var(--red)">{{ dup_count }} duplicaat{{ 'en' if dup_count != 1 }}</span>
+    worden overgeslagen.
   </p>
 </div>
 
@@ -102,10 +102,10 @@
   <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="confirm_import" value="1">
-    <button type="submit" class="btn btn-primary">Confirm Import</button>
+    <button type="submit" class="btn btn-primary">Import bevestigen</button>
   </form>
-  <a href="{{ url_for('roster_import_federation', reset=1) }}" class="btn btn-outline">Start Over</a>
-  <a href="{{ url_for('roster_list') }}" class="btn btn-outline">Cancel</a>
+  <a href="{{ url_for('roster_import_federation', reset=1) }}" class="btn btn-outline">Opnieuw beginnen</a>
+  <a href="{{ url_for('roster_list') }}" class="btn btn-outline">Annuleren</a>
 </div>
 {% endif %}
 {% endblock %}

@@ -1,19 +1,33 @@
 {% extends "base.html" %}
-{% from "_macros.html" import card_with_actions %}
-{% block title %}Club Teams — VolleyStats{% endblock %}
+{% from "_macros.html" import card_with_actions, filter_select %}
+{% block title %}Clubteams — VolleyStats{% endblock %}
 {% block content %}
+{% set ROLE_NL = {'player': 'Speler', 'head_coach': 'Hoofdcoach', 'assistant_coach': 'Assistent-coach', 'team_manager': 'Teammanager', 'medical': 'Medisch', 'scorer': 'Markeerder', 'marker': 'Markeerder', 'video_analyst': 'Video-analist', 'coach': 'Coach'} %}
 <div class="page-header">
-  <h1>Club Teams</h1>
+  <h1>Clubteams</h1>
   {% if can_view_all() %}
-  <a href="{{ url_for('new_team') }}" class="btn btn-primary">＋ New Team</a>
+  <a href="{{ url_for('new_team') }}" class="btn btn-primary">＋ Nieuw team</a>
   {% endif %}
 </div>
 
+<form method="get" class="filter-bar">
+  <input type="text" name="q" class="filter-search" placeholder="Naam of korte naam…" value="{{ q or '' }}">
+  {% call filter_select('season', 'Alle seizoenen') %}
+    {% for s in seasons %}
+    <option value="{{ s.id }}" {% if active_season_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+    {% endfor %}
+  {% endcall %}
+  <button type="submit" class="btn btn-outline btn-sm">Filteren</button>
+  {% if q or active_season_id %}
+  <a href="{{ url_for('team_list') }}" class="btn btn-sm" style="opacity:0.7">✕ Wissen</a>
+  {% endif %}
+</form>
+
 {% if not teams %}
 <div class="card" style="text-align:center;padding:2.5rem 1rem">
-  <p style="color:var(--gray);margin-bottom:1rem">No teams yet. Create a team to pre-fill rosters when setting up new games.</p>
+  <p style="color:var(--gray);margin-bottom:1rem">Nog geen teams. Maak een team aan om roosters vooraf in te vullen bij nieuwe wedstrijden.</p>
   {% if can_view_all() %}
-  <a href="{{ url_for('new_team') }}" class="btn btn-primary">＋ New Team</a>
+  <a href="{{ url_for('new_team') }}" class="btn btn-primary">＋ Nieuw team</a>
   {% endif %}
 </div>
 {% else %}
@@ -31,7 +45,7 @@
 
     {# Team Staff: trainer users + non-player roster members #}
     <div style="border-top:1px solid var(--border);padding-top:.5rem">
-      <span style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600">Team Staff</span>
+      <span style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600">Teamstaf</span>
       <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.35rem;align-items:center">
         {% if team_trainers[t.id] or team_non_players[t.id] %}
           {% for tr in team_trainers[t.id] %}
@@ -41,11 +55,11 @@
             {% if can_view_all() %}
             <form method="POST" action="{{ url_for('team_remove_trainer', team_id=t.id, user_id=tr.id) }}"
                   style="display:inline;margin:0"
-                  onsubmit="return confirm('Remove {{ tr.email|e }} from {{ t.name|e }}?')">
+                  onsubmit="return confirm('{{ tr.email|e }} verwijderen uit {{ t.name|e }}?')">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit"
                       style="background:none;border:none;color:var(--red);cursor:pointer;padding:0;font-size:.85rem;line-height:1"
-                      title="Remove trainer">✕</button>
+                      title="Trainer verwijderen">✕</button>
             </form>
             {% endif %}
           </span>
@@ -53,14 +67,14 @@
           {% for m in team_non_players[t.id] %}
           <span style="background:var(--surface2);border:1px solid var(--border);border-radius:999px;
                        padding:.15em .55em;font-size:0.78rem;display:inline-flex;align-items:center;gap:.3rem">
-            {{ m.name }}
+            {{ m.name | title }}
             {% if m.roles %}
-            <span style="font-size:0.7rem;color:var(--muted)">· {{ m.roles.split(',') | map('trim') | map('replace', '_', ' ') | join(', ') | title }}</span>
+            <span style="font-size:0.7rem;color:var(--muted)">· {% for role in m.roles.split(',') %}{{ ROLE_NL.get(role.strip(), role.strip().replace('_', ' ')|title) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
             {% endif %}
           </span>
           {% endfor %}
         {% else %}
-          <span style="color:var(--muted);font-size:0.82rem">None assigned</span>
+          <span style="color:var(--muted);font-size:0.82rem">Geen toegewezen</span>
         {% endif %}
 
       </div>

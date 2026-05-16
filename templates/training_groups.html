@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "_macros.html" import card_with_actions %}
-{% block title %}Training Groups — VolleyStats{% endblock %}
+{% block title %}Trainingsgroepen — VolleyStats{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Training Groups</h1>
-  <a href="{{ url_for('training_group_new') }}" class="btn btn-primary">＋ New Group</a>
+  <h1>Trainingsgroepen</h1>
+  <a href="{{ url_for('training_group_new') }}" class="btn btn-primary">＋ Nieuwe groep</a>
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -15,8 +15,8 @@
 
 {% if not groups %}
 <div class="card" style="text-align:center;padding:2.5rem 1rem">
-  <p style="color:var(--gray);margin-bottom:1rem">No training groups yet.</p>
-  <a href="{{ url_for('training_group_new') }}" class="btn btn-primary">＋ New Group</a>
+  <p style="color:var(--gray);margin-bottom:1rem">Nog geen trainingsgroepen.</p>
+  <a href="{{ url_for('training_group_new') }}" class="btn btn-primary">＋ Nieuwe groep</a>
 </div>
 {% else %}
 <div class="team-cards">

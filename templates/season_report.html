@@ -2,18 +2,19 @@
 {% from "_macros.html" import filter_chips, filter_select %}
 {% block title %}Season {{ season }} — VolleyStats{% endblock %}
 {% block content %}
+{% set stat_nl = {'serve': 'Opslag', 'attack': 'Aanval', 'receive': 'Receptie', 'block': 'Blok', 'freeball': 'Vrije bal', 'fault': 'Fout'} %}
 
 <!-- ── Sticky bar ──────────────────────────────────────────────────────── -->
-<div class="report-sticky-bar">
+<div class="sticky-page-header">
   <div class="page-header">
     <div>
       <h1>Season: <span class="season-tag lg">{{ season }}</span></h1>
       <small class="muted">
-        {{ games | length }} game{{ 's' if games | length != 1 else '' }}
+        {{ games | length }} wedstrijd{{ 'en' if games | length != 1 else '' }}
       </small>
     </div>
     <div class="track-actions">
-      <a href="{{ url_for('index') }}" class="btn btn-outline">← Games</a>
+      <a href="{{ url_for('index') }}" class="btn btn-outline">← Wedstrijden</a>
       <button id="filter-toggle-btn" class="btn btn-outline btn-sm filter-toggle-btn" aria-expanded="true" aria-controls="filter-rows">Filters <span class="filter-caret" aria-hidden="true">&#x25BE;</span></button>
     </div>
   </div>
@@ -21,16 +22,16 @@
   {% if all_seasons | length > 0 or teams | length > 1 %}
   <div class="filter-bar">
     {% if all_seasons | length > 0 %}
-    {% call filter_select('season', 'All seasons') %}
+    {% call filter_select('season', 'Alle seizoenen') %}
       {% for s in all_seasons %}
       <option value="{{ s }}" {% if s == season %}selected{% endif %}>{{ s }}</option>
       {% endfor %}
     {% endcall %}
     {% endif %}
     {% if teams | length > 1 %}
-    {% call filter_select('team', 'All teams') %}
+    {% call filter_select('team', 'Alle teams') %}
       {% for t in teams %}
-      <option value="{{ t }}" {% if t == active_team %}selected{% endif %}>{{ team_short_names[t] if t in team_short_names else t }}</option>
+      <option value="{{ t.id }}" {% if t.id == active_team %}selected{% endif %}>{{ t.short_name or t.name }}</option>
       {% endfor %}
     {% endcall %}
     {% endif %}
@@ -38,9 +39,9 @@
   {% endif %}
   {% call filter_chips('Type:' if (has_main or has_reserve) else '') %}
     {% if has_main or has_reserve %}
-    <a href="{{ filter_urls.all }}" class="set-chip {% if not active_set_type %}active{% endif %}">All</a>
+    <a href="{{ filter_urls.all }}" class="set-chip {% if not active_set_type %}active{% endif %}">Alles</a>
     {% if has_main %}
-    <a href="{{ filter_urls.main }}" class="set-chip {% if active_set_type == 'main' %}active{% endif %}">Main</a>
+    <a href="{{ filter_urls.main }}" class="set-chip {% if active_set_type == 'main' %}active{% endif %}">Hoofd</a>
     {% endif %}
     {% if has_reserve %}
     <a href="{{ filter_urls.reserve }}" class="set-chip {% if active_set_type == 'reserve' %}active{% endif %}">Reserve</a>
@@ -51,7 +52,7 @@
     <button id="split-toggle"
             class="set-chip split-toggle{% if not split_available %} disabled{% endif %}"
             {% if not split_available %}disabled{% endif %}
-            title="{% if split_available %}Split charts by set{% else %}Available for Main or Reserve filter only{% endif %}">
+            title="{% if split_available %}Grafieken splitsen per set{% else %}Alleen beschikbaar voor Hoofd- of Reservefilter{% endif %}">
       &#x229E; Split
     </button>
   {% endcall %}
@@ -65,7 +66,7 @@
 <!-- Row 1: Points Made / Lost -->
 <div class="charts-row charts-row-wide">
   <div class="chart-card" style="flex:1">
-    <div class="chart-title">Points Made / Lost per {{ 'Set' if active_split == 'sets' else 'Game' }}</div>
+    <div class="chart-title">Punten gemaakt/verloren per {{ 'set' if active_split == 'sets' else 'wedstrijd' }}</div>
     <div class="chart-body"><canvas id="pointsChart"></canvas></div>
   </div>
 </div>
@@ -74,9 +75,9 @@
 <div class="charts-row charts-row-2">
   {% for stat in ['serve', 'receive'] %}
   <div class="dual-chart-card">
-    <div class="chart-title">{{ stat | title }}</div>
+    <div class="chart-title">{{ stat_nl.get(stat, stat | title) }}</div>
     <div class="dual-top"><canvas id="chart-{{ stat }}-top"></canvas></div>
-    <div class="dual-sep">Quality</div>
+    <div class="dual-sep">Kwaliteit</div>
     <div class="dual-bottom"><canvas id="chart-{{ stat }}-qual"></canvas></div>
   </div>
   {% endfor %}
@@ -86,7 +87,7 @@
 <div class="charts-row charts-row-2">
   {% for stat in ['attack', 'block'] %}
   <div class="chart-card">
-    <div class="chart-title">{{ stat | title }}</div>
+    <div class="chart-title">{{ stat_nl.get(stat, stat | title) }}</div>
     <div class="chart-body"><canvas id="chart-{{ stat }}"></canvas></div>
   </div>
   {% endfor %}
@@ -95,13 +96,13 @@
 <!-- Row 4: Freeball + Fault -->
 <div class="charts-row charts-row-2">
   <div class="dual-chart-card">
-    <div class="chart-title">Freeball</div>
+    <div class="chart-title">Vrije bal</div>
     <div class="dual-top"><canvas id="chart-freeball-top"></canvas></div>
-    <div class="dual-sep">Quality</div>
+    <div class="dual-sep">Kwaliteit</div>
     <div class="dual-bottom"><canvas id="chart-freeball-qual"></canvas></div>
   </div>
   <div class="chart-card">
-    <div class="chart-title">Fault</div>
+    <div class="chart-title">Fout</div>
     <div class="chart-body"><canvas id="chart-fault"></canvas></div>
   </div>
 </div>
@@ -112,22 +113,22 @@
   'kill':'Kill','1-receive':'R1','2-receive':'R2','3-receive':'R3','overpass':'OvP',
   '1-freeball':'F1','2-freeball':'F2','3-freeball':'F3','fault':'Flt'
 } %}
-<h2>Season Stats</h2>
+<h2>Seizoensstatistieken</h2>
 <div class="stat-sections-grid">
 {% for stat, results in stat_results.items() %}
 <div class="stat-section" data-stat="{{ stat }}">
-  <h3 class="stat-section-title stat-{{ stat }}">{{ stat|title }}</h3>
+  <h3 class="stat-section-title stat-{{ stat }}">{{ stat_nl.get(stat, stat|title) }}</h3>
   <table class="table report-table">
     <thead>
       <tr>
-        <th>Game</th>
+        <th>Wedstrijd</th>
         {% for result in results %}
         <th class="r-{{ result }}">{{ abbrev.get(result, result) }}</th>
         {% endfor %}
         <th class="derived-col">Tot</th>
         <th class="derived-col">Pts±</th>
-        <th class="derived-col">Err%</th>
-        {% if stat in quality_stats %}<th class="derived-col">Qual</th>{% endif %}
+        <th class="derived-col">Fout%</th>
+        {% if stat in quality_stats %}<th class="derived-col">Kwal</th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -154,7 +155,7 @@
       </tr>
       {% endfor %}
       <tr class="totals-row">
-        <td><strong>Season Total</strong></td>
+        <td><strong>Seizoenstotaal</strong></td>
         {% for result in results %}
         <td><strong>{{ season_totals[stat][result] }}</strong></td>
         {% endfor %}
@@ -176,14 +177,14 @@
 </div>
 
 {% else %}
-<p class="empty" style="margin-top:1rem;">No stats recorded in this season yet.</p>
+<p class="empty" style="margin-top:1rem;">Nog geen statistieken geregistreerd voor dit seizoen.</p>
 {% endif %}
 
 <!-- ── Games List ─────────────────────────────────────────────────────── -->
-<h2>Games</h2>
+<h2>Wedstrijden</h2>
 <table class="table">
   <thead>
-    <tr><th>Date</th><th>Opponent</th><th></th></tr>
+    <tr><th>Datum</th><th>Tegenstander</th><th></th></tr>
   </thead>
   <tbody>
     {% for g in games %}
@@ -191,8 +192,8 @@
       <td>{{ g.played_at }}</td>
       <td>{{ g.opponent }}</td>
       <td class="actions">
-        <a class="btn btn-sm btn-outline" href="{{ url_for('report', game_id=g.id) }}">Report</a>
-        <a class="btn btn-sm btn-outline" href="{{ url_for('track', game_id=g.id) }}">Track</a>
+        <a class="btn btn-sm btn-outline" href="{{ url_for('report', game_id=g.id) }}">Rapport</a>
+        <a class="btn btn-sm btn-outline" href="{{ url_for('track', game_id=g.id) }}">Bijhouden</a>
       </td>
     </tr>
     {% endfor %}
@@ -205,7 +206,7 @@
   <div class="chart-modal-card">
     <div class="chart-modal-header">
       <span id="chart-modal-title" class="chart-modal-title-text"></span>
-      <button id="chart-modal-close" class="chart-modal-close" title="Close">✕</button>
+      <button id="chart-modal-close" class="chart-modal-close" title="Sluiten">✕</button>
     </div>
     <div id="chart-modal-body" class="chart-modal-body"></div>
   </div>

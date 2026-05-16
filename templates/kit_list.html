@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% from "_macros.html" import filter_select %}
+{% block title %}Materiaallijst — VolleyStats{% endblock %}
+{% block content %}
+{% set KIT_STATUS_NL = {'in stock': 'Op voorraad', 'assigned': 'Toegewezen', 'lost': 'Verloren', 'retired': 'Afgeschreven'} %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+<div class="sticky-page-header">
+<div class="page-header">
+  <h1>Materiaallijst</h1>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+    <a href="{{ url_for('kit_new') }}" class="btn btn-primary">＋ Nieuw item</a>
+    <a href="{{ url_for('kit_export') }}" class="btn btn-outline btn-sm">↓ CSV exporteren</a>
+    <a href="{{ url_for('kit_import_form') }}" class="btn btn-outline btn-sm">↑ CSV importeren</a>
+    <button type="submit" form="bulk-form" class="btn btn-sm btn-danger"
+            onclick="return document.querySelectorAll('[name=item_ids]:checked').length > 0 ? confirm('Geselecteerde items verwijderen? Dit kan niet ongedaan worden gemaakt.') : (alert('Selecteer ten minste één item.'), false)">
+      Geselecteerde verwijderen
+    </button>
+  </div>
+</div>
+
+<form method="get" id="filter-rows" class="filter-bar">
+  <input type="text" name="q" value="{{ q }}"
+         placeholder="Naam / nummer zoeken…"
+         class="filter-search" />
+
+  {% call filter_select('status', 'Alle statussen') %}
+    {% for s in KIT_STATUSES %}
+    <option value="{{ s }}" {% if f_status == s %}selected{% endif %}>{{ KIT_STATUS_NL.get(s, s) }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('model', 'Alle modellen') %}
+    {% for m in KIT_MODELS %}
+    <option value="{{ m }}" {% if f_model == m %}selected{% endif %}>{{ m }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('team_id', 'Alle teams') %}
+    {% for t in all_teams %}
+    <option value="{{ t.id }}" {% if f_team_id == t.id|string %}selected{% endif %}>{{ t.name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('profile_id', 'Alle leden') %}
+    {% for p in all_profiles %}
+    <option value="{{ p.id }}" {% if f_profile == p.id|string %}selected{% endif %}>{{ p.first_name }} {{ p.last_name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('store', 'Alle bakken') %}
+    {% for s in all_stores %}
+    <option value="{{ s }}" {% if f_store == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  <button type="submit" class="btn btn-sm">Filteren</button>
+</form>
+</div>{# /.sticky-page-header #}
+
+<div class="table-scroll-wrap">
+  <form method="post" action="{{ url_for('kit_bulk_delete') }}" id="bulk-form"
+        onsubmit="return document.querySelectorAll('[name=item_ids]:checked').length > 0 || (alert('Selecteer ten minste één item.'), false)">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <table class="sticky-col-head" style="width:100%;border-collapse:collapse;font-size:0.9rem">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="padding:.55rem .5rem">
+          <input type="checkbox" id="select-all" title="Select all"
+                 onchange="document.querySelectorAll('[name=item_ids]').forEach(c=>c.checked=this.checked)">
+        </th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Model</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Type</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Maat</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Nr.</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Naam</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Status</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Staat</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Bak</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Lid</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Team</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Toegevoegd</th>
+        <th style="padding:.55rem .5rem"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:.6rem .5rem">
+          <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-form">
+        </td>
+        <td style="padding:.6rem .5rem">{{ item.model }}</td>
+        <td style="padding:.6rem .5rem">{{ item.type }}</td>
+        <td style="padding:.6rem .5rem">{{ item.size }}</td>
+        <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.number or '—' }}</td>
+        <td style="padding:.6rem .5rem">{{ item.name_printed or '—' }}</td>
+        <td style="padding:.6rem .5rem">
+          <span class="role-badge"
+                style="--kit-status-color:{% if item.status == 'in stock' %}var(--green){% elif item.status == 'assigned' %}var(--accent){% elif item.status == 'lost' %}var(--red){% else %}var(--muted){% endif %};
+                       background:transparent;border:1px solid var(--kit-status-color);color:var(--kit-status-color)">
+            {{ KIT_STATUS_NL.get(item.status, item.status) }}
+          </span>
+        </td>
+        <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.state }}</td>
+        <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.store or '—' }}</td>
+        <td style="padding:.6rem .5rem">
+          {% if item.profile_id %}
+          <a href="{{ url_for('roster_detail', profile_id=item.profile_id) }}" style="font-size:0.85rem">{{ item.member_name }}</a>
+          {% else %}
+          <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+        <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.team_name or '—' }}</td>
+        <td style="padding:.6rem .5rem;color:var(--muted);font-size:0.82rem">{{ (item.date_added or item.created_at)[:10] }}</td>
+        <td style="padding:.6rem .5rem">
+          <a href="{{ url_for('kit_detail', item_id=item.id) }}" class="btn btn-sm btn-outline">Bekijken</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="13" style="padding:1.5rem .5rem;text-align:center;color:var(--muted)">Geen materiaalinventaris gevonden.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "_macros.html" import filter_select %}
+{% block title %}Materiaallog — VolleyStats{% endblock %}
+{% block content %}
+{% set KIT_ACTION_NL = {'created': 'Aangemaakt', 'assigned': 'Toegewezen', 'unassigned': 'Niet toegewezen', 'deleted': 'Verwijderd', 'edited': 'Bewerkt', 'remark': 'Opmerking'} %}
+
+<div class="sticky-page-header">
+<div class="page-header">
+  <h1>Materiaallog</h1>
+  <a href="{{ url_for('kit_list') }}" class="btn btn-outline btn-sm">← Materiaallijst</a>
+</div>
+
+<form method="get" id="filter-rows" class="filter-bar">
+  {% call filter_select('kit_type', 'Alle types') %}
+    {% for t in KIT_TYPES %}
+    <option value="{{ t }}" {% if f_kit_type == t %}selected{% endif %}>{{ t|capitalize }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('team_id', 'Alle teams') %}
+    {% for t in all_teams %}
+    <option value="{{ t.id }}" {% if f_team == t.id|string %}selected{% endif %}>{{ t.name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('profile_id', 'Alle leden') %}
+    {% for p in all_profiles %}
+    <option value="{{ p.id }}" {% if f_profile == p.id|string %}selected{% endif %}>{{ p.first_name }} {{ p.last_name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('action', 'Alle acties') %}
+    {% for a in KIT_ACTIONS %}
+    <option value="{{ a }}" {% if f_action == a %}selected{% endif %}>{{ KIT_ACTION_NL.get(a, a) }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  <span style="font-size:0.8rem;color:var(--muted)">Van</span>
+  <input type="date" name="date_from" value="{{ f_date_from }}" class="filter-select">
+  <span style="font-size:0.8rem;color:var(--muted)">Tot</span>
+  <input type="date" name="date_to" value="{{ f_date_to }}" class="filter-select">
+
+  <button type="submit" class="btn btn-sm">Filteren</button>
+</form>
+</div>{# /.sticky-page-header #}
+
+<div class="table-scroll-wrap">
+  <table class="sticky-col-head" style="width:100%;border-collapse:collapse;font-size:0.9rem">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Datum</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Item</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Actie</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Team</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Lid</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Notitie</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Door</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:.6rem .5rem;color:var(--muted);font-size:0.82rem;white-space:nowrap">{{ entry.created_at[:16] }}</td>
+        <td style="padding:.6rem .5rem">
+          <a href="{{ url_for('kit_detail', item_id=entry.item_id) }}" style="font-size:0.85rem">
+            {{ entry.item_label }}
+          </a>
+        </td>
+        <td style="padding:.6rem .5rem">
+          <span style="font-weight:600;
+            {% if entry.action == 'created' %}color:var(--green)
+            {% elif entry.action == 'assigned' %}color:var(--accent)
+            {% elif entry.action == 'unassigned' %}color:var(--muted)
+            {% elif entry.action == 'deleted' %}color:var(--red)
+            {% else %}color:var(--fg){% endif %}">
+            {{ KIT_ACTION_NL.get(entry.action, entry.action) }}
+          </span>
+        </td>
+        <td style="padding:.6rem .5rem;color:var(--muted)">{{ entry.team_name or '—' }}</td>
+        <td style="padding:.6rem .5rem;color:var(--muted)">{{ entry.member_name or '—' }}</td>
+        <td style="padding:.6rem .5rem">{{ entry.note or '—' }}</td>
+        <td style="padding:.6rem .5rem;color:var(--muted);font-size:0.82rem">{{ entry.created_by_email or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" style="padding:1.5rem .5rem;text-align:center;color:var(--muted)">Geen logitems gevonden.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

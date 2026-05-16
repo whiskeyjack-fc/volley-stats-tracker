@@ -1,8 +1,10 @@
 {% extends "base.html" %}
-{% block title %}{% if profile %}Edit {{ profile.first_name }} {{ profile.last_name }}{% else %}New Member{% endif %} — VolleyStats{% endblock %}
+{% block title %}{% if profile %}{{ profile.first_name }} {{ profile.last_name }} bewerken{% else %}Nieuw lid{% endif %} — VolleyStats{% endblock %}
 {% block content %}
+{% set STATUS_NL = {'active': 'Actief', 'inactive': 'Inactief', 'injured': 'Geblesseerd', 'prospect': 'Prospect', 'trial': 'Trial', 'unknown': 'Onbekend'} %}
+{% set POS_NL = {'setter': 'Spelverdeler', 'libero': 'Libero', 'outside': 'Hoekaanvaller', 'opposite': 'Opposite', 'middle': 'Middenaanvaller'} %}
 <h1 style="font-size:1.4rem;font-weight:700;margin-bottom:1.25rem">
-  {% if profile %}Edit Member{% else %}New Member{% endif %}
+  {% if profile %}Lid bewerken{% else %}Nieuw lid{% endif %}
 </h1>
 
 {% if error %}
@@ -13,32 +15,32 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <section class="card" style="margin-bottom:1rem">
-    <h2>Basic Info</h2>
+    <h2>Basisgegevens</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
       <label>
-        <span class="field-label">First Name <span style="color:var(--red)">*</span></span>
+        <span class="field-label">Voornaam <span style="color:var(--red)">*</span></span>
         <input type="text" name="first_name" required
-               value="{{ profile.first_name if profile else '' }}" placeholder="First name" />
+               value="{{ profile.first_name if profile else '' }}" placeholder="Voornaam" />
       </label>
       <label>
-        <span class="field-label">Last Name <span style="color:var(--red)">*</span></span>
+        <span class="field-label">Achternaam <span style="color:var(--red)">*</span></span>
         <input type="text" name="last_name" required
-               value="{{ profile.last_name if profile else '' }}" placeholder="Last name" />
+               value="{{ profile.last_name if profile else '' }}" placeholder="Achternaam" />
       </label>
       <label>
-        <span class="field-label">Date of Birth</span>
+        <span class="field-label">Geboortedatum</span>
         <input type="date" name="date_of_birth"
                value="{{ profile.date_of_birth if profile else '' }}" />
       </label>
       <label>
-        <span class="field-label">Jersey #</span>
+        <span class="field-label">Rugnummer</span>
         <input type="text" name="number" maxlength="10"
-               value="{{ profile.number if profile else '' }}" placeholder="e.g. 7" />
+               value="{{ profile.number if profile else '' }}" placeholder="bijv. 7" />
       </label>
       <label>
-        <span class="field-label">Federation ID</span>
+        <span class="field-label">Stamnummer</span>
         <input type="text" name="federation_id" maxlength="20"
-               value="{{ profile.federation_id if profile else '' }}" placeholder="e.g. 0035321" />
+               value="{{ profile.federation_id if profile else '' }}" placeholder="bijv. 0035321" />
       </label>
     </div>
 
@@ -49,7 +51,7 @@
                 style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
                        color:var(--fg);padding:.35rem .5rem;font-size:0.9rem">
           {% for s in ['active','inactive','injured'] %}
-          <option value="{{ s }}" {% if profile and profile.status == s %}selected{% endif %}>{{ s|capitalize }}</option>
+          <option value="{{ s }}" {% if profile and profile.status == s %}selected{% endif %}>{{ STATUS_NL.get(s, s|capitalize) }}</option>
           {% endfor %}
         </select>
       </label>
@@ -59,19 +61,19 @@
         <input type="checkbox" name="is_staff"
                {% if profile and profile.is_staff %}checked{% endif %}
                style="accent-color:var(--accent)">
-        <span>Staff / non-player (hide from stats pages)</span>
+        <span>Staf / geen speler (verbergen in statistieken)</span>
       </label>
     </div>
   </section>
 
-  <section class="card" style="margin-bottom:1rem">
-    <h2>Positions</h2>
+  <section class="card" style="margin-bottom:1rem" id="positions-section">
+    <h2>Posities</h2>
     {% set cur_positions = (profile.positions or '').split(',') | map('trim') | list if profile else [] %}
     <div style="display:flex;flex-wrap:wrap;gap:.5rem">
       {% for pos in ['setter','libero','outside','opposite','middle'] %}
       <button type="button" class="set-chip{% if pos in cur_positions %} active{% endif %}"
               onclick="togglePos(this, '{{ pos }}')" data-pos="{{ pos }}">
-        {{ pos|capitalize }}
+        {{ POS_NL.get(pos, pos|capitalize) }}
       </button>
       {% endfor %}
     </div>
@@ -82,16 +84,16 @@
   <section class="card" style="margin-bottom:1rem">
     <h2>Tags</h2>
     <label>
-      <span class="field-label">Tags (comma-separated)</span>
+      <span class="field-label">Labels (kommagescheiden)</span>
       <input type="text" name="tags"
              value="{{ profile.tags | from_json | join(', ') if profile and profile.tags else '' }}"
-             placeholder="e.g. U18, national, transfer" />
+             placeholder="bijv. U18, nationaal, transfer" />
     </label>
   </section>
 
   <section class="card" style="margin-bottom:1rem">
-    <h2>Notes</h2>
-    <textarea name="notes" rows="4" placeholder="Internal notes…"
+    <h2>Notities</h2>
+    <textarea name="notes" rows="4" placeholder="Interne notities…"
               style="width:100%;background:var(--surface2);border:1px solid var(--border);
                      border-radius:var(--radius);color:var(--fg);padding:.4rem .55rem;
                      font-size:0.9rem;resize:vertical;box-sizing:border-box">{{ profile.notes or '' if profile else '' }}</textarea>
@@ -99,9 +101,9 @@
 
   <div class="form-actions" style="gap:.75rem">
     <a href="{{ url_for('roster_detail', profile_id=profile.id) if profile else url_for('roster_list') }}"
-       class="btn btn-outline">Cancel</a>
+       class="btn btn-outline">Annuleren</a>
     <button type="submit" class="btn btn-primary btn-lg">
-      {% if profile %}Save Changes{% else %}Create Member{% endif %}
+      {% if profile %}Wijzigingen opslaan{% else %}Lid aanmaken{% endif %}
     </button>
   </div>
 </form>
@@ -124,5 +126,13 @@ function togglePos(btn, pos) {
   const active = Array.from(document.querySelectorAll('[data-pos].active')).map(b => b.dataset.pos);
   document.getElementById('positions-hidden').value = active.join(',');
 }
+
+(function () {
+  const cb = document.querySelector('input[name="is_staff"]');
+  const sec = document.getElementById('positions-section');
+  function sync() { sec.style.display = cb.checked ? 'none' : ''; }
+  sync();
+  cb.addEventListener('change', sync);
+})();
 </script>
 {% endblock %}

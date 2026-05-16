@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Kit Item #{{ item.id }} — VolleyStats{% endblock %}
+{% block content %}
+{% set KIT_STATUS_NL = {'in stock': 'Op voorraad', 'assigned': 'Toegewezen', 'lost': 'Verloren', 'retired': 'Afgeschreven'} %}
+{% set KIT_ACTION_NL = {'created': 'Aangemaakt', 'assigned': 'Toegewezen', 'unassigned': 'Niet toegewezen', 'deleted': 'Verwijderd', 'edited': 'Bewerkt', 'remark': 'Opmerking'} %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+<div class="page-header">
+  <h1>Kit Item #{{ item.id }} — {{ item.model }} {{ item.type }}{% if item.number %} #{{ item.number }}{% endif %}</h1>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <a href="{{ url_for('kit_list') }}" class="btn btn-outline btn-sm">← Materiaallijst</a>
+    <a href="{{ url_for('kit_edit', item_id=item.id) }}" class="btn btn-primary btn-sm">Bewerken</a>
+  </div>
+</div>
+
+{# ── Item info card ─────────────────────────────────────────────────────── #}
+<div class="card" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1.5rem;max-width:650px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem 1.5rem;font-size:0.88rem">
+
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Model</div>
+      <div>{{ item.model }}</div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Type</div>
+      <div>{{ item.type }}</div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Maat</div>
+      <div>{{ item.size }}</div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Nummer</div>
+      <div>{{ item.number or '—' }}</div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Naam op shirt</div>
+      <div>{{ item.name_printed or '—' }}</div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Status</div>
+      <div>
+        <span style="{% if item.status == 'in stock' %}color:var(--green){% elif item.status == 'assigned' %}color:var(--accent){% elif item.status == 'lost' %}color:var(--red){% else %}color:var(--muted){% endif %}">
+          {{ KIT_STATUS_NL.get(item.status, item.status) }}
+        </span>
+      </div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Staat</div>
+      <div>{{ item.state }}</div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Opslag</div>
+      <div>{{ item.store or '—' }}</div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Toegewezen lid</div>
+      <div>
+        {% if item.profile_id %}
+        <a href="{{ url_for('roster_detail', profile_id=item.profile_id) }}">{{ item.member_name }}</a>
+        {% else %}
+        <span style="color:var(--muted)">—</span>
+        {% endif %}
+      </div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Team</div>
+      <div>{{ item.team_name or '—' }}</div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Datum toegevoegd</div>
+      <div>{{ item.date_added[:10] if item.date_added else '—' }}</div>
+    </div>
+    <div>
+      <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Aangemaakt</div>
+      <div style="color:var(--muted)">{{ item.created_at[:10] }}</div>
+    </div>
+
+  </div>
+</div>
+
+{# ── Add remark ────────────────────────────────────────────────────────── #}
+<div class="card" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1.5rem;max-width:650px">
+  <h2 style="font-size:1rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0 0 .75rem">Opmerking toevoegen</h2>
+  <form method="post" action="{{ url_for('kit_add_log', item_id=item.id) }}" style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="note" placeholder="Opmerking typen…"
+           style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .6rem;font-size:0.9rem"
+           required>
+    <button type="submit" class="btn btn-sm btn-primary">Toevoegen</button>
+  </form>
+</div>
+
+{# ── Log table ─────────────────────────────────────────────────────────── #}
+<h2 style="font-size:1rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.5rem">Geschiedenis</h2>
+<div style="overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:.5rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Datum</th>
+        <th style="text-align:left;padding:.5rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Actie</th>
+        <th style="text-align:left;padding:.5rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Lid</th>
+        <th style="text-align:left;padding:.5rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Notitie</th>
+        <th style="text-align:left;padding:.5rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Door</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in log_entries %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:.55rem .5rem;color:var(--muted);font-size:0.82rem;white-space:nowrap">{{ entry.created_at[:16] }}</td>
+        <td style="padding:.55rem .5rem">
+          <span style="font-weight:600;
+            {% if entry.action == 'created' %}color:var(--green)
+            {% elif entry.action == 'assigned' %}color:var(--accent)
+            {% elif entry.action == 'unassigned' %}color:var(--muted)
+            {% elif entry.action == 'deleted' %}color:var(--red)
+            {% else %}color:var(--fg){% endif %}">
+            {{ KIT_ACTION_NL.get(entry.action, entry.action) }}
+          </span>
+        </td>
+        <td style="padding:.55rem .5rem;color:var(--muted)">{{ entry.member_name or '—' }}</td>
+        <td style="padding:.55rem .5rem">{{ entry.note or '—' }}</td>
+        <td style="padding:.55rem .5rem;color:var(--muted);font-size:0.82rem">{{ entry.created_by_email or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" style="padding:1.25rem .5rem;text-align:center;color:var(--muted)">Nog geen logitems.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

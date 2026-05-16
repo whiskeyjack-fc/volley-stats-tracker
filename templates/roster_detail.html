@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ profile.first_name }} {{ profile.last_name }} — VolleyStats{% endblock %}
 {% block content %}
-
-{# ── Flash messages ──────────────────────────────────────────────────────── #}
+{% set STATUS_NL = {'active': 'Actief', 'inactive': 'Inactief', 'injured': 'Geblesseerd', 'prospect': 'Prospect', 'trial': 'Trial', 'unknown': 'Onbekend'} %}
+{% set POS_NL = {'setter': 'Spelverdeler', 'libero': 'Libero', 'outside': 'Hoekaanvaller', 'opposite': 'Opposite', 'middle': 'Middenaanvaller'} %}
+{% set ROLE_NL = {'player': 'Speler', 'head_coach': 'Hoofdcoach', 'assistant_coach': 'Assistent-coach', 'team_manager': 'Teammanager', 'medical': 'Medisch', 'scorer': 'Markeerder', 'marker': 'Markeerder', 'video_analyst': 'Video-analist'} %}
+{% set REMARK_TYPE_NL = {'general': 'Algemeen', 'training': 'Training', 'scouting': 'Scouting', 'injury': 'Blessure', 'followup': 'Opvolging'} %}
+{% set KIT_STATUS_NL = {'in stock': 'Op voorraad', 'assigned': 'Toegewezen', 'lost': 'Verloren', 'retired': 'Afgeschreven'} %}
+{% set KIT_STATE_NL = {'new': 'Nieuw', 'good': 'Goed', 'worn': 'Versleten', 'damaged': 'Beschadigd'} %}
+{% set KIT_ACTION_NL = {'created': 'Aangemaakt', 'assigned': 'Toegewezen', 'unassigned': 'Niet toegewezen', 'deleted': 'Verwijderd', 'edited': 'Bewerkt', 'remark': 'Opmerking'} %}
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, message in messages %}
   <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
@@ -18,19 +23,19 @@
         <span style="font-size:1.7rem;font-weight:800;color:var(--accent)">#{{ profile.number }}</span>
         {% endif %}
         <h1 style="font-size:1.5rem;font-weight:700;margin:0">{{ profile.first_name }} {{ profile.last_name }}</h1>
-        <span class="status-badge status-{{ profile.status }}">{{ profile.status }}</span>
+        <span class="status-badge status-{{ profile.status }}">{{ STATUS_NL.get(profile.status, profile.status) }}</span>
       </div>
       {% if profile.date_of_birth %}
-      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">DOB: {{ profile.date_of_birth }}</p>
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">Geboortedatum: {{ profile.date_of_birth }}</p>
       {% endif %}
       {% if profile.federation_id %}
-      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">Federation ID: {{ profile.federation_id }}</p>
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">Stamnummer: {{ profile.federation_id }}</p>
       {% endif %}
       {# Position pills #}
-      {% if profile.positions %}
+      {% if profile.positions and not profile.is_staff %}
       <div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.5rem">
         {% for pos in profile.positions.split(',') %}
-        <span class="pos-pill">{{ pos.strip()|capitalize }}</span>
+        <span class="pos-pill">{{ POS_NL.get(pos.strip(), pos.strip()|capitalize) }}</span>
         {% endfor %}
       </div>
       {% endif %}
@@ -48,11 +53,11 @@
 
     {% if can_view_all() %}
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-start">
-      <a href="{{ url_for('roster_edit', profile_id=profile.id) }}" class="btn btn-outline btn-sm">✎ Edit</a>
+      <a href="{{ url_for('roster_edit', profile_id=profile.id) }}" class="btn btn-outline btn-sm">✎ Bewerken</a>
       <form method="POST" action="{{ url_for('roster_delete', profile_id=profile.id) }}"
-            onsubmit="return confirm('Delete {{ profile.first_name }} {{ profile.last_name }}? This cannot be undone.')">
+            onsubmit="return confirm('{{ profile.first_name }} {{ profile.last_name }} verwijderen? Dit kan niet ongedaan worden gemaakt.')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+        <button type="submit" class="btn btn-sm btn-danger">Verwijderen</button>
       </form>
     </div>
     {% endif %}
@@ -68,7 +73,7 @@
       {% if t.roles %}
       <span style="display:flex;flex-wrap:wrap;gap:0.2rem">
         {% for role in t.roles.split(',') %}
-        <span class="role-pill role-{{ role.strip() }}">{{ role.strip().replace('_', ' ')|title }}</span>
+        <span class="role-pill role-{{ role.strip() }}">{{ ROLE_NL.get(role.strip(), role.strip().replace('_', ' ')|title) }}</span>
         {% endfor %}
       </span>
       {% endif %}
@@ -76,7 +81,7 @@
     {% endfor %}
     {% for ct in coaching_teams %}
     <span style="background:var(--surface2);border:1px solid var(--green);border-radius:999px;
-                 padding:.2em .65em;font-size:0.8rem;color:var(--green)">🎓 Coaches: {{ ct.name }}</span>
+                 padding:.2em .65em;font-size:0.8rem;color:var(--green)">🎓 Traint: {{ ct.name }}</span>
     {% endfor %}
   </div>
   {% endif %}
@@ -90,25 +95,26 @@
 </div>
 
 {# ── Remarks ─────────────────────────────────────────────────────────────── #}
+{% if not is_kit_manager() %}
 <div class="card">
-  <h2>Remarks</h2>
+  <h2>Opmerkingen</h2>
 
   {# Tab bar #}
   <div class="tab-bar" style="margin-bottom:1rem">
-    <button class="tab-btn active" data-tab="all">All</button>
-    <button class="tab-btn" data-tab="general">General</button>
+    <button class="tab-btn active" data-tab="all">Alles</button>
+    <button class="tab-btn" data-tab="general">Algemeen</button>
     <button class="tab-btn" data-tab="training">Training</button>
     {% if can_view_all() %}
     <button class="tab-btn" data-tab="scouting">Scouting</button>
-    <button class="tab-btn" data-tab="injury">Injury</button>
-    <button class="tab-btn" data-tab="followup">Follow-up</button>
+    <button class="tab-btn" data-tab="injury">Blessure</button>
+    <button class="tab-btn" data-tab="followup">Opvolging</button>
     {% endif %}
   </div>
 
   {# Remarks list #}
   <div id="remarks-list">
     {% if not remarks %}
-    <p style="color:var(--muted);font-size:0.9rem">No remarks yet.</p>
+    <p style="color:var(--muted);font-size:0.9rem">Nog geen opmerkingen.</p>
     {% else %}
     {% for r in remarks %}
     <div class="remark-item" data-type="{{ r.remark_type }}"
@@ -117,9 +123,9 @@
                 border-radius:0 var(--radius) var(--radius) 0;position:relative">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.3rem;margin-bottom:.3rem">
         <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
-          <span class="remark-type-badge remark-{{ r.remark_type }}">{{ r.remark_type }}</span>
-          {% if r.is_private %}<span style="font-size:0.68rem;color:var(--red);margin-left:.3rem">🔒 private</span>{% endif %}
-          {% if r.due_date %}<span style="color:var(--muted);font-size:0.72rem;margin-left:.4rem">due {{ r.due_date }}</span>{% endif %}
+          <span class="remark-type-badge remark-{{ r.remark_type }}">{{ REMARK_TYPE_NL.get(r.remark_type, r.remark_type) }}</span>
+          {% if r.is_private %}<span style="font-size:0.68rem;color:var(--red);margin-left:.3rem">🔒 privé</span>{% endif %}
+          {% if r.due_date %}<span style="color:var(--muted);font-size:0.72rem;margin-left:.4rem">vervaldatum {{ r.due_date }}</span>{% endif %}
         </span>
         <span style="font-size:0.75rem;color:var(--muted)">{{ r.author_email or 'unknown' }} · {{ r.created_at[:10] }}</span>
       </div>
@@ -127,7 +133,7 @@
       {% if can_view_all() %}
       <form method="POST" action="{{ url_for('roster_delete_remark', profile_id=profile.id, remark_id=r.id) }}"
             style="position:absolute;top:.5rem;right:.5rem"
-            onsubmit="return confirm('Delete this remark?')">
+            onsubmit="return confirm('Deze opmerking verwijderen?')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-sm btn-danger" style="padding:.15rem .4rem;font-size:0.7rem">✕</button>
       </form>
@@ -141,35 +147,35 @@
   {% if can_add_remark %}
   <details style="margin-top:1rem">
     <summary style="cursor:pointer;color:var(--accent);font-size:0.9rem;font-weight:600;list-style:none;padding:.4rem 0">
-      ＋ Add remark
+      ＋ Opmerking toevoegen
     </summary>
     <form method="POST" action="{{ url_for('roster_add_remark', profile_id=profile.id) }}"
           style="margin-top:.75rem;display:flex;flex-direction:column;gap:.6rem">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end">
         <label style="flex:1;min-width:130px">
-          <span style="font-size:0.8rem;color:var(--muted)">Type</span>
+          <span style="font-size:0.75rem;color:var(--muted);">Type</span>
           <select name="remark_type"
                   style="display:block;width:100%;background:var(--surface2);border:1px solid var(--border);
                          border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem">
-            <option value="general">General</option>
+            <option value="general">Algemeen</option>
             <option value="training">Training</option>
             {% if can_view_all() %}
             <option value="scouting">Scouting</option>
-            <option value="injury">Injury</option>
-            <option value="followup">Follow-up</option>
+            <option value="injury">Blessure</option>
+            <option value="followup">Opvolging</option>
             {% endif %}
           </select>
         </label>
         <label id="due-date-field" style="display:none;flex:1;min-width:130px">
-          <span style="font-size:0.8rem;color:var(--muted)">Due date</span>
+          <span style="font-size:0.8rem;color:var(--muted)">Vervaldatum</span>
           <input type="date" name="due_date"
                  style="display:block;width:100%;background:var(--surface2);border:1px solid var(--border);
                         border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem" />
         </label>
         {% if can_view_all() %}
         <label style="display:flex;align-items:center;gap:.35rem;font-size:0.85rem;cursor:pointer;padding-bottom:.35rem">
-          <input type="checkbox" name="is_private"> Private
+          <input type="checkbox" name="is_private"> Privé
         </label>
         {% endif %}
       </div>
@@ -177,15 +183,106 @@
                 style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
                        color:var(--fg);padding:.4rem .55rem;font-size:0.9rem;resize:vertical"></textarea>
       <div>
-        <button type="submit" class="btn btn-primary btn-sm">Save Remark</button>
+        <button type="submit" class="btn btn-primary btn-sm">Opmerking opslaan</button>
       </div>
     </form>
   </details>
   {% endif %}
 </div>
+{% endif %}{# end not is_kit_manager() #}
+
+{# ── Kit subsection ───────────────────────────────────────────────────────── #}
+{% if can_manage_kit() or is_kit_manager() %}
+<div class="card" style="margin-top:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+    <h2 style="margin:0">Kit</h2>
+    <a href="{{ url_for('kit_list', profile_id=profile.id) }}" class="btn btn-outline btn-sm">Alles bekijken in Materiaallijst</a>
+  </div>
+
+  {% if kit_items_profile %}
+  <div style="overflow-x:auto;margin-bottom:1.25rem">
+    <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Model</th>
+          <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Type</th>
+          <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Maat</th>
+          <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Nr.</th>
+          <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Status</th>
+          <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Staat</th>
+          <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Team</th>
+          <th style="text-align:left;padding:.45rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Toegevoegd</th>
+          <th style="padding:.45rem .5rem"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ki in kit_items_profile %}
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:.5rem .5rem">{{ ki.model }}</td>
+          <td style="padding:.5rem .5rem">{{ ki.type }}</td>
+          <td style="padding:.5rem .5rem">{{ ki.size }}</td>
+          <td style="padding:.5rem .5rem;color:var(--muted)">{{ ki.number or '—' }}</td>
+          <td style="padding:.5rem .5rem">
+            <span class="role-badge"
+                  style="--kit-status-color:{% if ki.status == 'in stock' %}var(--green){% elif ki.status == 'assigned' %}var(--accent){% elif ki.status == 'lost' %}var(--red){% else %}var(--muted){% endif %};
+                         background:transparent;border:1px solid var(--kit-status-color);color:var(--kit-status-color)">
+              {{ KIT_STATUS_NL.get(ki.status, ki.status) }}
+            </span>
+          </td>
+          <td style="padding:.5rem .5rem;color:var(--muted)">{{ KIT_STATE_NL.get(ki.state, ki.state) }}</td>
+          <td style="padding:.5rem .5rem;color:var(--muted)">{{ ki.team_name or '—' }}</td>
+          <td style="padding:.5rem .5rem;color:var(--muted);font-size:0.82rem">{{ (ki.date_added or ki.created_at)[:10] }}</td>
+          <td style="padding:.5rem .5rem">
+            <a href="{{ url_for('kit_detail', item_id=ki.id) }}" class="btn btn-sm btn-outline">Bekijken</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="color:var(--muted);font-size:0.9rem;margin-bottom:1.25rem">Geen materiaal toegewezen aan dit lid.</p>
+  {% endif %}
+
+  {% if kit_log_profile %}
+  <h3 style="font-size:0.85rem;font-weight:700;text-transform:uppercase;color:var(--muted);margin:0 0 .6rem">Materiaallog</h3>
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:.4rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Datum</th>
+          <th style="text-align:left;padding:.4rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Item</th>
+          <th style="text-align:left;padding:.4rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Actie</th>
+          <th style="text-align:left;padding:.4rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Notitie</th>
+          <th style="text-align:left;padding:.4rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Door</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in kit_log_profile %}
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:.45rem .5rem;color:var(--muted);font-size:0.82rem;white-space:nowrap">{{ entry.created_at[:10] }}</td>
+          <td style="padding:.45rem .5rem">
+            <a href="{{ url_for('kit_detail', item_id=entry.item_id) }}" style="font-size:0.85rem">{{ entry.item_label }}</a>
+          </td>
+          <td style="padding:.45rem .5rem">
+            <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;
+                         color:{% if entry.action == 'assigned' %}var(--green){% elif entry.action == 'unassigned' %}var(--muted){% elif entry.action == 'deleted' %}var(--red){% else %}var(--fg){% endif %}">
+              {{ KIT_ACTION_NL.get(entry.action, entry.action) }}
+            </span>
+          </td>
+          <td style="padding:.45rem .5rem;font-size:0.85rem;color:var(--muted)">{{ entry.note or '—' }}</td>
+          <td style="padding:.45rem .5rem;font-size:0.8rem;color:var(--muted)">{{ entry.created_by_email or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}{# end can_manage_kit() or is_kit_manager() #}
 
 <div style="margin-top:0.75rem">
-  <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Back to Roster</a>
+  <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Terug naar ledenlijst</a>
 </div>
 
 <script>

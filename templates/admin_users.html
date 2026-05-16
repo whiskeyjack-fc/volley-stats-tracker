@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}User Management — VolleyStats{% endblock %}
+{% block title %}Gebruikersbeheer — VolleyStats{% endblock %}
 
 {% block content %}
 <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-  <h1 style="font-size:1.3rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:0">User Management</h1>
-  <span style="font-size:0.85rem;color:var(--muted)">{{ users | length }} user{{ 's' if users | length != 1 }}</span>
+  <h1 style="font-size:1.3rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:0">Gebruikersbeheer</h1>
+  <span style="font-size:0.85rem;color:var(--muted)">{{ users | length }} gebruiker{{ 's' if users | length != 1 }}</span>
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -17,10 +17,10 @@
   <table style="width:100%;border-collapse:collapse;font-size:0.9rem">
     <thead>
       <tr style="border-bottom:1px solid var(--border)">
-        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Email</th>
-        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Role</th>
-        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Player Profile</th>
-        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Registered</th>
+        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">E-mail</th>
+        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Rol</th>
+        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Spelersprofiel</th>
+        <th style="text-align:left;padding:.6rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Geregistreerd</th>
         <th style="padding:.6rem .5rem"></th>
       </tr>
     </thead>
@@ -44,14 +44,14 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div style="display:flex;gap:.3rem;align-items:center">
               <div class="profile-select-wrap" style="position:relative">
-                <input type="text" placeholder="Search profile…" autocomplete="off"
+                <input type="text" placeholder="Profiel zoeken…" autocomplete="off"
                        class="profile-search"
                        style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
                               color:var(--fg);padding:.2rem .4rem;font-size:0.8rem;width:170px">
                 <select name="profile_id" class="profile-select"
                         style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
                                color:var(--fg);padding:.2rem .4rem;font-size:0.8rem;width:170px">
-                  <option value="">— unlink —</option>
+                  <option value="">— ontkoppelen —</option>
                   {% for p in profiles %}
                   <option value="{{ p.id }}" {% if u.profile_id == p.id %}selected{% endif %}>
                     #{{ p.id }} {{ p.first_name }} {{ p.last_name }}
@@ -59,7 +59,7 @@
                   {% endfor %}
                 </select>
               </div>
-              <button type="submit" class="btn btn-sm" style="font-size:0.78rem;padding:.2rem .5rem">Link</button>
+              <button type="submit" class="btn btn-sm" style="font-size:0.78rem;padding:.2rem .5rem">Koppelen</button>
             </div>
           </form>
           {% if u.profile_id %}
@@ -68,7 +68,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="profile_id" value="">
             <button type="submit" class="btn btn-sm"
-                    style="font-size:0.78rem;padding:.2rem .5rem;color:var(--muted);border-color:var(--muted)">Unlink</button>
+                    style="font-size:0.78rem;padding:.2rem .5rem;color:var(--muted);border-color:var(--muted)">Ontkoppelen</button>
           </form>
           {% endif %}
         </td>
@@ -83,14 +83,15 @@
                 <option value="trainer"     {% if u.role == 'trainer'     %}selected{% endif %}>trainer</option>
                 <option value="coordinator" {% if u.role == 'coordinator' %}selected{% endif %}>coordinator</option>
                 <option value="admin"       {% if u.role == 'admin'       %}selected{% endif %}>admin</option>
+                <option value="kit_manager" {% if u.role == 'kit_manager' %}selected{% endif %}>kit_manager</option>
               </select>
-              <button type="submit" class="btn btn-sm">Save</button>
+              <button type="submit" class="btn btn-sm">Opslaan</button>
             </form>
             {% if u.id != current_user.id %}
             <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}"
-                  onsubmit="return confirm('Delete ' + {{ u.email | tojson }} + '? This cannot be undone.')">
+                  onsubmit="return confirm('Gebruiker ' + {{ u.email | tojson }} + ' verwijderen? Dit kan niet ongedaan worden gemaakt.')">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-sm" style="color:var(--red);border-color:var(--red)">Delete</button>
+              <button type="submit" class="btn btn-sm" style="color:var(--red);border-color:var(--red)">Verwijderen</button>
             </form>
             {% endif %}
           </div>

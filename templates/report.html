@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% from "_macros.html" import filter_chips %}
-{% block title %}Report — {{ game.team_name }} vs {{ game.opponent }}{% endblock %}
+{% block title %}Rapport — {{ game.team_name }} vs {{ game.opponent }}{% endblock %}
 {% block content %}
-<div class="report-sticky-bar">
+<div class="sticky-page-header">
 <div class="page-header">
   <div>
     <h1>{{ game.team_name }} <span class="vs">vs</span> {{ game.opponent }}</h1>
     <small>{{ game.played_at }}{% if game.season %} &nbsp;·&nbsp; <span class="season-tag">{{ game.season }}</span>{% endif %}</small>
   </div>
   <div class="track-actions">
-    <a href="{{ url_for('track', game_id=game.id) }}" class="btn btn-outline">← Track</a>
-    {% if game.season %}<a href="{{ url_for('season_report', season=game.season) }}" class="btn btn-outline">📊 Season</a>{% endif %}
+    <a href="{{ url_for('track', game_id=game.id) }}" class="btn btn-outline">← Bijhouden</a>
+    {% if game.season %}<a href="{{ url_for('season_report', season=game.season) }}" class="btn btn-outline">📊 Seizoen</a>{% endif %}
     <button id="filter-toggle-btn" class="btn btn-outline btn-sm filter-toggle-btn" aria-expanded="true" aria-controls="filter-rows">Filters <span class="filter-caret" aria-hidden="true">&#x25BE;</span></button>
     <a href="{{ url_for('export_csv', game_id=game.id) }}" class="btn btn-primary">⬇ CSV</a>
   </div>
@@ -21,10 +21,10 @@
 {% set has_reserve = sets | selectattr('set_type','eq','reserve') | list | length > 0 %}
 {% call filter_chips('Set:') %}
   <a href="{{ url_for('report', game_id=game.id) }}"
-     class="set-chip {% if not active_set_id and not active_set_type %}active{% endif %}">All</a>
+     class="set-chip {% if not active_set_id and not active_set_type %}active{% endif %}">Alles</a>
   {% if has_main %}
   <a href="{{ url_for('report', game_id=game.id, type='main') }}"
-     class="set-chip {% if active_set_type == 'main' %}active{% endif %}">Main</a>
+     class="set-chip {% if active_set_type == 'main' %}active{% endif %}">Hoofd</a>
   {% endif %}
   {% if has_reserve %}
   <a href="{{ url_for('report', game_id=game.id, type='reserve') }}"
@@ -42,7 +42,7 @@
   <button id="split-toggle"
           class="set-chip split-toggle{% if not split_available %} disabled{% endif %}"
           {% if not split_available %}disabled{% endif %}
-          title="{% if split_available %}Split charts by set{% else %}Available for Main or Reserve filter only{% endif %}">
+          title="{% if split_available %}Grafieken splitsen per set{% else %}Alleen beschikbaar voor Hoofd- of Reservefilter{% endif %}">
     &#x229E; Split
   </button>
 {% endcall %}
@@ -57,7 +57,7 @@
 <!-- Row 1: Points Made / Lost -->
 <div class="charts-row charts-row-wide">
   <div class="chart-card" style="flex:1">
-    <div class="chart-title">Points Made / Lost per Player</div>
+    <div class="chart-title">Punten gemaakt/verloren per speler</div>
     <div class="chart-body"><canvas id="pointsChart"></canvas></div>
   </div>
 </div>
@@ -66,11 +66,11 @@
 <div class="charts-row charts-row-2">
   {% for stat in ['serve', 'receive'] %}
   <div class="dual-chart-card">
-    <div class="chart-title">{{ stat | title }}</div>
+    <div class="chart-title">{{ stat_nl.get(stat, stat | title) }}</div>
     <div class="dual-top">
       <canvas id="chart-{{ stat }}-top"></canvas>
     </div>
-    <div class="dual-sep">Quality</div>
+    <div class="dual-sep">Kwaliteit</div>
     <div class="dual-bottom">
       <canvas id="chart-{{ stat }}-qual"></canvas>
     </div>
@@ -82,7 +82,7 @@
 <div class="charts-row charts-row-2">
   {% for stat in ['attack', 'block'] %}
   <div class="chart-card">
-    <div class="chart-title">{{ stat | title }}</div>
+    <div class="chart-title">{{ stat_nl.get(stat, stat | title) }}</div>
     <div class="chart-body"><canvas id="chart-{{ stat }}"></canvas></div>
   </div>
   {% endfor %}
@@ -91,17 +91,17 @@
 <!-- Row 4: Freeball + Fault -->
 <div class="charts-row charts-row-2">
   <div class="dual-chart-card">
-    <div class="chart-title">Freeball</div>
+    <div class="chart-title">Vrije bal</div>
     <div class="dual-top">
       <canvas id="chart-freeball-top"></canvas>
     </div>
-    <div class="dual-sep">Quality</div>
+    <div class="dual-sep">Kwaliteit</div>
     <div class="dual-bottom">
       <canvas id="chart-freeball-qual"></canvas>
     </div>
   </div>
   <div class="chart-card">
-    <div class="chart-title">Fault</div>
+    <div class="chart-title">Fout</div>
     <div class="chart-body"><canvas id="chart-fault"></canvas></div>
   </div>
 </div>
@@ -112,23 +112,24 @@
   'kill':'Kill','1-receive':'R1','2-receive':'R2','3-receive':'R3','overpass':'OvP',
   '1-freeball':'F1','2-freeball':'F2','3-freeball':'F3','fault':'Flt'
 } %}
-<h2>{{ game.team_name }} — Player Stats</h2>
+{% set stat_nl = {'serve': 'Opslag', 'attack': 'Aanval', 'receive': 'Receptie', 'block': 'Blok', 'freeball': 'Vrije bal', 'fault': 'Fout'} %}
+<h2>{{ game.team_name }} — Spelersstatistieken</h2>
 <div class="stat-sections-grid">
 {% for stat, results in stat_results.items() %}
 <div class="stat-section">
-  <h3 class="stat-section-title stat-{{ stat }}">{{ stat|title }}</h3>
+  <h3 class="stat-section-title stat-{{ stat }}">{{ stat_nl.get(stat, stat|title) }}</h3>
   <table class="table report-table">
     <thead>
       <tr>
         <th>#</th>
-        <th>Player</th>
+        <th>Speler</th>
         {% for result in results %}
         <th class="r-{{ result }}">{{ abbrev.get(result, result) }}</th>
         {% endfor %}
         <th class="derived-col">Tot</th>
         <th class="derived-col">Pts±</th>
-        <th class="derived-col">Err%</th>
-        {% if stat in quality_stats %}<th class="derived-col">Qual</th>{% endif %}
+        <th class="derived-col">Fout%</th>
+        {% if stat in quality_stats %}<th class="derived-col">Kwal</th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -157,7 +158,7 @@
       {% endfor %}
       <tr class="totals-row">
         <td></td>
-        <td><strong>Team Total</strong></td>
+        <td><strong>Teamtotaal</strong></td>
         {% for result in results %}
         <td><strong>{{ team_totals[stat][result] }}</strong></td>
         {% endfor %}
@@ -200,7 +201,7 @@
 </div>
 
 {% else %}
-<p class="empty">No player stats recorded yet.</p>
+<p class="empty">Nog geen spelersstatistieken geregistreerd.</p>
 {% endif %}
 
 <!-- ── Full-screen chart focus modal ──────────────── -->
@@ -208,7 +209,7 @@
   <div class="chart-modal-card">
     <div class="chart-modal-header">
       <span id="chart-modal-title" class="chart-modal-title-text"></span>
-      <button id="chart-modal-close" class="chart-modal-close" title="Close">✕</button>
+      <button id="chart-modal-close" class="chart-modal-close" title="Sluiten">✕</button>
     </div>
     <div id="chart-modal-body" class="chart-modal-body"></div>
   </div>

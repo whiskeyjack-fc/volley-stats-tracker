@@ -60,15 +60,15 @@
      {% from "_macros.html" import player_roster_section %}
      {{ player_roster_section(players, all_profiles, title='Roster') }}
 #}
-{% macro player_roster_section(players, all_profiles, title='Players', show_clear=True, note=None, show_roles=False, team_member_roles=[]) %}
+{% macro player_roster_section(players, all_profiles, title='Spelers', show_clear=True, note=None, show_roles=False, team_member_roles=[]) %}
 <section class="card">
   <h2>{{ title }}</h2>
   {% if note %}<p class="grid-hint">{{ note }}</p>{% endif %}
   <table class="table" id="players-table">
     <thead>
       <tr>
-        <th>Member</th>
-        {% if show_roles %}<th>Roles</th>{% endif %}
+        <th>Lid</th>
+        {% if show_roles %}<th>Rollen</th>{% endif %}
         <th></th>
       </tr>
     </thead>
@@ -76,22 +76,21 @@
       {% if players %}
         {% for p in players %}
         {% set cur_roles = (p.roles or 'player').split(',') | map('trim') | list %}
+        {% set ns = namespace(label='') %}
+        {% for pr in all_profiles %}{% if pr.id == p.profile_id %}{% set ns.label = ('#' + pr.number|string + ' ' if pr.number else '') + pr.first_name + ' ' + pr.last_name %}{% endif %}{% endfor %}
         <tr>
           <td>
-            <select name="player_profile_id"
-                    style="width:100%;background:var(--surface2);border:1px solid var(--border);
-                           border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem">
-              <option value="">&mdash; select member &mdash;</option>
-              {% for pr in all_profiles %}
-              <option value="{{ pr.id }}"
-                {% if p.profile_id == pr.id %}selected{% endif %}>
-                {% if pr.number %}#{{ pr.number }} {% endif %}{{ pr.first_name }} {{ pr.last_name }}
-              </option>
-              {% endfor %}
-            </select>
+            <div class="player-combo">
+              <input type="text" class="player-search-input" autocomplete="off"
+                     placeholder="— selecteer lid —" value="{{ ns.label }}">
+              <ul class="player-dropdown" style="display:none"></ul>
+              <input type="hidden" name="player_profile_id" value="{{ p.profile_id or '' }}">
+            </div>
           </td>
           {% if show_roles %}
-          {% set role_label = cur_roles | map('replace', '_', ' ') | map('title') | join(', ') %}
+          {% set rns = namespace(labels=[]) %}
+          {% for rv, rl in team_member_roles %}{% if rv in cur_roles %}{% set rns.labels = rns.labels + [rl] %}{% endif %}{% endfor %}
+          {% set role_label = rns.labels | join(', ') or 'Speler' %}
           <td class="roles-td">
             <button type="button" class="roles-btn">{{ role_label }} ▾</button>
             <div class="roles-panel" style="display:none">
@@ -111,20 +110,16 @@
       {% else %}
         <tr>
           <td>
-            <select name="player_profile_id"
-                    style="width:100%;background:var(--surface2);border:1px solid var(--border);
-                           border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem">
-              <option value="">&mdash; select member &mdash;</option>
-              {% for pr in all_profiles %}
-              <option value="{{ pr.id }}">
-                {% if pr.number %}#{{ pr.number }} {% endif %}{{ pr.first_name }} {{ pr.last_name }}
-              </option>
-              {% endfor %}
-            </select>
+            <div class="player-combo">
+              <input type="text" class="player-search-input" autocomplete="off"
+                     placeholder="— selecteer lid —" value="">
+              <ul class="player-dropdown" style="display:none"></ul>
+              <input type="hidden" name="player_profile_id" value="">
+            </div>
           </td>
           {% if show_roles %}
           <td class="roles-td">
-            <button type="button" class="roles-btn">Player ▾</button>
+            <button type="button" class="roles-btn">Speler ▾</button>
             <div class="roles-panel" style="display:none">
               {% for rv, rl in team_member_roles %}
               <label class="roles-check-label">
@@ -142,9 +137,9 @@
     </tbody>
   </table>
   <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
-    <button type="button" class="btn btn-outline" id="add-player">+ Add Member</button>
+    <button type="button" class="btn btn-outline" id="add-player">+ Lid toevoegen</button>
     {% if show_clear %}
-    <button type="button" class="btn btn-sm btn-danger" id="clear-players">Delete all members</button>
+    <button type="button" class="btn btn-sm btn-danger" id="clear-players">Alle leden verwijderen</button>
     {% endif %}
   </div>
 </section>
@@ -189,24 +184,24 @@
      {% endcall %}
 #}
 {% macro card_with_actions(name, edit_url, delete_url, show_actions=True, gap='.65rem',
-                            edit_label='Edit', player_count=None, short_name=None,
+                            edit_label='Bewerken', player_count=None, short_name=None,
                             sub_label=None, description=None) %}
 <div class="team-card-item" style="flex-direction:column;align-items:stretch;gap:{{ gap }}">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
     <div class="team-card-info">
-      <span class="team-card-name">{{ name }}</span>
-      {% if short_name %}<span style="font-size:0.78rem;color:var(--accent);font-weight:600">{{ short_name }}</span>{% endif %}
+      {% if short_name %}<span class="team-card-name">{{ short_name }}</span>{% else %}<span class="team-card-name">{{ name }}</span>{% endif %}
+      {% if short_name %}<span style="font-size:0.78rem;color:var(--accent);font-weight:600">{{ name }}</span>{% endif %}
       {% if sub_label %}<span style="font-size:0.75rem;color:var(--muted)">{{ sub_label }}</span>{% endif %}
-      {% if player_count is not none %}<span class="team-card-count">{{ player_count }} player{{ 's' if player_count != 1 else '' }}</span>{% endif %}
+      {% if player_count is not none %}<span class="team-card-count">{{ player_count }} speler{{ 's' if player_count != 1 else '' }}</span>{% endif %}
       {% if description %}<span style="font-size:0.82rem;color:var(--muted);display:block;margin-top:.2rem">{{ description }}</span>{% endif %}
     </div>
     {% if show_actions %}
     <div class="team-card-actions">
       <a href="{{ edit_url }}" class="btn btn-sm btn-outline">{{ edit_label }}</a>
       <form method="POST" action="{{ delete_url }}" style="display:inline"
-            onsubmit="return confirm('Delete {{ name|e }}? This cannot be undone.')">
+            onsubmit="return confirm('{{ name|e }} verwijderen? Dit kan niet ongedaan worden gemaakt.')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+        <button type="submit" class="btn btn-sm btn-danger">Verwijderen</button>
       </form>
     </div>
     {% endif %}
