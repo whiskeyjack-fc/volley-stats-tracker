@@ -3084,6 +3084,7 @@ def kit_list():
     q          = request.args.get("q", "").strip()
     f_status   = request.args.get("status", "")
     f_model    = request.args.get("model", "")
+    f_type     = request.args.get("type", "")
     f_team_id  = request.args.get("team_id", "")
     f_profile  = request.args.get("profile_id", "")
     f_store    = request.args.get("store", "")
@@ -3100,9 +3101,17 @@ def kit_list():
     if f_model:
         where += " AND ki.model = ?"
         params.append(f_model)
+    if f_type:
+        where += " AND ki.type = ?"
+        params.append(f_type)
     if f_team_id:
-        where += " AND ki.team_id = ?"
-        params.append(f_team_id)
+        where += (
+            " AND (ki.team_id = ?"
+            " OR (ki.team_id IS NULL AND ki.profile_id IN"
+            "  (SELECT profile_id FROM club_team_players"
+            "   WHERE team_id = ? AND profile_id IS NOT NULL)))"
+        )
+        params += [f_team_id, f_team_id]
     if f_profile:
         where += " AND ki.profile_id = ?"
         params.append(f_profile)
@@ -3113,15 +3122,23 @@ def kit_list():
     items = db.execute(
         "SELECT ki.*, "
         "pp.first_name || ' ' || pp.last_name AS member_name, "
-        "ct.name AS team_name "
+        "COALESCE(ct.short_name, ct.name, dct.short_name, dct.name) AS team_name "
         "FROM kit_items ki "
         "LEFT JOIN player_profiles pp ON pp.id = ki.profile_id "
         "LEFT JOIN club_teams ct ON ct.id = ki.team_id "
+        "LEFT JOIN ("
+        "  SELECT ctp.profile_id, c2.name, c2.short_name "
+        "  FROM club_team_players ctp "
+        "  JOIN club_teams c2 ON c2.id = ctp.team_id "
+        "  WHERE ctp.profile_id IS NOT NULL "
+        "  AND ctp.id = (SELECT MAX(ctp2.id) FROM club_team_players ctp2 "
+        "               WHERE ctp2.profile_id = ctp.profile_id) "
+        ") dct ON dct.profile_id = ki.profile_id "
         f"{where} ORDER BY ki.created_at DESC",
         params
     ).fetchall()
 
-    all_teams    = db.execute("SELECT id, name FROM club_teams ORDER BY name COLLATE NOCASE").fetchall()
+    all_teams    = db.execute("SELECT id, name, short_name FROM club_teams ORDER BY name COLLATE NOCASE").fetchall()
     all_profiles = db.execute(
         "SELECT id, first_name, last_name FROM player_profiles "
         "WHERE status != 'inactive' ORDER BY last_name, first_name"
@@ -3139,10 +3156,12 @@ def kit_list():
         q=q,
         f_status=f_status,
         f_model=f_model,
+        f_type=f_type,
         f_team_id=f_team_id,
         f_profile=f_profile,
         f_store=f_store,
         KIT_MODELS=KIT_MODELS,
+        KIT_TYPES=KIT_TYPES,
         KIT_STATUSES=KIT_STATUSES,
     )
 

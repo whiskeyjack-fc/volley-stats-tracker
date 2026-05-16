@@ -35,9 +35,15 @@
     {% endfor %}
   {% endcall %}
 
+  {% call filter_select('type', 'Alle types') %}
+    {% for t in KIT_TYPES %}
+    <option value="{{ t }}" {% if f_type == t %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  {% endcall %}
+
   {% call filter_select('team_id', 'Alle teams') %}
     {% for t in all_teams %}
-    <option value="{{ t.id }}" {% if f_team_id == t.id|string %}selected{% endif %}>{{ t.name }}</option>
+    <option value="{{ t.id }}" {% if f_team_id == t.id|string %}selected{% endif %}>{{ t.short_name or t.name }}</option>
     {% endfor %}
   {% endcall %}
 
