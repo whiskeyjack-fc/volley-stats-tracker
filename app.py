@@ -3206,7 +3206,13 @@ def kit_new():
         state        = request.form.get("state", "new").strip()
         store        = request.form.get("store", "").strip() or None
         profile_id   = request.form.get("profile_id", "").strip() or None
-        date_added   = request.form.get("date_added", "").strip() or None
+        date_added_raw = request.form.get("date_added", "").strip() or None
+        date_added = None
+        if date_added_raw:
+            try:
+                date_added = datetime.strptime(date_added_raw, "%d/%m/%Y").strftime("%Y-%m-%d")
+            except ValueError:
+                date_added = None
         now          = datetime.now(UTC).isoformat()
 
         if model not in KIT_MODELS:
@@ -3312,7 +3318,13 @@ def kit_edit(item_id):
         state        = request.form.get("state", "new").strip()
         store        = request.form.get("store", "").strip() or None
         profile_id   = request.form.get("profile_id", "").strip() or None
-        date_added   = request.form.get("date_added", "").strip() or None
+        date_added_raw = request.form.get("date_added", "").strip() or None
+        date_added = None
+        if date_added_raw:
+            try:
+                date_added = datetime.strptime(date_added_raw, "%d/%m/%Y").strftime("%Y-%m-%d")
+            except ValueError:
+                date_added = None
         now          = datetime.now(UTC).isoformat()
 
         if model not in KIT_MODELS:
