@@ -154,10 +154,10 @@
         </td>
         {% if can_view_all() %}
         <td class="editable-cell" data-pid="{{ p.id }}" data-field="date_of_birth" data-val="{{ p.date_of_birth or '' }}" title="Klik om te bewerken">
-          <span class="ec-display" style="color:var(--muted);font-size:0.85rem">{{ p.date_of_birth or '—' }}</span>
+          <span class="ec-display" style="color:var(--muted);font-size:0.85rem">{{ p.date_of_birth | fmt_date if p.date_of_birth else '—' }}</span>
         </td>
         {% else %}
-        <td style="color:var(--muted);font-size:0.85rem">{{ p.date_of_birth or '—' }}</td>
+        <td style="color:var(--muted);font-size:0.85rem">{{ p.date_of_birth | fmt_date if p.date_of_birth else '—' }}</td>
         {% endif %}
       </tr>
       {% endfor %}

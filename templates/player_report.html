@@ -46,7 +46,7 @@
       {% for g in candidate_games %}
       <label class="set-chip game-chip-label{% if g.id in selected_game_ids %} active{% endif %}">
         <input type="checkbox" name="game" value="{{ g.id }}" {% if g.id in selected_game_ids %}checked{% endif %} style="display:none">
-        {{ g.played_at }} vs {{ g.opponent }}
+        {{ g.played_at | fmt_date }} vs {{ g.opponent }}
       </label>
       {% endfor %}
       <button type="submit" class="btn btn-primary btn-sm">Toepassen</button>
@@ -193,7 +193,7 @@
       <tbody>
         {% for gt in player.game_rows %}
         <tr class="game-row">
-          <td><a href="{{ url_for('report', game_id=gt.game_id) }}" class="muted">{{ gt.played_at }} vs {{ gt.opponent }}</a></td>
+          <td><a href="{{ url_for('report', game_id=gt.game_id) }}" class="muted">{{ gt.played_at | fmt_date }} vs {{ gt.opponent }}</a></td>
           {% if gt.stats[stat].total == 0 %}
           <td colspan="{{ results|length + (4 if stat in quality_stats else 3) }}" class="no-data">—</td>
           {% else %}
@@ -295,6 +295,7 @@
 
 <script src="{{ url_for('static', filename='js/charts-common.js') }}"></script>
 <script>
+function fmtDate(iso) { if (!iso) return ''; const p = iso.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : iso; }
 const ALL_PLAYERS_DATA = {{ players_data_js | tojson }};
 const STAT_RESULTS     = {{ stat_results | tojson }};
 const QUALITY_STATS    = new Set({{ quality_stats | list | tojson }});
@@ -509,7 +510,7 @@ function renderSplitTables(slug, gameSetData) {
       hLink.href = `/games/${game.game_id}/report`;
       hLink.className = 'muted';
       const hStrong = document.createElement('strong');
-      hStrong.textContent = `${game.played_at} ${game.label}`;
+      hStrong.textContent = `${fmtDate(game.played_at)} ${game.label}`;
       hLink.appendChild(hStrong);
       hTd.appendChild(hLink);
       hRow.appendChild(hTd);

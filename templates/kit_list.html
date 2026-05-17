@@ -122,7 +122,7 @@
           {% endif %}
         </td>
         <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.team_name or '—' }}</td>
-        <td style="padding:.6rem .5rem;color:var(--muted);font-size:0.82rem">{{ (item.date_added or item.created_at)[:10] }}</td>
+        <td style="padding:.6rem .5rem;color:var(--muted);font-size:0.82rem">{{ (item.date_added or item.created_at) | fmt_date }}</td>
         <td style="padding:.6rem .5rem">
           <a href="{{ url_for('kit_detail', item_id=item.id) }}" class="btn btn-sm btn-outline">Bekijken</a>
         </td>

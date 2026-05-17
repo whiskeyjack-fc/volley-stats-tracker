@@ -69,7 +69,7 @@
           <td style="color:var(--muted)">{{ row.number or '—' }}</td>
           <td>{{ row.first_name }}</td>
           <td>{{ row.last_name }}</td>
-          <td style="color:var(--muted)">{{ row.date_of_birth or '—' }}</td>
+          <td style="color:var(--muted)">{{ row.date_of_birth | fmt_date if row.date_of_birth else '—' }}</td>
           <td style="color:var(--muted);font-family:monospace;font-size:0.82rem">{{ row.federation_id or '—' }}</td>
           <td style="font-size:0.82rem;color:var(--muted)">
             {% set tag_list = row.tags | from_json if row.tags else [] %}

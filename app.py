@@ -32,6 +32,28 @@ def from_json_filter(value):
     except (ValueError, TypeError):
         return []
 
+@app.template_filter("fmt_date")
+def fmt_date_filter(value):
+    if not value:
+        return ''
+    parts = str(value)[:10].split('-')
+    if len(parts) == 3:
+        return f"{parts[2]}/{parts[1]}/{parts[0]}"
+    return str(value)[:10]
+
+@app.template_filter("fmt_datetime")
+def fmt_datetime_filter(value):
+    if not value:
+        return ''
+    s = str(value)
+    date_part = s[:10]
+    time_part = s[11:16] if len(s) > 10 else ''
+    parts = date_part.split('-')
+    if len(parts) == 3:
+        result = f"{parts[2]}/{parts[1]}/{parts[0]}"
+        return f"{result} {time_part}" if time_part else result
+    return s[:16] if time_part else date_part
+
 @app.context_processor
 def inject_helpers():
     return dict(can_view_all=can_view_all, is_admin=is_admin,
@@ -3092,9 +3114,12 @@ def kit_list():
     where  = "WHERE ki.is_deleted = 0"
     params = []
     if q:
-        where += " AND (ki.name_printed LIKE ? OR ki.model LIKE ? OR ki.type LIKE ? OR ki.number LIKE ?)"
+        where += (
+            " AND (ki.name_printed LIKE ? OR ki.model LIKE ? OR ki.type LIKE ? OR ki.number LIKE ?"
+            " OR (pp.first_name || ' ' || pp.last_name) LIKE ?)"
+        )
         like = "%" + q + "%"
-        params += [like, like, like, like]
+        params += [like, like, like, like, like]
     if f_status:
         where += " AND ki.status = ?"
         params.append(f_status)
@@ -3181,7 +3206,6 @@ def kit_new():
         state        = request.form.get("state", "new").strip()
         store        = request.form.get("store", "").strip() or None
         profile_id   = request.form.get("profile_id", "").strip() or None
-        team_id      = request.form.get("team_id", "").strip() or None
         date_added   = request.form.get("date_added", "").strip() or None
         now          = datetime.now(UTC).isoformat()
 
@@ -3195,6 +3219,15 @@ def kit_new():
             status = KIT_STATUSES[0]
         if state not in KIT_STATES:
             state = KIT_STATES[0]
+
+        team_id = None
+        if profile_id:
+            t_row = db.execute(
+                "SELECT team_id FROM club_team_players WHERE profile_id=? LIMIT 1",
+                (profile_id,)
+            ).fetchone()
+            if t_row:
+                team_id = t_row["team_id"]
 
         cur = db.execute(
             "INSERT INTO kit_items "
@@ -3214,7 +3247,6 @@ def kit_new():
         flash("Materiaalitem aangemaakt.", "success")
         return redirect(url_for("kit_list"))
 
-    all_teams    = db.execute("SELECT id, name FROM club_teams ORDER BY name COLLATE NOCASE").fetchall()
     all_profiles = db.execute(
         "SELECT id, first_name, last_name FROM player_profiles "
         "WHERE status != 'inactive' ORDER BY last_name, first_name"
@@ -3222,7 +3254,6 @@ def kit_new():
     return render_template(
         "kit_form.html",
         item=None,
-        all_teams=all_teams,
         all_profiles=all_profiles,
         KIT_MODELS=KIT_MODELS,
         KIT_TYPES=KIT_TYPES,
@@ -3281,7 +3312,6 @@ def kit_edit(item_id):
         state        = request.form.get("state", "new").strip()
         store        = request.form.get("store", "").strip() or None
         profile_id   = request.form.get("profile_id", "").strip() or None
-        team_id      = request.form.get("team_id", "").strip() or None
         date_added   = request.form.get("date_added", "").strip() or None
         now          = datetime.now(UTC).isoformat()
 
@@ -3295,6 +3325,15 @@ def kit_edit(item_id):
             status = item["status"]
         if state not in KIT_STATES:
             state = item["state"]
+
+        team_id = None
+        if profile_id:
+            t_row = db.execute(
+                "SELECT team_id FROM club_team_players WHERE profile_id=? LIMIT 1",
+                (profile_id,)
+            ).fetchone()
+            if t_row:
+                team_id = t_row["team_id"]
 
         old_profile = str(item["profile_id"]) if item["profile_id"] else None
         old_status  = item["status"]
@@ -3335,7 +3374,6 @@ def kit_edit(item_id):
         flash("Materiaalitem bijgewerkt.", "success")
         return redirect(url_for("kit_detail", item_id=item_id))
 
-    all_teams    = db.execute("SELECT id, name FROM club_teams ORDER BY name COLLATE NOCASE").fetchall()
     all_profiles = db.execute(
         "SELECT id, first_name, last_name FROM player_profiles "
         "WHERE status != 'inactive' ORDER BY last_name, first_name"
@@ -3343,7 +3381,6 @@ def kit_edit(item_id):
     return render_template(
         "kit_form.html",
         item=item,
-        all_teams=all_teams,
         all_profiles=all_profiles,
         KIT_MODELS=KIT_MODELS,
         KIT_TYPES=KIT_TYPES,

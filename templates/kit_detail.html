@@ -73,11 +73,11 @@
     </div>
     <div>
       <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Datum toegevoegd</div>
-      <div>{{ item.date_added[:10] if item.date_added else '—' }}</div>
+      <div>{{ item.date_added | fmt_date if item.date_added else '—' }}</div>
     </div>
     <div>
       <div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;font-weight:600;margin-bottom:.2rem">Aangemaakt</div>
-      <div style="color:var(--muted)">{{ item.created_at[:10] }}</div>
+      <div style="color:var(--muted)">{{ item.created_at | fmt_date }}</div>
     </div>
 
   </div>
@@ -111,7 +111,7 @@
     <tbody>
       {% for entry in log_entries %}
       <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:.55rem .5rem;color:var(--muted);font-size:0.82rem;white-space:nowrap">{{ entry.created_at[:16] }}</td>
+        <td style="padding:.55rem .5rem;color:var(--muted);font-size:0.82rem;white-space:nowrap">{{ entry.created_at | fmt_datetime }}</td>
         <td style="padding:.55rem .5rem">
           <span style="font-weight:600;
             {% if entry.action == 'created' %}color:var(--green)

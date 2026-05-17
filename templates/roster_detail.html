@@ -26,7 +26,7 @@
         <span class="status-badge status-{{ profile.status }}">{{ STATUS_NL.get(profile.status, profile.status) }}</span>
       </div>
       {% if profile.date_of_birth %}
-      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">Geboortedatum: {{ profile.date_of_birth }}</p>
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">Geboortedatum: {{ profile.date_of_birth | fmt_date }}</p>
       {% endif %}
       {% if profile.federation_id %}
       <p style="color:var(--muted);font-size:0.85rem;margin:0 0 .4rem">Stamnummer: {{ profile.federation_id }}</p>
@@ -125,9 +125,9 @@
         <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
           <span class="remark-type-badge remark-{{ r.remark_type }}">{{ REMARK_TYPE_NL.get(r.remark_type, r.remark_type) }}</span>
           {% if r.is_private %}<span style="font-size:0.68rem;color:var(--red);margin-left:.3rem">🔒 privé</span>{% endif %}
-          {% if r.due_date %}<span style="color:var(--muted);font-size:0.72rem;margin-left:.4rem">vervaldatum {{ r.due_date }}</span>{% endif %}
+          {% if r.due_date %}<span style="color:var(--muted);font-size:0.72rem;margin-left:.4rem">vervaldatum {{ r.due_date | fmt_date }}</span>{% endif %}
         </span>
-        <span style="font-size:0.75rem;color:var(--muted)">{{ r.author_email or 'unknown' }} · {{ r.created_at[:10] }}</span>
+        <span style="font-size:0.75rem;color:var(--muted)">{{ r.author_email or 'unknown' }} · {{ r.created_at | fmt_date }}</span>
       </div>
       <p style="margin:0;font-size:0.9rem;white-space:pre-wrap">{{ r.content }}</p>
       {% if can_view_all() %}
@@ -231,7 +231,7 @@
           </td>
           <td style="padding:.5rem .5rem;color:var(--muted)">{{ KIT_STATE_NL.get(ki.state, ki.state) }}</td>
           <td style="padding:.5rem .5rem;color:var(--muted)">{{ ki.team_name or '—' }}</td>
-          <td style="padding:.5rem .5rem;color:var(--muted);font-size:0.82rem">{{ (ki.date_added or ki.created_at)[:10] }}</td>
+          <td style="padding:.5rem .5rem;color:var(--muted);font-size:0.82rem">{{ (ki.date_added or ki.created_at) | fmt_date }}</td>
           <td style="padding:.5rem .5rem">
             <a href="{{ url_for('kit_detail', item_id=ki.id) }}" class="btn btn-sm btn-outline">Bekijken</a>
           </td>
@@ -260,7 +260,7 @@
       <tbody>
         {% for entry in kit_log_profile %}
         <tr style="border-bottom:1px solid var(--border)">
-          <td style="padding:.45rem .5rem;color:var(--muted);font-size:0.82rem;white-space:nowrap">{{ entry.created_at[:10] }}</td>
+          <td style="padding:.45rem .5rem;color:var(--muted);font-size:0.82rem;white-space:nowrap">{{ entry.created_at | fmt_date }}</td>
           <td style="padding:.45rem .5rem">
             <a href="{{ url_for('kit_detail', item_id=entry.item_id) }}" style="font-size:0.85rem">{{ entry.item_label }}</a>
           </td>

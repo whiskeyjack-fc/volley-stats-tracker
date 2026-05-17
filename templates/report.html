@@ -6,7 +6,7 @@
 <div class="page-header">
   <div>
     <h1>{{ game.team_name }} <span class="vs">vs</span> {{ game.opponent }}</h1>
-    <small>{{ game.played_at }}{% if game.season %} &nbsp;·&nbsp; <span class="season-tag">{{ game.season }}</span>{% endif %}</small>
+    <small>{{ game.played_at | fmt_date }}{% if game.season %} &nbsp;·&nbsp; <span class="season-tag">{{ game.season }}</span>{% endif %}</small>
   </div>
   <div class="track-actions">
     <a href="{{ url_for('track', game_id=game.id) }}" class="btn btn-outline">← Bijhouden</a>

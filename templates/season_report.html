@@ -134,7 +134,7 @@
     <tbody>
       {% for gt in rows %}
       <tr class="game-row">
-        <td><a href="{{ url_for('report', game_id=gt.game_id) }}" class="muted">{{ gt.played_at }} vs {{ gt.opponent }}</a></td>
+        <td><a href="{{ url_for('report', game_id=gt.game_id) }}" class="muted">{{ gt.played_at | fmt_date }} vs {{ gt.opponent }}</a></td>
         {% if gt.stats[stat].total == 0 %}
         <td colspan="{{ results|length + (4 if stat in quality_stats else 3) }}" class="no-data">—</td>
         {% else %}
@@ -189,7 +189,7 @@
   <tbody>
     {% for g in games %}
     <tr>
-      <td>{{ g.played_at }}</td>
+      <td>{{ g.played_at | fmt_date }}</td>
       <td>{{ g.opponent }}</td>
       <td class="actions">
         <a class="btn btn-sm btn-outline" href="{{ url_for('report', game_id=g.id) }}">Rapport</a>
@@ -214,6 +214,7 @@
 
 <script src="{{ url_for('static', filename='js/charts-common.js') }}"></script>
 <script>
+function fmtDate(iso) { if (!iso) return ''; const p = iso.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : iso; }
 const CD = {{ chart_data_all | tojson }};
 const SPLIT_AVAILABLE = {{ (active_set_type in ('main', 'reserve')) | tojson }};
 const GAME_SET_DATA = {{ game_set_data | tojson }};
@@ -422,7 +423,7 @@ function renderSplitTables() {
       hLink.href = `/games/${game.game_id}/report`;
       hLink.className = 'muted';
       const hStrong = document.createElement('strong');
-      hStrong.textContent = `${game.played_at} ${game.label}`;
+      hStrong.textContent = `${fmtDate(game.played_at)} ${game.label}`;
       hLink.appendChild(hStrong);
       hTd.appendChild(hLink);
       hRow.appendChild(hTd);

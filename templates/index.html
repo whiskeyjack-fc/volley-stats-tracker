@@ -52,7 +52,7 @@
   <tbody>
     {% for g in games %}
     <tr>
-      <td>{{ g.played_at }}</td>
+      <td>{{ g.played_at | fmt_date }}</td>
       <td>{% if g.season %}<span class="season-tag">{{ g.season }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
       <td>{{ g.team_short_name or g.team_name }}</td>
       <td>{{ g.opponent }}</td>

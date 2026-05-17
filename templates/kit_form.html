@@ -100,16 +100,6 @@
       </label>
 
       <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
-        Teamlabel
-        <select name="team_id" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem;font-size:0.9rem">
-          <option value="">— geen —</option>
-          {% for t in all_teams %}
-          <option value="{{ t.id }}" {% if item and item.team_id == t.id %}selected{% endif %}>{{ t.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-
-      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
         Datum toegevoegd
         <input type="date" name="date_added" value="{{ item.date_added[:10] if item and item.date_added else '' }}"
                style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem;font-size:0.9rem">

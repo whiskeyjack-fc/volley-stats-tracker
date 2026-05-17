@@ -72,7 +72,7 @@
           </form>
           {% endif %}
         </td>
-        <td style="padding:.65rem .5rem;color:var(--muted)">{{ u.created_at[:10] }}</td>
+        <td style="padding:.65rem .5rem;color:var(--muted)">{{ u.created_at | fmt_date }}</td>
         <td style="padding:.65rem .5rem">
           {% if current_user.role == 'admin' %}
           <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">

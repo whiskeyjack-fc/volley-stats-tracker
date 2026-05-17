@@ -60,7 +60,7 @@
     <tbody>
       {% for entry in entries %}
       <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:.6rem .5rem;color:var(--muted);font-size:0.82rem;white-space:nowrap">{{ entry.created_at[:16] }}</td>
+        <td style="padding:.6rem .5rem;color:var(--muted);font-size:0.82rem;white-space:nowrap">{{ entry.created_at | fmt_datetime }}</td>
         <td style="padding:.6rem .5rem">
           <a href="{{ url_for('kit_detail', item_id=entry.item_id) }}" style="font-size:0.85rem">
             {{ entry.item_label }}
