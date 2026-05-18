@@ -14,7 +14,7 @@
       </small>
     </div>
     <div class="track-actions">
-      <a href="{{ url_for('index') }}" class="btn btn-outline">← Wedstrijden</a>
+      <a href="{{ url_for('games_list') }}" class="btn btn-outline">← Wedstrijden</a>
       <button id="filter-toggle-btn" class="btn btn-outline btn-sm filter-toggle-btn" aria-expanded="true" aria-controls="filter-rows">Filters <span class="filter-caret" aria-hidden="true">&#x25BE;</span></button>
     </div>
   </div>
@@ -112,7 +112,7 @@
   <h2>Nog geen spelersstatistieken</h2>
   <p>Registreer statistieken in een wedstrijd om spelersrapporten hier te zien.</p>
   <div class="player-empty-actions">
-    <a href="{{ url_for('index') }}" class="btn btn-outline">Naar wedstrijden</a>
+    <a href="{{ url_for('games_list') }}" class="btn btn-outline">Naar wedstrijden</a>
   </div>
   {% endif %}
 </div>

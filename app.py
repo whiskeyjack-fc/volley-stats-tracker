@@ -911,6 +911,12 @@ def require_kit_access():
 @app.route("/")
 @login_required
 def index():
+    return redirect(url_for("roster_list"))
+
+
+@app.route("/games")
+@login_required
+def games_list():
     db = get_db()
     ucond, uparams = _uid_cond()
     gcond = " AND g.user_id=?" if ucond else ""

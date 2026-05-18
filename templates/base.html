@@ -36,7 +36,7 @@
 </head>
 <body>
   <header>
-    <a class="logo" href="{{ url_for('index') }}">🏐 VolleyStats</a>
+    <a class="logo" href="{{ url_for('roster_list') }}">🏐 VolleyStats</a>
     <nav class="main-nav">
       {% if current_user.is_authenticated %}
       <span class="nav-group-label">Beheer</span>
@@ -45,19 +45,20 @@
       {% if can_view_all() %}<a href="{{ url_for('training_group_list') }}">Trainingsgroepen</a>{% endif %}
       <span class="nav-sep"></span>
       <span class="nav-group-label">Statistieken</span>
-      <a href="{{ url_for('index') }}">Wedstrijden</a>
+      <a href="{{ url_for('games_list') }}">Wedstrijden</a>
       <a href="{{ url_for('player_report') }}">Spelers</a>
       <a href="{{ url_for('season_list') }}">Seizoenen</a>
-      {% if is_admin() %}
-      <span class="nav-sep"></span>
-      <span class="nav-group-label">Beheerder</span>
-      <a href="{{ url_for('admin_users') }}">Gebruikers</a>
-      {% endif %}
       {% if can_manage_kit() or is_kit_manager() %}
       <span class="nav-sep"></span>
       <span class="nav-group-label">Materiaal</span>
       <a href="{{ url_for('kit_list') }}">Materiaallijst</a>
       <a href="{{ url_for('kit_log_page') }}">Materiaallog</a>
+      {% endif %}
+      {% if is_admin() %}
+      <span class="nav-sep"></span>
+      <span class="nav-group-label">Beheerder</span>
+      <a href="{{ url_for('admin_users') }}">Gebruikers</a>
+      <a href="{{ url_for('admin_backup_download') }}">DB backup</a>
       {% endif %}
       <span class="nav-user">{{ current_user.email }} <span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span></span>
       <form method="post" action="{{ url_for('logout') }}" style="display:inline">
