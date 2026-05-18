@@ -59,6 +59,10 @@
     {% endfor %}
   {% endcall %}
 
+  <input type="text" name="remark" value="{{ f_remark }}"
+         placeholder="Opmerking zoeken…"
+         class="filter-search" style="max-width:14rem" />
+
   <button type="submit" class="btn btn-sm">Filteren</button>
 </form>
 </div>{# /.sticky-page-header #}
@@ -91,29 +95,50 @@
         <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Lid</th>
         <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Team</th>
         <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Toegevoegd</th>
+        <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Opmerking</th>
         <th style="padding:.55rem .5rem"></th>
       </tr>
     </thead>
     <tbody>
       {% for item in items %}
-      <tr style="border-bottom:1px solid var(--border)">
+      <tr style="cursor:pointer;border-bottom:1px solid var(--border)" onclick="if(!event.target.closest('.editable-cell'))location.href='{{ url_for('kit_detail', item_id=item.id) }}'">
         <td style="padding:.6rem .5rem">
           <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-form">
         </td>
         <td style="padding:.6rem .5rem">{{ item.model }}</td>
         <td style="padding:.6rem .5rem">{{ item.type }}</td>
         <td style="padding:.6rem .5rem">{{ item.size }}</td>
-        <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.number or '—' }}</td>
-        <td style="padding:.6rem .5rem">{{ item.name_printed or '—' }}</td>
-        <td style="padding:.6rem .5rem">
-          <span class="role-badge"
-                style="--kit-status-color:{% if item.status == 'in stock' %}var(--green){% elif item.status == 'assigned' %}var(--accent){% elif item.status == 'lost' %}var(--red){% else %}var(--muted){% endif %};
-                       background:transparent;border:1px solid var(--kit-status-color);color:var(--kit-status-color)">
-            {{ KIT_STATUS_NL.get(item.status, item.status) }}
-          </span>
+        {% if can_manage_kit() %}
+        <td class="editable-cell" data-iid="{{ item.id }}" data-field="number" data-val="{{ item.number or '' }}" title="Klik om te bewerken">
+          <span class="ec-display" style="color:var(--muted)">{{ item.number or '—' }}</span>
         </td>
-        <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.state }}</td>
+        {% else %}
+        <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.number or '—' }}</td>
+        {% endif %}
+        <td style="padding:.6rem .5rem">{{ item.name_printed or '—' }}</td>
+        {% if can_manage_kit() %}
+        <td class="editable-cell" data-iid="{{ item.id }}" data-field="status" data-val="{{ item.status }}" title="Klik om te bewerken">
+          <span class="ec-display"><span class="kit-status-badge" style="color:{% if item.status == 'in stock' %}var(--green){% elif item.status == 'assigned' %}var(--accent){% elif item.status == 'lost' %}var(--red){% else %}var(--muted){% endif %}">{{ KIT_STATUS_NL.get(item.status, item.status) }}</span></span>
+        </td>
+        {% else %}
+        <td style="padding:.6rem .5rem">
+          <span class="kit-status-badge" style="color:{% if item.status == 'in stock' %}var(--green){% elif item.status == 'assigned' %}var(--accent){% elif item.status == 'lost' %}var(--red){% else %}var(--muted){% endif %}">{{ KIT_STATUS_NL.get(item.status, item.status) }}</span>
+        </td>
+        {% endif %}
+        {% if can_manage_kit() %}
+        <td class="editable-cell" data-iid="{{ item.id }}" data-field="state" data-val="{{ item.state or '' }}" title="Klik om te bewerken">
+          <span class="ec-display" style="color:var(--muted)">{{ item.state or '—' }}</span>
+        </td>
+        {% else %}
+        <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.state or '—' }}</td>
+        {% endif %}
+        {% if can_manage_kit() %}
+        <td class="editable-cell" data-iid="{{ item.id }}" data-field="store" data-val="{{ item.store or '' }}" title="Klik om te bewerken">
+          <span class="ec-display" style="color:var(--muted)">{{ item.store or '—' }}</span>
+        </td>
+        {% else %}
         <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.store or '—' }}</td>
+        {% endif %}
         <td style="padding:.6rem .5rem">
           {% if item.profile_id %}
           <a href="{{ url_for('roster_detail', profile_id=item.profile_id) }}" style="font-size:0.85rem">{{ item.member_name }}</a>
@@ -123,17 +148,136 @@
         </td>
         <td style="padding:.6rem .5rem;color:var(--muted)">{{ item.team_name or '—' }}</td>
         <td style="padding:.6rem .5rem;color:var(--muted);font-size:0.82rem">{{ (item.date_added or item.created_at) | fmt_date }}</td>
+        <td style="padding:.6rem .5rem;color:var(--muted);font-size:0.82rem;max-width:14rem">
+          {% if item.last_remark %}
+          <span title="{{ item.last_remark }}">{{ item.last_remark | truncate(60, True, '…') }}</span>
+          {% else %}
+          <span>—</span>
+          {% endif %}
+        </td>
         <td style="padding:.6rem .5rem">
           <a href="{{ url_for('kit_detail', item_id=item.id) }}" class="btn btn-sm btn-outline">Bekijken</a>
         </td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="13" style="padding:1.5rem .5rem;text-align:center;color:var(--muted)">Geen materiaalinventaris gevonden.</td>
+        <td colspan="14" style="padding:1.5rem .5rem;text-align:center;color:var(--muted)">Geen materiaalinventaris gevonden.</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   </form>
 </div>
+
+<style>
+.editable-cell { cursor:text; position:relative; padding:.6rem .5rem; }
+.editable-cell:hover .ec-display { outline:1px dashed var(--border); border-radius:3px; padding:1px 3px; margin:-1px -3px; }
+.ec-input { background:var(--surface2); color:var(--text); border:1px solid var(--accent); border-radius:4px;
+            padding:2px 5px; font-size:inherit; font-family:inherit; outline:none; max-width:100%; }
+select.ec-input { cursor:pointer; }
+.ec-saved { animation:ec-flash-ok 1.2s ease; }
+.ec-error  { animation:ec-flash-err 1.5s ease; }
+@keyframes ec-flash-ok  { 0%,100%{background:transparent} 20%{background:color-mix(in srgb,var(--green) 25%,transparent)} }
+@keyframes ec-flash-err { 0%,100%{background:transparent} 20%{background:color-mix(in srgb,var(--red)   25%,transparent)} }
+.kit-status-badge { display:inline-block; border-radius:999px; padding:.15em .55em; font-size:0.78rem;
+                    border:1px solid currentColor; background:transparent; }
+</style>
+
+<script>
+(function(){
+  const STATUS_NL = {'in stock':'Op voorraad','assigned':'Toegewezen','lost':'Verloren','retired':'Afgeschreven'};
+  const STATUS_OPTS = ['in stock','assigned','lost','retired'];
+  const STATE_NL   = {'nieuw':'Nieuw','misdruk':'Misdruk','gebruikt':'Gebruikt','beschadigd':'Beschadigd'};
+  const STATE_OPTS = ['nieuw','misdruk','gebruikt','beschadigd'];
+
+  function statusColor(val) {
+    if (val === 'in stock') return 'var(--green)';
+    if (val === 'assigned')  return 'var(--accent)';
+    if (val === 'lost')      return 'var(--red)';
+    return 'var(--muted)';
+  }
+
+  function renderDisplay(field, val) {
+    if (!val) return '\u2014';
+    if (field === 'status')
+      return '<span class="kit-status-badge" style="color:' + statusColor(val) + '">' + (STATUS_NL[val] || val) + '</span>';
+    if (field === 'state') return STATE_NL[val] || val;
+    return val;
+  }
+
+  document.addEventListener('click', function(e) {
+    var cell = e.target.closest('.editable-cell');
+    if (!cell || cell.querySelector('.ec-input')) return;
+    e.stopPropagation();
+    var field   = cell.dataset.field;
+    var iid     = cell.dataset.iid;
+    var origVal = cell.dataset.val;
+    var display = cell.querySelector('.ec-display');
+    var input;
+    if (field === 'status') {
+      input = document.createElement('select');
+      STATUS_OPTS.forEach(function(s) {
+        var o = document.createElement('option');
+        o.value = s; o.textContent = STATUS_NL[s];
+        if (s === origVal) o.selected = true;
+        input.appendChild(o);
+      });
+    } else if (field === 'state') {
+      input = document.createElement('select');
+      STATE_OPTS.forEach(function(s) {
+        var o = document.createElement('option');
+        o.value = s; o.textContent = STATE_NL[s];
+        if (s === origVal) o.selected = true;
+        input.appendChild(o);
+      });
+    } else {
+      input = document.createElement('input');
+      input.type = 'text';
+      input.value = origVal;
+      if (field === 'number') { input.size = 5; input.pattern = '[0-9]*'; }
+      if (field === 'store')  { input.size = 12; }
+    }
+    input.className = 'ec-input';
+    display.replaceWith(input);
+    input.focus();
+    if (input.tagName === 'INPUT') input.select();
+
+    var cancelled = false;
+    function cancel() { cancelled = true; input.replaceWith(display); }
+    function save() {
+      if (cancelled) return;
+      var newVal = input.value.trim();
+      input.replaceWith(display);
+      if (newVal === origVal) return;
+      display.innerHTML = renderDisplay(field, newVal);
+      cell.dataset.val = newVal;
+      fetch('/api/kit/' + iid, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({field: field, value: newVal || null})
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.ok) {
+          cell.classList.add('ec-saved');
+          setTimeout(function(){ cell.classList.remove('ec-saved'); }, 1200);
+        } else {
+          display.innerHTML = renderDisplay(field, origVal);
+          cell.dataset.val = origVal;
+          cell.classList.add('ec-error');
+          setTimeout(function(){ cell.classList.remove('ec-error'); }, 1500);
+        }
+      }).catch(function() {
+        display.innerHTML = renderDisplay(field, origVal);
+        cell.dataset.val = origVal;
+        cell.classList.add('ec-error');
+        setTimeout(function(){ cell.classList.remove('ec-error'); }, 1500);
+      });
+    }
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+      if (ev.key === 'Escape') cancel();
+    });
+  }, true);
+}());
+</script>
 {% endblock %}

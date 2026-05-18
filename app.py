@@ -3110,6 +3110,7 @@ def kit_list():
     f_team_id  = request.args.get("team_id", "")
     f_profile  = request.args.get("profile_id", "")
     f_store    = request.args.get("store", "")
+    f_remark   = request.args.get("remark", "").strip()
 
     where  = "WHERE ki.is_deleted = 0"
     params = []
@@ -3143,11 +3144,18 @@ def kit_list():
     if f_store:
         where += " AND ki.store = ?"
         params.append(f_store)
+    if f_remark:
+        where += (
+            " AND EXISTS (SELECT 1 FROM kit_log kl WHERE kl.item_id = ki.id"
+            " AND kl.action = 'remark' AND kl.note LIKE ?)"
+        )
+        params.append("%" + f_remark + "%")
 
     items = db.execute(
         "SELECT ki.*, "
         "pp.first_name || ' ' || pp.last_name AS member_name, "
-        "COALESCE(ct.short_name, ct.name, dct.short_name, dct.name) AS team_name "
+        "COALESCE(ct.short_name, ct.name, dct.short_name, dct.name) AS team_name, "
+        "lr.note AS last_remark "
         "FROM kit_items ki "
         "LEFT JOIN player_profiles pp ON pp.id = ki.profile_id "
         "LEFT JOIN club_teams ct ON ct.id = ki.team_id "
@@ -3159,6 +3167,13 @@ def kit_list():
         "  AND ctp.id = (SELECT MAX(ctp2.id) FROM club_team_players ctp2 "
         "               WHERE ctp2.profile_id = ctp.profile_id) "
         ") dct ON dct.profile_id = ki.profile_id "
+        "LEFT JOIN ("
+        "  SELECT item_id, note FROM kit_log"
+        "  WHERE action = 'remark' AND note IS NOT NULL"
+        "  AND id = (SELECT MAX(kl2.id) FROM kit_log kl2"
+        "            WHERE kl2.item_id = kit_log.item_id"
+        "            AND kl2.action = 'remark' AND kl2.note IS NOT NULL)"
+        ") lr ON lr.item_id = ki.id "
         f"{where} ORDER BY ki.created_at DESC",
         params
     ).fetchall()
@@ -3185,6 +3200,7 @@ def kit_list():
         f_team_id=f_team_id,
         f_profile=f_profile,
         f_store=f_store,
+        f_remark=f_remark,
         KIT_MODELS=KIT_MODELS,
         KIT_TYPES=KIT_TYPES,
         KIT_STATUSES=KIT_STATUSES,
