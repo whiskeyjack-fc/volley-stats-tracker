@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{% if team %}Edit Team{% else %}New Team{% endif %} — VolleyStats{% endblock %}
+{% from "_macros.html" import player_roster_section %}
+{% block title %}{% if team %}Team bewerken{% else %}Nieuw team{% endif %} — VolleyStats{% endblock %}
 {% block content %}
-<h1>{% if team %}Edit Team{% else %}New Team{% endif %}</h1>
+<h1>{% if team %}Team bewerken{% else %}Nieuw team{% endif %}</h1>
 
 {% if error %}
 <div class="error-banner">{{ error }}</div>
@@ -9,80 +10,185 @@
 
 <form method="POST">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
   <section class="card">
-    <h2>Team Info</h2>
+    <h2>Teaminfo</h2>
     <div class="field-row">
-      <label>Team Name
+      <label>Teamnaam
         <input type="text" name="team_name" required value="{{ team.name if team else '' }}"
-               placeholder="e.g. Spikemasters" />
+               placeholder="bijv. VC Belvoc BELSELE B" />
       </label>
     </div>
-  </section>
-
-  <section class="card">
-    <h2>Roster</h2>
-    <table class="table" id="players-table">
-      <thead>
-        <tr><th class="num-col">#</th><th>Name</th><th></th></tr>
-      </thead>
-      <tbody id="players-body">
-        {% if players %}
-          {% for p in players %}
-          <tr>
-            <td><input type="text" name="player_number" value="{{ p.number or '' }}" placeholder="#" /></td>
-            <td><input type="text" name="player_name" value="{{ p.name | title }}" placeholder="Player name" /></td>
-            <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
-          </tr>
+    <div style="display:grid;grid-template-columns:1fr 1fr{% if team %} 1fr{% endif %};gap:.75rem;margin-top:.75rem">
+      <label>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Korte naam</span>
+        <input type="text" name="short_name" maxlength="20"
+               value="{{ (season_info.short_name if season_info else None) or (team.short_name if team and team.short_name else '') }}"
+               placeholder="e.g. HP3"
+               style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
+      </label>
+      <label>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Divisie{% if selected_season_id %} <span style="font-weight:400;text-transform:none;letter-spacing:0">(scheid meerdere met /)</span>{% endif %}</span>
+        <input type="text" name="division" maxlength="120"
+               value="{{ (season_info.division if season_info else None) or (team.division if team and team.division else '') }}"
+               placeholder="{% if selected_season_id %}e.g. Promo 3A / Promo 3B{% else %}e.g. HEREN PROMO 3A{% endif %}"
+               style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
+      </label>
+      {% if team %}
+      <label id="season-label">
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Roosterseizoen</span>
+        <select id="season-select"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box">
+          <option value="" {% if not selected_season_id %}selected{% endif %}>— Selecteer seizoen —</option>
+          {% for s in seasons %}
+          <option value="{{ s.id }}" {% if selected_season_id == s.id %}selected{% endif %}>{{ s.name }}</option>
           {% endfor %}
-        {% else %}
-          <tr>
-            <td><input type="text" name="player_number" placeholder="#" /></td>
-            <td><input type="text" name="player_name" placeholder="Player name" /></td>
-            <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
-          </tr>
-        {% endif %}
-      </tbody>
-    </table>
-    <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
-      <button type="button" class="btn btn-outline" id="add-player">+ Add Player</button>
-      <button type="button" class="btn btn-sm btn-danger" id="clear-players">Delete all players</button>
+          <option value="__new__">＋ Seizoen toevoegen…</option>
+        </select>
+        <input type="hidden" id="season-id-value" value="{{ selected_season_id or '' }}" />
+        <div id="new-season-inline" style="display:none;margin-top:0.4rem">
+          <div style="display:flex;gap:0.4rem;align-items:center">
+            <input type="text" id="new-season-input" placeholder="S25-26" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem" />
+            <button type="button" class="btn btn-sm btn-primary" id="add-season-btn">Toevoegen</button>
+            <button type="button" class="btn btn-sm btn-outline" id="cancel-season-btn">✕</button>
+          </div>
+          <small id="season-error" style="color:var(--red);display:none">Formaat moet Sxx-jj zijn (bijv. S25-26)</small>
+        </div>
+      </label>
+      {% endif %}
     </div>
   </section>
 
+  {% if team and selected_season_id %}
+  {{ player_roster_section(players, all_profiles, title='Spelerslijst', show_roles=True, team_member_roles=team_member_roles) }}
+  {% elif team %}
+  <div class="card" style="text-align:center;padding:1.5rem 1rem;color:var(--muted);font-size:0.9rem">
+    Selecteer een seizoen om de spelerslijst te beheren.
+  </div>
+  {% endif %}
+
   <div class="form-actions" style="gap:0.75rem">
-    <a href="{{ url_for('team_list') }}" class="btn btn-outline">Cancel</a>
+    <a href="{{ url_for('team_list') }}" class="btn btn-outline">Annuleren</a>
     <button type="submit" class="btn btn-primary btn-lg">
-      {% if team %}Save Changes{% else %}Create Team{% endif %}
+      {% if team %}Wijzigingen opslaan{% else %}Team aanmaken{% endif %}
     </button>
   </div>
 </form>
 
-<script>
-  document.getElementById("add-player").addEventListener("click", () => {
-    const tbody = document.getElementById("players-body");
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td><input type="text" name="player_number" placeholder="#" /></td>
-      <td><input type="text" name="player_name" placeholder="Player name" /></td>
-      <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>`;
-    tbody.appendChild(row);
-  });
+<style>
+.roles-td { position: relative; min-width: 150px; }
+.roles-btn {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: .35rem .5rem;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color .15s;
+}
+.roles-btn:hover { border-color: var(--accent); }
+.roles-panel {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  z-index: 200;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .45rem .5rem;
+  min-width: 170px;
+  flex-direction: column;
+  gap: .15rem;
+  box-shadow: 0 4px 14px rgba(0,0,0,.4);
+}
+.roles-check-label {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: 0.83rem;
+  cursor: pointer;
+  padding: .2rem .3rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.roles-check-label:hover { background: var(--surface3, rgba(255,255,255,.06)); }
+</style>
 
-  document.getElementById("players-body").addEventListener("click", (e) => {
-    if (e.target.classList.contains("remove-row")) {
-      const rows = document.querySelectorAll("#players-body tr");
-      if (rows.length > 1) e.target.closest("tr").remove();
+<script src="{{ url_for('static', filename='js/player-picker.js') }}"></script>
+<script>
+  {% if team and selected_season_id %}
+  initPlayerPicker({{ all_profiles | tojson }}, { showRoles: true });
+  {% endif %}
+
+  {% if team %}
+  // ── Season selector with inline create ──────────────────────────
+  const seasonSelect    = document.getElementById('season-select');
+  const seasonIdValue   = document.getElementById('season-id-value');
+  const newSeasonInline = document.getElementById('new-season-inline');
+  const newSeasonInput  = document.getElementById('new-season-input');
+  const addSeasonBtn    = document.getElementById('add-season-btn');
+  const cancelSeasonBtn = document.getElementById('cancel-season-btn');
+  const seasonError     = document.getElementById('season-error');
+
+  seasonSelect.addEventListener('change', () => {
+    if (seasonSelect.value === '__new__') {
+      newSeasonInline.style.display = 'block';
+      newSeasonInput.focus();
+      seasonIdValue.value = '';
+    } else {
+      newSeasonInline.style.display = 'none';
+      seasonIdValue.value = seasonSelect.value;
+      seasonError.style.display = 'none';
+      // Navigate so the roster reloads for the chosen season
+      window.location = '{{ url_for("edit_team", team_id=team.id) }}' + (seasonSelect.value ? '?season_id=' + seasonSelect.value : '');
     }
   });
 
-  document.getElementById("clear-players").addEventListener("click", () => {
-    if (!confirm("Remove all players from the roster?")) return;
-    document.getElementById("players-body").innerHTML =
-      '<tr>' +
-      '<td><input type="text" name="player_number" placeholder="#" /></td>' +
-      '<td><input type="text" name="player_name" placeholder="Player name" /></td>' +
-      '<td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>' +
-      '</tr>';
+  addSeasonBtn.addEventListener('click', async () => {
+    const name = newSeasonInput.value.trim();
+    if (!/^S\d{2}-\d{2}$/.test(name)) {
+      seasonError.style.display = 'block';
+      return;
+    }
+    seasonError.style.display = 'none';
+    try {
+      const res = await fetch('/api/seasons', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name})
+      });
+      if (!res.ok && res.status !== 409) {
+        const err = await res.json();
+        alert(err.error || 'Failed to add season');
+        return;
+      }
+      const data = await res.json();
+      let opt = [...seasonSelect.options].find(o => o.value === String(data.id));
+      if (!opt) {
+        opt = new Option(name, data.id);
+        seasonSelect.insertBefore(opt, seasonSelect.lastElementChild);
+      }
+      newSeasonInline.style.display = 'none';
+      newSeasonInput.value = '';
+      // Navigate to reload roster for the new season
+      window.location = '{{ url_for("edit_team", team_id=team.id) }}?season_id=' + data.id;
+    } catch (e) {
+      alert('Network error adding season');
+    }
   });
+
+  cancelSeasonBtn.addEventListener('click', () => {
+    newSeasonInline.style.display = 'none';
+    seasonSelect.value = seasonIdValue.value || '';
+    newSeasonInput.value = '';
+    seasonError.style.display = 'none';
+  });
+  {% endif %}
 </script>
 {% endblock %}

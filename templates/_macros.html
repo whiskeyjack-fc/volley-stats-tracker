@@ -1,0 +1,211 @@
+{#
+  VolleyStats shared Jinja2 macros
+  Import with: {% from "_macros.html" import filter_select %}
+               {% from "_macros.html" import filter_chips %}
+#}
+
+{# ── filter_select ────────────────────────────────────────────────────────
+   Renders a <select class="filter-select"> with a standard "all" option.
+   Use the {% call %} block to provide the <option> elements.
+
+   Usage:
+     {% call filter_select('status', 'All statuses') %}
+       {% for s in ['active','prospect','trial'] %}
+       <option value="{{ s }}" {% if current == s %}selected{% endif %}>{{ s|capitalize }}</option>
+       {% endfor %}
+     {% endcall %}
+#}
+{% macro filter_select(name, all_label) %}
+<select name="{{ name }}" class="filter-select">
+  <option value="">{{ all_label }}</option>
+  {{ caller() }}
+</select>
+{% endmacro %}
+
+
+{# ── filter_chips ─────────────────────────────────────────────────────────
+   Renders a .set-filter-bar row of .set-chip anchor links.
+   Used on report pages where filters are URL-driven (no form).
+
+   Use the {% call %} block to provide all chip content (anchors, buttons,
+   dividers). The macro provides the wrapper div and optional label.
+
+   Parameters:
+     label – left label text, e.g. "Season:" — pass "" to omit the label
+
+   Usage:
+     {% call filter_chips('Season:') %}
+       {% for s in all_seasons %}
+       <a href="..." class="set-chip {% if s == season %}active{% endif %}">{{ s }}</a>
+       {% endfor %}
+     {% endcall %}
+#}
+{# ── player_roster_section ────────────────────────────────────────────────
+   Renders the Players <section> card with a profile dropdown per row.
+   Requires player-picker.js to be loaded and initPlayerPicker() called by
+   the embedding page.
+
+   Parameters:
+     players      — list of existing player rows (sqlite3.Row or dict) with
+                    a profile_id field; pass [] for a new/empty roster
+     all_profiles — list of profile dicts from player_profiles (for initial
+                    server-side option rendering; JS will re-filter on load)
+     title        — section heading (default "Players")
+     show_clear   — show "Delete all players" button (default True)
+     note         — optional hint text shown below the heading
+     show_roles   — show a Roles column for team membership (default False)
+     team_member_roles — list of (value, label) tuples for role options
+
+   Usage:
+     {% from "_macros.html" import player_roster_section %}
+     {{ player_roster_section(players, all_profiles, title='Roster') }}
+#}
+{% macro player_roster_section(players, all_profiles, title='Spelers', show_clear=True, note=None, show_roles=False, team_member_roles=[]) %}
+<section class="card">
+  <h2>{{ title }}</h2>
+  {% if note %}<p class="grid-hint">{{ note }}</p>{% endif %}
+  <table class="table" id="players-table">
+    <thead>
+      <tr>
+        <th>Lid</th>
+        {% if show_roles %}<th>Rollen</th>{% endif %}
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="players-body">
+      {% if players %}
+        {% for p in players %}
+        {% set cur_roles = (p.roles or 'player').split(',') | map('trim') | list %}
+        {% set ns = namespace(label='') %}
+        {% for pr in all_profiles %}{% if pr.id == p.profile_id %}{% set ns.label = ('#' + pr.number|string + ' ' if pr.number else '') + pr.first_name + ' ' + pr.last_name %}{% endif %}{% endfor %}
+        <tr>
+          <td>
+            <div class="player-combo">
+              <input type="text" class="player-search-input" autocomplete="off"
+                     placeholder="— selecteer lid —" value="{{ ns.label }}">
+              <ul class="player-dropdown" style="display:none"></ul>
+              <input type="hidden" name="player_profile_id" value="{{ p.profile_id or '' }}">
+            </div>
+          </td>
+          {% if show_roles %}
+          {% set rns = namespace(labels=[]) %}
+          {% for rv, rl in team_member_roles %}{% if rv in cur_roles %}{% set rns.labels = rns.labels + [rl] %}{% endif %}{% endfor %}
+          {% set role_label = rns.labels | join(', ') or 'Speler' %}
+          <td class="roles-td">
+            <button type="button" class="roles-btn">{{ role_label }} ▾</button>
+            <div class="roles-panel" style="display:none">
+              {% for rv, rl in team_member_roles %}
+              <label class="roles-check-label">
+                <input type="checkbox" value="{{ rv }}" {% if rv in cur_roles %}checked{% endif %}
+                       style="accent-color:var(--accent)"> {{ rl }}
+              </label>
+              {% endfor %}
+            </div>
+            <input type="hidden" name="player_roles" value="{{ cur_roles | join(',') }}">
+          </td>
+          {% endif %}
+          <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td>
+            <div class="player-combo">
+              <input type="text" class="player-search-input" autocomplete="off"
+                     placeholder="— selecteer lid —" value="">
+              <ul class="player-dropdown" style="display:none"></ul>
+              <input type="hidden" name="player_profile_id" value="">
+            </div>
+          </td>
+          {% if show_roles %}
+          <td class="roles-td">
+            <button type="button" class="roles-btn">Speler ▾</button>
+            <div class="roles-panel" style="display:none">
+              {% for rv, rl in team_member_roles %}
+              <label class="roles-check-label">
+                <input type="checkbox" value="{{ rv }}" {% if rv == 'player' %}checked{% endif %}
+                       style="accent-color:var(--accent)"> {{ rl }}
+              </label>
+              {% endfor %}
+            </div>
+            <input type="hidden" name="player_roles" value="player">
+          </td>
+          {% endif %}
+          <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+  <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
+    <button type="button" class="btn btn-outline" id="add-player">+ Lid toevoegen</button>
+    {% if show_clear %}
+    <button type="button" class="btn btn-sm btn-danger" id="clear-players">Alle leden verwijderen</button>
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+
+{% macro filter_chips(label) %}
+<div class="set-filter-bar">
+  {% if label %}<span class="set-label">{{ label }}</span>{% endif %}
+  {{ caller() }}
+</div>
+{% endmacro %}
+
+
+{# ── card_with_actions ────────────────────────────────────────────────────
+   Renders a .team-card-item card with a header row (entity name + optional
+   metadata on the left, Edit/Delete actions on the right).
+
+   Parameters:
+     name         — entity name displayed as .team-card-name (required)
+     edit_url     — href for the Edit button (required)
+     delete_url   — action URL for the Delete form (required)
+     show_actions — show the action group; default True
+     gap          — CSS gap for the .team-card-item wrapper; default '.65rem'
+     edit_label   — Edit button label; default 'Edit'
+     player_count — optional int; renders a .team-card-count span
+     short_name   — optional short-name badge (accent colour)
+     sub_label    — optional sub-label shown in muted colour (e.g. division)
+     description  — optional description text (muted, display:block)
+
+   Use {% call %} to provide an optional body section rendered below the
+   header row, still inside .team-card-item (e.g. a Team Staff panel).
+
+   Usage (no body):
+     {{ card_with_actions(name=t.name, edit_url=..., delete_url=...) }}
+
+   Usage (with body):
+     {% call card_with_actions(name=t.name, edit_url=..., delete_url=...) %}
+       <div style="border-top:1px solid var(--border);padding-top:.5rem">
+         ...
+       </div>
+     {% endcall %}
+#}
+{% macro card_with_actions(name, edit_url, delete_url, show_actions=True, gap='.65rem',
+                            edit_label='Bewerken', player_count=None, short_name=None,
+                            sub_label=None, description=None) %}
+<div class="team-card-item" style="flex-direction:column;align-items:stretch;gap:{{ gap }}">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+    <div class="team-card-info">
+      {% if short_name %}<span class="team-card-name">{{ short_name }}</span>{% else %}<span class="team-card-name">{{ name }}</span>{% endif %}
+      {% if short_name %}<span style="font-size:0.78rem;color:var(--accent);font-weight:600">{{ name }}</span>{% endif %}
+      {% if sub_label %}<span style="font-size:0.75rem;color:var(--muted)">{{ sub_label }}</span>{% endif %}
+      {% if player_count is not none %}<span class="team-card-count">{{ player_count }} speler{{ 's' if player_count != 1 else '' }}</span>{% endif %}
+      {% if description %}<span style="font-size:0.82rem;color:var(--muted);display:block;margin-top:.2rem">{{ description }}</span>{% endif %}
+    </div>
+    {% if show_actions %}
+    <div class="team-card-actions">
+      <a href="{{ edit_url }}" class="btn btn-sm btn-outline">{{ edit_label }}</a>
+      <form method="POST" action="{{ delete_url }}" style="display:inline"
+            onsubmit="return confirm('{{ name|e }} verwijderen? Dit kan niet ongedaan worden gemaakt.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm btn-danger">Verwijderen</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% if caller %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}

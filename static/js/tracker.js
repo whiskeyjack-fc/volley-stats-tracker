@@ -180,7 +180,7 @@ const Tracker = (() => {
       pill.style.display = "none";
     } else {
       pill.style.display = "";
-      pill.textContent   = `Unsynced: ${ops.length}`;
+      pill.textContent   = `Niet gesynchroniseerd: ${ops.length}`;
     }
     if (btn) btn.style.display = ops.length > 0 ? "" : "none";
   }
@@ -218,7 +218,7 @@ const Tracker = (() => {
 
   function updateEventCount() {
     const el = document.getElementById("event-count");
-    if (el) el.textContent = `${totalEvents} event${totalEvents !== 1 ? "s" : ""} recorded`;
+    if (el) el.textContent = `${totalEvents} actie${totalEvents !== 1 ? "s" : ""} geregistreerd`;
   }
 
   function flashCell(td, cls) {
@@ -310,14 +310,14 @@ const Tracker = (() => {
   }
 
   async function deleteSet(setId) {
-    if (!confirm("Delete this set and all its recorded events? This cannot be undone.")) return;
+    if (!confirm("Dit set en alle geregistreerde acties verwijderen? Dit kan niet ongedaan worden gemaakt.")) return;
     const ok = await apiDeleteSet(setId);
     if (ok) {
       if (currentSetId === setId) currentSetId = null;
-      showToast("Set deleted", "ok");
+      showToast("Set verwijderd", "ok");
       await renderSetBar();
     } else {
-      showToast("Delete failed", "warn");
+      showToast("Verwijderen mislukt", "warn");
     }
   }
 
@@ -430,13 +430,13 @@ const Tracker = (() => {
     currentSetId = result.id;
     hideNewSetPanel();
     await renderSetBar();
-    showToast(`Set ${number} (${type}) started`, "ok");
+    showToast(`Set ${number} (${type}) gestart`, "ok");
   }
 
   async function finishCurrentSet() {
     if (!currentSetId) return;
     await apiFinishSet(currentSetId);
-    showToast("Set finished", "ok");
+    showToast("Set voltooid", "ok");
     await renderSetBar();
   }
 
@@ -455,7 +455,7 @@ const Tracker = (() => {
   async function onRemove(td, pid, stat, result) {
     const current = getCount(pid, stat, result);
     if (current <= 0) {
-      showToast("Nothing to remove", "warn");
+      showToast("Niets te verwijderen", "warn");
       return;
     }
     const removed = await apiDecrement(pid, stat, result);
@@ -791,10 +791,10 @@ const Tracker = (() => {
     attachGridDelegation();
 
     document.getElementById("sync-now-btn")?.addEventListener("click", async () => {
-      showToast("Syncing...", "ok");
+      showToast("Synchroniseren…", "ok");
       await flushQueue();
       await reloadStats();
-      showToast("Synced", "ok");
+      showToast("Gesynchroniseerd", "ok");
     });
 
     // Mode toggle: Grid â†” Flow
@@ -876,11 +876,11 @@ const RallyFlow = (() => {
   ];
 
   const LOOP_ACTIONS = [
-    { label: "Attack",   stat: "attack"     },
-    { label: "Block",    stat: "block"      },
-    { label: "Freeball", stat: "freeball"   },
-    { label: "Fault",    stat: "fault"      },
-    { label: "Error",    stat: "ball_error" },
+    { label: "Aanval",    stat: "attack"     },
+    { label: "Blok",      stat: "block"      },
+    { label: "Vrije bal", stat: "freeball"   },
+    { label: "Fout",      stat: "fault"      },
+    { label: "Fout",      stat: "ball_error" },
   ];
 
   const LOOP_OUTCOMES = {
@@ -1143,16 +1143,16 @@ const RallyFlow = (() => {
 
   // Step header labels shown at top of each active card
   const STEP_HEADERS = {
-    "type":           { n:1, label:"Start rally" },
-    "serve-player":   { n:1, label:"Serve — who served?" },
-    "serve-outcome":  { n:2, label:"Serve — result" },
-    "receive-player": { n:1, label:"Receive — who received?" },
-    "receive-outcome":{ n:2, label:"Receive — result" },
-    "loop-combined":  { n:null, label:"What happened?" },
-    "loop-action":    { n:null, label:"Next action" },
-    "loop-player":    { n:null, label:"Who?" },
-    "loop-outcome":   { n:null, label:"Result" },
-    "confirm":        { n:null, label:"Review rally" },
+    "type":           { n:1, label:"Rally starten" },
+    "serve-player":   { n:1, label:"Opslag — wie serveerde?" },
+    "serve-outcome":  { n:2, label:"Opslag — resultaat" },
+    "receive-player": { n:1, label:"Receptie — wie ontving?" },
+    "receive-outcome":{ n:2, label:"Receptie — resultaat" },
+    "loop-combined":  { n:null, label:"Wat is er gebeurd?" },
+    "loop-action":    { n:null, label:"Volgende actie" },
+    "loop-player":    { n:null, label:"Wie?" },
+    "loop-outcome":   { n:null, label:"Resultaat" },
+    "confirm":        { n:null, label:"Rally bekijken" },
   };
 
   function setActiveCardHeader(cardId, overrideLabel) {
@@ -1572,7 +1572,7 @@ const RallyFlow = (() => {
       if (window.__incrTotal) window.__incrTotal();
     }
     if (window.__updateEventCount) window.__updateEventCount();
-    window.__showToast(`Rally saved (${rallyBuf.length} action${rallyBuf.length!==1?"s":""})`, "ok");
+    window.__showToast(`Rally opgeslagen (${rallyBuf.length} actie${rallyBuf.length!==1?"s":""})`, "ok");
     resetFlow();
   }
 
@@ -1655,7 +1655,7 @@ const RallyFlow = (() => {
   }
 
   function discardRally() {
-    window.__showToast("Rally discarded", "warn");
+    window.__showToast("Rally geannuleerd", "warn");
     resetFlow();
   }
 

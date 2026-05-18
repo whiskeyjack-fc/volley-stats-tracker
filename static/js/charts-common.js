@@ -13,7 +13,7 @@ const CAT_COLORS = {
 const RESULT_LABELS = {
   error:"Error","1-serve":"S1","2-serve":"S2","3-serve":"S3",ace:"Ace",
   kill:"Kill","1-receive":"R1","2-receive":"R2","3-receive":"R3",overpass:"OvP",
-  "1-freeball":"F1","2-freeball":"F2","3-freeball":"F3",fault:"Fault"
+  "1-freeball":"F1","2-freeball":"F2","3-freeball":"F3",fault:"Fout"
 };
 
 // ── Shared axis / plugin defaults ─────────────────────────────────────

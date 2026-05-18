@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% from "_macros.html" import filter_select %}
+{% block title %}Ledenlijst — VolleyStats{% endblock %}
+{% block content %}
+{% set STATUS_NL = {'active': 'Actief', 'inactive': 'Inactief', 'injured': 'Geblesseerd', 'prospect': 'Prospect', 'trial': 'Trial', 'unknown': 'Onbekend'} %}
+{% set POS_NL = {'setter': 'Spelverdeler', 'libero': 'Libero', 'outside': 'Hoekaanvaller', 'opposite': 'Opposite', 'middle': 'Middenaanvaller'} %}
+{% set ROLE_NL = {'player': 'Speler', 'head_coach': 'Hoofdcoach', 'assistant_coach': 'Assistent-coach', 'team_manager': 'Teammanager', 'medical': 'Medisch', 'scorer': 'Markeerder', 'marker': 'Markeerder', 'video_analyst': 'Video-analist'} %}
+
+<div class="sticky-page-header">
+<div class="page-header">
+  <h1>Ledenlijst</h1>
+  {% if can_view_all() %}
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a href="{{ url_for('roster_import') }}" class="btn btn-outline btn-sm">⬆ CSV importeren</a>
+    <a href="{{ url_for('roster_import_federation') }}" class="btn btn-outline btn-sm">⬆ Federatielijst importeren</a>
+    <a href="{{ url_for('roster_new') }}" class="btn btn-primary">＋ Nieuw lid</a>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Filter bar ─────────────────────────────────────────────────────────── #}
+<form method="get" id="filter-rows" class="filter-bar">
+  <input type="text" name="q" value="{{ q_filter }}"
+         placeholder="Naam zoeken…"
+         class="filter-search" />
+
+  {% call filter_select('status', 'Alle statussen') %}
+    {% for s in ['active','inactive','injured','prospect','trial','unknown'] %}
+    <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ STATUS_NL.get(s, s|capitalize) }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('position', 'Alle posities') %}
+    {% for p in ['setter','libero','outside','opposite','middle'] %}
+    <option value="{{ p }}" {% if position_filter == p %}selected{% endif %}>{{ POS_NL.get(p, p|capitalize) }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('team', 'Alle teams') %}
+    {% for t in teams %}
+    <option value="{{ t.id }}" {% if team_filter == t.id %}selected{% endif %}>{{ t.short_name or t.name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('group', 'Alle groepen') %}
+    {% for g in groups %}
+    <option value="{{ g.id }}" {% if group_filter == g.id %}selected{% endif %}>{{ g.name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('season_id', 'Alle seizoenen') %}
+    {% for s in seasons %}
+    <option value="{{ s.id }}" {% if season_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('tag', 'Alle labels') %}
+    {% for t in all_tags %}
+    <option value="{{ t }}" {% if tag_filter == t %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_select('role', 'Alle rollen') %}
+    {% for rv, rl in [('player','Speler'),('head_coach','Hoofdcoach'),('assistant_coach','Assistent-coach'),('team_manager','Teammanager'),('medical','Medisch'),('marker','Markeerder'),('video_analyst','Video-analist')] %}
+    <option value="{{ rv }}" {% if role_filter == rv %}selected{% endif %}>{{ rl }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  <button type="submit" class="btn btn-outline btn-sm">Filteren</button>
+  {% if status_filter or position_filter or tag_filter or team_filter or group_filter or season_filter or role_filter or request.args.get('q') %}
+  <a href="{{ url_for('roster_list') }}" class="btn btn-sm" style="opacity:0.7">✕ Wissen</a>
+  {% endif %}
+</form>
+</div>{# /.sticky-page-header #}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+{# ── Results ─────────────────────────────────────────────────────────────── #}
+{% if not profiles %}
+<div class="card" style="text-align:center;padding:2.5rem 1rem">
+  <p style="color:var(--gray);margin-bottom:1rem">Geen spelers gevonden.</p>
+  {% if can_view_all() %}
+  <a href="{{ url_for('roster_new') }}" class="btn btn-primary">＋ Nieuw lid</a>
+  {% endif %}
+</div>
+{% else %}
+<div class="table-scroll-wrap">
+  <table class="table sticky-col-head">
+    <thead>
+      <tr>
+        <th>Nr.</th>
+        <th>Naam</th>
+        <th>Status</th>
+        <th>Posities</th>
+        <th>Labels</th>
+        <th>Team</th>
+        <th>Geb.datum</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in profiles %}
+      <tr style="cursor:pointer" onclick="if(!event.target.closest('.editable-cell'))location.href='{{ url_for('roster_detail', profile_id=p.id) }}'">
+        {% if can_view_all() %}
+        <td class="editable-cell" data-pid="{{ p.id }}" data-field="number" data-val="{{ p.number or '' }}" title="Klik om te bewerken">
+          <span class="ec-display" style="color:var(--muted)">{{ p.number or '—' }}</span>
+        </td>
+        {% else %}
+        <td style="color:var(--muted)">{{ p.number or '—' }}</td>
+        {% endif %}
+        <td><a href="{{ url_for('roster_detail', profile_id=p.id) }}" style="font-weight:600">{{ p.first_name }} {{ p.last_name }}</a></td>
+        {% if can_view_all() %}
+        <td class="editable-cell" data-pid="{{ p.id }}" data-field="status" data-val="{{ p.status }}" title="Klik om te bewerken">
+          <span class="ec-display"><span class="status-badge status-{{ p.status }}">{{ STATUS_NL.get(p.status, p.status) }}</span></span>
+        </td>
+        {% else %}
+        <td>
+          <span class="status-badge status-{{ p.status }}">{{ STATUS_NL.get(p.status, p.status) }}</span>
+        </td>
+        {% endif %}
+        <td style="font-size:0.82rem;color:var(--muted)">
+          {% if p.positions %}
+            {% for pos in p.positions.split(',') %}
+            <span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);
+                         border-radius:999px;padding:.1em .45em;font-size:0.72rem;margin:1px">{{ POS_NL.get(pos.strip(), pos.strip()|capitalize) }}</span>
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+        <td style="font-size:0.82rem;color:var(--muted)">
+          {% if p.tags %}
+            {% for t in p.tags | from_json %}
+            <span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);
+                         border-radius:999px;padding:.1em .45em;font-size:0.72rem;margin:1px">{{ t }}</span>
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+        <td style="font-size:0.82rem;color:var(--muted)">
+          {% set pts = teams_by_pid.get(p.id, []) %}
+          {% if pts %}
+            {% for t in pts %}
+            <span style="display:inline-block;vertical-align:top;margin:1px">
+              <span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:.1em .45em;font-size:0.72rem">{{ t.short_name or t.name }}</span>
+              {% if t.roles %}
+                {% for role in t.roles.split(',') %}
+                <span class="rl-pill rl-{{ role.strip() }}">{{ ROLE_NL.get(role.strip(), role.strip().replace('_', ' ')|title) }}</span>
+                {% endfor %}
+              {% endif %}
+            </span>
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+        {% if can_view_all() %}
+        <td class="editable-cell" data-pid="{{ p.id }}" data-field="date_of_birth" data-val="{{ p.date_of_birth or '' }}" title="Klik om te bewerken">
+          <span class="ec-display" style="color:var(--muted);font-size:0.85rem">{{ p.date_of_birth | fmt_date if p.date_of_birth else '—' }}</span>
+        </td>
+        {% else %}
+        <td style="color:var(--muted);font-size:0.85rem">{{ p.date_of_birth | fmt_date if p.date_of_birth else '—' }}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+<p style="font-size:0.82rem;color:var(--muted);margin:0.5rem 0 0">{{ profiles|length }} leden</p>
+</div>
+{% endif %}
+
+<style>
+@media (max-width:600px) {
+  .filter-bar { flex-direction:column; align-items:stretch; }
+  .filter-search, .filter-select { width:100%; max-width:none; }
+  .table th:nth-child(4), .table td:nth-child(4),
+  .table th:nth-child(5), .table td:nth-child(5),
+  .table th:nth-child(6), .table td:nth-child(6) { display:none; }
+}
+.editable-cell { cursor:text; position:relative; }
+.editable-cell:hover .ec-display { outline:1px dashed var(--border); border-radius:3px; padding:1px 3px; margin:-1px -3px; }
+.ec-input { background:var(--surface2); color:var(--text); border:1px solid var(--accent); border-radius:4px;
+            padding:2px 5px; font-size:inherit; font-family:inherit; outline:none; max-width:100%; }
+select.ec-input { cursor:pointer; }
+.ec-saved { animation:ec-flash-ok 1.2s ease; }
+.ec-error  { animation:ec-flash-err 1.5s ease; }
+@keyframes ec-flash-ok  { 0%,100%{background:transparent} 20%{background:color-mix(in srgb,var(--green) 25%,transparent)} }
+@keyframes ec-flash-err { 0%,100%{background:transparent} 20%{background:color-mix(in srgb,var(--red)   25%,transparent)} }
+</style>
+
+<script>
+(function(){
+  const STATUS_NL = {active:'Actief',inactive:'Inactief',injured:'Geblesseerd',prospect:'Prospect',trial:'Trial',unknown:'Onbekend'};
+  const STATUS_OPTS = Object.keys(STATUS_NL);
+
+  function renderDisplay(field, val) {
+    if (!val) return '—';
+    if (field === 'status')
+      return '<span class="status-badge status-' + val + '">' + (STATUS_NL[val] || val) + '</span>';
+    return val;
+  }
+
+  document.addEventListener('click', function(e) {
+    const cell = e.target.closest('.editable-cell');
+    if (!cell || cell.querySelector('.ec-input')) return;
+    e.stopPropagation();
+    const field   = cell.dataset.field;
+    const pid     = cell.dataset.pid;
+    const origVal = cell.dataset.val;
+    const display = cell.querySelector('.ec-display');
+    let input;
+    if (field === 'status') {
+      input = document.createElement('select');
+      STATUS_OPTS.forEach(function(s) {
+        const o = document.createElement('option');
+        o.value = s;
+        o.textContent = STATUS_NL[s];
+        if (s === origVal) o.selected = true;
+        input.appendChild(o);
+      });
+    } else {
+      input = document.createElement('input');
+      input.type = field === 'date_of_birth' ? 'date' : 'text';
+      input.value = origVal;
+      if (field === 'number') { input.size = 5; input.pattern = '[0-9]*'; }
+    }
+    input.className = 'ec-input';
+    display.replaceWith(input);
+    input.focus();
+    if (input.type === 'text') input.select();
+
+    let cancelled = false;
+    function cancel() {
+      cancelled = true;
+      input.replaceWith(display);
+    }
+    function save() {
+      if (cancelled) return;
+      const newVal = input.value.trim();
+      input.replaceWith(display);
+      if (newVal === origVal) return;
+      display.innerHTML = renderDisplay(field, newVal);
+      cell.dataset.val = newVal;
+      fetch('/api/profiles/' + pid, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({field: field, value: newVal || null})
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.ok) {
+          cell.classList.add('ec-saved');
+          setTimeout(function(){ cell.classList.remove('ec-saved'); }, 1200);
+        } else {
+          display.innerHTML = renderDisplay(field, origVal);
+          cell.dataset.val = origVal;
+          cell.classList.add('ec-error');
+          setTimeout(function(){ cell.classList.remove('ec-error'); }, 1500);
+        }
+      }).catch(function() {
+        display.innerHTML = renderDisplay(field, origVal);
+        cell.dataset.val = origVal;
+        cell.classList.add('ec-error');
+        setTimeout(function(){ cell.classList.remove('ec-error'); }, 1500);
+      });
+    }
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+      if (ev.key === 'Escape') cancel();
+    });
+  }, true);  /* capture phase: fires before <tr> onclick */
+}());
+</script>
+{% endblock %}

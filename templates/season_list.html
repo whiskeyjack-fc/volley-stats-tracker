@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Seasons — VolleyStats{% endblock %}
+{% block title %}Seizoenen — VolleyStats{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Seasons</h1>
-  <a href="{{ url_for('index') }}" class="btn btn-outline">← Games</a>
+  <h1>Seizoenen</h1>
+  <a href="{{ url_for('index') }}" class="btn btn-outline">← Wedstrijden</a>
 </div>
 {% if seasons %}
 <div class="season-cards">
@@ -15,6 +15,6 @@
   {% endfor %}
 </div>
 {% else %}
-<p class="empty">No seasons yet. Add a season label when creating a game.</p>
+<p class="empty">Nog geen seizoenen. Voeg een seizoenslabel toe bij het aanmaken van een wedstrijd.</p>
 {% endif %}
 {% endblock %}

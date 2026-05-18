@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{% if item %}Materiaalitem #{{ item.id }} bewerken{% else %}Nieuw materiaalitem{% endif %} — VolleyStats{% endblock %}
+{% block content %}
+{% set KIT_STATUS_NL = {'in stock': 'Op voorraad', 'assigned': 'Toegewezen', 'lost': 'Verloren', 'retired': 'Afgeschreven'} %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+<div class="page-header">
+  <h1>{% if item %}Materiaalitem #{{ item.id }} bewerken{% else %}Nieuw materiaalitem{% endif %}</h1>
+  {% if item %}
+  <a href="{{ url_for('kit_detail', item_id=item.id) }}" class="btn btn-outline btn-sm">← Terug naar detail</a>
+  {% else %}
+  <a href="{{ url_for('kit_list') }}" class="btn btn-outline btn-sm">← Terug naar lijst</a>
+  {% endif %}
+</div>
+
+<div class="card" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;max-width:600px">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Model <span style="color:var(--red);display:inline">*</span>
+        <select name="model" class="filter-select" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem">
+          {% for m in KIT_MODELS %}
+          <option value="{{ m }}" {% if item and item.model == m %}selected{% elif not item and loop.first %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Type <span style="color:var(--red);display:inline">*</span>
+        <select name="type" class="filter-select" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem">
+          {% for t in KIT_TYPES %}
+          <option value="{{ t }}" {% if item and item.type == t %}selected{% elif not item and loop.first %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Maat <span style="color:var(--red);display:inline">*</span>
+        <select name="size" class="filter-select" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem">
+          {% for s in KIT_SIZES %}
+          <option value="{{ s }}" {% if item and item.size == s %}selected{% elif not item and loop.first %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Rugnummer
+        <input type="text" name="number" value="{{ item.number if item and item.number else '' }}"
+               placeholder="bijv. 10"
+               style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem;font-size:0.9rem">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Naam op shirt
+        <input type="text" name="name_printed" value="{{ item.name_printed if item and item.name_printed else '' }}"
+               placeholder="Naam op shirt"
+               style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem;font-size:0.9rem">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Status
+        <select name="status" class="filter-select" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem">
+          {% for s in KIT_STATUSES %}
+          <option value="{{ s }}" {% if item and item.status == s %}selected{% elif not item and s == 'in stock' %}selected{% endif %}>{{ KIT_STATUS_NL.get(s, s) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Staat / conditie
+        <select name="state" class="filter-select" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem">
+          {% for st in KIT_STATES %}
+          <option value="{{ st }}" {% if item and item.state == st %}selected{% elif not item and st == 'nieuw' %}selected{% endif %}>{{ st }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Opslaglocatie
+        <input type="text" name="store" value="{{ item.store if item and item.store else '' }}"
+               placeholder="bijv. Kast A"
+               style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem;font-size:0.9rem">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Toegewezen lid
+        <select name="profile_id" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem;font-size:0.9rem">
+          <option value="">— niet toegewezen —</option>
+          {% for p in all_profiles %}
+          <option value="{{ p.id }}" {% if item and item.profile_id == p.id %}selected{% endif %}>{{ p.first_name }} {{ p.last_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:.3rem;font-size:0.88rem">
+        Datum toegevoegd
+        <input type="text" name="date_added" value="{{ item.date_added | fmt_date if item and item.date_added else '' }}"
+               placeholder="DD/MM/YYYY"
+               style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.4rem .5rem;font-size:0.9rem">
+      </label>
+
+    </div>
+
+    <div style="margin-top:1.5rem;display:flex;gap:.75rem">
+      <button type="submit" class="btn btn-primary">
+        {% if item %}Wijzigingen opslaan{% else %}Item aanmaken{% endif %}
+      </button>
+      {% if item %}
+      <a href="{{ url_for('kit_detail', item_id=item.id) }}" class="btn btn-outline">Annuleren</a>
+      {% else %}
+      <a href="{{ url_for('kit_list') }}" class="btn btn-outline">Annuleren</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

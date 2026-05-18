@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_macros.html" import player_roster_section %}
+{% block title %}{{ group.name }} — VolleyStats{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ group.name }}</h1>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <a href="{{ url_for('training_group_list') }}" class="btn btn-outline btn-sm">← Groepen</a>
+    <form method="POST" action="{{ url_for('training_group_delete', group_id=group.id) }}"
+          onsubmit="return confirm('Groep {{ group.name|e }} verwijderen? Dit kan niet ongedaan worden gemaakt.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-sm btn-danger">Groep verwijderen</button>
+    </form>
+  </div>
+</div>
+
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
+
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <section class="card">
+    <h2>Groepsinfo</h2>
+    <div class="field-row">
+      <label>Naam
+        <input type="text" name="group_name" required value="{{ group.name }}"
+               placeholder="bijv. U18 Spelverdelers" />
+      </label>
+      <label>Beschrijving
+        <input type="text" name="description" value="{{ group.description or '' }}"
+               placeholder="Optionele beschrijving…" />
+      </label>
+    </div>
+  </section>
+
+  {{ player_roster_section(players, all_profiles, title='Spelers') }}
+
+  <div class="form-actions" style="gap:0.75rem">
+    <a href="{{ url_for('training_group_list') }}" class="btn btn-outline">Annuleren</a>
+    <button type="submit" class="btn btn-primary btn-lg">Wijzigingen opslaan</button>
+  </div>
+</form>
+
+<script src="{{ url_for('static', filename='js/player-picker.js') }}"></script>
+<script>
+  initPlayerPicker({{ all_profiles | tojson }});
+</script>
+{% endblock %}

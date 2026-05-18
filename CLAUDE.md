@@ -12,10 +12,12 @@ VolleyStats is a Flask 3.x / SQLite volleyball statistics tracker. A single mono
 |-------|-----------|
 | Backend routes + logic | `app.py` |
 | Live tracking JS | `static/js/tracker.js` |
+| Shared player-profile picker | `static/js/player-picker.js` |
+| Shared chart infrastructure | `static/js/charts-report.js` |
 | Styles | `static/css/style.css` |
-| Templates (13) | `templates/` — `base.html`, `track.html`, `report.html`, `season_report.html`, `player_report.html`, … |
+| Templates (21) | `templates/` — `base.html`, `_macros.html` (shared Jinja2 macros), `track.html`, `report.html`, `season_report.html`, `player_report.html`, `roster_list.html`, `roster_detail.html`, `roster_form.html`, `roster_import.html`, `training_groups.html`, `training_group_detail.html`, `training_group_form.html`, … |
 
-**DB tables:** `users` · `games` · `players` · `sets` · `events` · `seasons` · `club_teams` · `club_team_players`
+**DB tables:** `users` · `games` · `players` · `sets` · `events` · `seasons` · `club_teams` · `club_team_players` · `player_profiles` · `player_remarks` · `training_groups` · `training_group_players` · `club_team_trainers`
 
 **Stat pipeline:**
 ```
@@ -31,7 +33,17 @@ events → build_player_stats() → agg_team_stats() → build_chart_data() → 
 | `build_chart_data(game_rows)` | Chart-ready arrays; X-axis = games |
 | `build_comparison_data(...)` | Multi-player cross-game comparison |
 | `_uid_cond()` | Returns `(sql_fragment, params)` for user-scoped queries |
+| `_team_cond()` | Returns `(sql_fragment, params)` scoping `club_teams` to trainer's assigned teams; no-op for coordinator/admin |
+| `_resolve_profile_id(first, last)` | Normalises `first+" "+last` and returns matching `player_profiles.id` or `None` |
+| `_collect_profile_ids(form_values)` | Extracts and deduplicates player profile IDs from a form POST |
+| `_save_profile(data, profile_id=None)` | Insert or update a player profile (used by `roster_new` and `roster_edit`) |
 
+**Jinja2 macros (`templates/_macros.html`):**
+
+| Macro | Purpose |
+|-------|---------|
+| `filter_select(name, all_label)` | `<select class="filter-select">` wrapper; use `{% call %}` block for `<option>` rows |
+| `filter_chips(label)` | `.set-filter-bar` row of `.set-chip` anchors for URL-driven filters; use `{% call %}` block to provide all chip content; pass `""` to omit the label || `player_roster_section(players, all_profiles, title, show_clear, note)` | Players `<section>` card with a profile `<select>` per row; requires `player-picker.js` + `initPlayerPicker()` call on the embedding page |
 For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/copilot-instructions.md).
 
 ---
@@ -46,6 +58,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 | **Chart canvas IDs must be `{slug}-{chartName}`** | Both the template and `initPlayerCharts(slug, data)` must match exactly |
 | **DB migrations are non-destructive** | `ALTER TABLE … ADD COLUMN IF NOT EXISTS` only; never DROP columns |
 | **Tracking JS stays in `tracker.js`** | Report/chart JS lives inside each template's own `<script>` block; pages don't share runtime JS |
+| **Use `_team_cond()` for every `club_teams` query** | Trainers see only their assigned teams via `club_team_trainers`; coordinators/admins get no filter — mirrors `_uid_cond()` but for team scope |
 | **Player identity = `name.strip().lower()`** | Applied at both insert time and query time; no alias matching |
 | **`sqlite3.Row` row factory on every connection** | Set in `get_db()`; forgetting it breaks downstream `dict()` calls silently |
 | **Keep line endings as LF** | CRLF in JS/HTML/Python files breaks string-matching tools (replace, grep, patch); enforce with `.gitattributes`: `* text=auto eol=lf` |
@@ -67,7 +80,8 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Chart label strings must use string concatenation, not template literals, when embedding user-supplied data** — a crafted player name like `` ${alert(1)} `` would execute as JS. Use `(p.number ? "#" + p.number + " " : "") + p.name`.
 - **`LOOP_OUTCOMES["fault"]` is intentionally empty** — fault auto-records after player selection; the `else if (loopStat === "fault")` branch in `onPlayerChosen` prevents falling through to an empty `renderOutcomeStep([])`. Do not remove that branch.
 - **Background sync: guard on queue length and treat `!r.ok` as a network failure** — skip `isOnline()`/`flushQueue()` when the queue is empty; `!r.ok` responses must increment the failure streak and trigger a toast, same as thrown exceptions.
-- **Duplicate player names must be caught client-side** — `game_setup.html`'s submit handler normalises with `.trim().toLowerCase()` and blocks submit on duplicates, mirroring the server-side identity rule.
+- **Duplicate player names must be caught client-side** — player-profile selects use `refreshSelects()` from `player-picker.js` to hide already-chosen profiles from other rows; the submit handler still checks for duplicates as a belt-and-braces guard.
+- **`INSERT OR IGNORE` alone does not prevent duplicates without a DB constraint** — `club_team_players` has `UNIQUE INDEX uq_club_team_players_profile (team_id, profile_id) WHERE profile_id IS NOT NULL`; always pair `INSERT OR IGNORE` with a Python seen-set loop so in-memory dedup is guaranteed even without the index.
 - **Flask-Limiter on `/login`** — configured with `storage_uri="memory://"` (resets on restart); apply `@limiter.limit(...)` only to routes that need it.
 - **Always validate user-supplied filter params against the actual data set** — a `?team=` param that doesn't match any team silently returns empty results; fetch the valid list and reset the param to `""` if not found.
 - **Wrap multi-row INSERT loops in explicit try/except + rollback** — a mid-loop failure (incl. in `edit_team`/`new_team`) leaves the parent-row INSERT committed with no children. Extend the `try` block to cover the entire sequence (parent INSERT + child loop + `db.commit()`); add `db.rollback()` in every `except` branch.
@@ -77,6 +91,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 - **Inline `style="width:Npx"` on table columns breaks mobile** — use a CSS class with a responsive `@media (max-width: 600px)` override instead.
 - **Undefined CSS variables silently fall back to `inherit`** — always declare every variable explicitly in `:root`.
 - **Per-set score in the flow view uses `STAT_POSITIVE`/`STAT_NEGATIVE`** — `computeScoreFromStats()` drives the score bar; `_lastRallyDelta` lets `undoLastAutoSave()` reverse the score client-side without a round-trip.
+- **`ucond.replace('user_id', 'g.user_id')` is an anti-pattern** — use explicit table aliases in the SQL query instead; string-replacing a SQL fragment is fragile and breaks when the fragment changes.
 
 ---
 
@@ -85,11 +100,14 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 > Use this section to capture ongoing ideas, active work, and design decisions. Keep it current.
 
 ### Ideas / Backlog
-
+- Re-render `name`/`description` values in `training_group_form.html` on validation error
 
 ### Active Work
 
 
 ### Decisions Made
+- Player management feature (roster, remarks, training groups, club_team_trainers) shipped on `feature/player-scouting`; trainer assignment UI lives on `team_list.html` (not `team_form.html`) — more user-friendly in practice
+- Player selection on `team_form.html`, `game_setup.html`, and `edit_game.html` now uses `player_profiles` dropdowns (not free-text name/number inputs); `player-picker.js` + `player_roster_section` macro are the canonical way to add this UI to future pages
+- Trainer assignment on `team_list.html` uses an email-based `<select>` of users with `role='trainer'` (not a raw user ID input)
 
 

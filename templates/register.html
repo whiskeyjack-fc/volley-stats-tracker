@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Register — VolleyStats{% endblock %}
+{% block title %}Registreren — VolleyStats{% endblock %}
 
 {% block content %}
 <div class="auth-card">
-  <h1 class="auth-title">Create account</h1>
+  <h1 class="auth-title">Account aanmaken</h1>
 
   {% if error %}
   <p class="auth-error">{{ error }}</p>
@@ -12,20 +12,20 @@
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>
-      Email
+      E-mailadres
       <input type="email" name="email" value="{{ email or '' }}" required autofocus>
     </label>
     <label>
-      Password
+      Wachtwoord
       <input type="password" name="password" required minlength="8">
     </label>
     <label>
-      Confirm password
+      Wachtwoord bevestigen
       <input type="password" name="confirm" required>
     </label>
-    <button type="submit" class="btn btn-primary btn-lg" style="width:100%;margin-top:.5rem">Create account</button>
+    <button type="submit" class="btn btn-primary btn-lg" style="width:100%;margin-top:.5rem">Account aanmaken</button>
   </form>
 
-  <p class="auth-switch">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+  <p class="auth-switch">Al een account? <a href="{{ url_for('login') }}">Aanmelden</a></p>
 </div>
 {% endblock %}

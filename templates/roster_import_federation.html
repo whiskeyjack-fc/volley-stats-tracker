@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Federatielijst importeren — VolleyStats{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Federatielijst importeren</h1>
+  <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Terug naar ledenlijst</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+{% if not preview %}
+{# ── Step 1: Paste form ──────────────────────────────────────────────────── #}
+<div class="card">
+  <h2>Federatielijst plakken</h2>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:.5rem">
+    Kopieer de spelersrijen uit de federatie-PDF en plak ze hieronder.
+    Kopregels (clubnaam, competitie, code) worden automatisch genegeerd.
+  </p>
+  <p style="color:var(--muted);font-size:0.85rem;margin-bottom:1rem">
+    Expected line format: <code>[K] &lt;nr&gt; &lt;card#&gt; &lt;Familienaam&gt; &lt;Voornaam&gt; &lt;Nat&gt; &lt;DD/MM/YYYY&gt;</code><br>
+    Example: <code>K 15 0035321 Thierens Casper BEL 11/02/2007</code>
+  </p>
+
+  {% if error %}
+  <p class="auth-error">{{ error }}</p>
+  {% endif %}
+
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label style="display:block;margin-bottom:.75rem">
+      <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.03em">Geplakte tekst</span>
+      <textarea name="paste_text" rows="18" required
+                placeholder="Hier plakken…"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);
+                       border-radius:var(--radius);color:var(--fg);padding:.4rem .55rem;
+                       font-size:0.88rem;font-family:monospace;resize:vertical;box-sizing:border-box"></textarea>
+    </label>
+    <button type="submit" class="btn btn-primary">Voorvertoning</button>
+  </form>
+</div>
+
+{% else %}
+{# ── Step 2: Preview table ───────────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:1rem">
+  <h2>Voorvertoning — {{ preview|length }} rij{{ 'en' if preview|length != 1 }}</h2>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:.75rem">
+    Duplicaten (op basis van volledige naam) worden overgeslagen.
+  </p>
+  <div style="overflow-x:auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nr.</th>
+          <th>Voornaam</th>
+          <th>Achternaam</th>
+          <th>Geb.datum</th>
+          <th>Stamnummer</th>
+          <th>Labels</th>
+          <th>Importeren</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in preview %}
+        <tr style="opacity:{% if row._duplicate %}0.55{% else %}1{% endif %}">
+          <td style="color:var(--muted)">{{ row.number or '—' }}</td>
+          <td>{{ row.first_name }}</td>
+          <td>{{ row.last_name }}</td>
+          <td style="color:var(--muted)">{{ row.date_of_birth | fmt_date if row.date_of_birth else '—' }}</td>
+          <td style="color:var(--muted);font-family:monospace;font-size:0.82rem">{{ row.federation_id or '—' }}</td>
+          <td style="font-size:0.82rem;color:var(--muted)">
+            {% set tag_list = row.tags | from_json if row.tags else [] %}
+            {{ tag_list | join(', ') or '—' }}
+          </td>
+          <td>
+            {% if row._duplicate %}
+            <span style="color:var(--red);font-weight:600;font-size:0.8rem">duplicaat</span>
+            {% else %}
+            <span style="color:var(--green);font-weight:600;font-size:0.8rem">nieuw</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% set new_count = preview | selectattr('_duplicate', 'equalto', false) | list | length %}
+  {% set dup_count = preview | selectattr('_duplicate', 'equalto', true)  | list | length %}
+  <p style="margin-top:.75rem;font-size:0.88rem;color:var(--muted)">
+    <span style="color:var(--green);font-weight:600">{{ new_count }} nieuw</span>
+    worden ingevoegd ·
+    <span style="color:var(--red)">{{ dup_count }} duplicaat{{ 'en' if dup_count != 1 }}</span>
+    worden overgeslagen.
+  </p>
+</div>
+
+<div style="display:flex;gap:.75rem;flex-wrap:wrap">
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="confirm_import" value="1">
+    <button type="submit" class="btn btn-primary">Import bevestigen</button>
+  </form>
+  <a href="{{ url_for('roster_import_federation', reset=1) }}" class="btn btn-outline">Opnieuw beginnen</a>
+  <a href="{{ url_for('roster_list') }}" class="btn btn-outline">Annuleren</a>
+</div>
+{% endif %}
+{% endblock %}

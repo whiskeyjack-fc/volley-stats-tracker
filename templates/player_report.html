@@ -1,68 +1,65 @@
 {% extends "base.html" %}
-{% block title %}Players — VolleyStats{% endblock %}
+{% from "_macros.html" import filter_select %}
+{% block title %}Spelers — VolleyStats{% endblock %}
 {% block content %}
 
 <!-- ── Sticky bar ──────────────────────────────────────────────────────── -->
-<div class="report-sticky-bar">
+<div class="sticky-page-header">
   <div class="page-header">
     <div>
-      <h1>Players</h1>
+      <h1>Spelers</h1>
       <small class="muted">
-        {{ players_data | length }} player{{ 's' if players_data | length != 1 else '' }}
-        across {{ games_count }} game{{ 's' if games_count != 1 else '' }}
+        {{ players_data | length }} speler{{ 's' if players_data | length != 1 else '' }}
+        over {{ games_count }} wedstrijd{{ 'en' if games_count != 1 else '' }}
       </small>
     </div>
     <div class="track-actions">
-      <a href="{{ url_for('index') }}" class="btn btn-outline">← Games</a>
+      <a href="{{ url_for('index') }}" class="btn btn-outline">← Wedstrijden</a>
       <button id="filter-toggle-btn" class="btn btn-outline btn-sm filter-toggle-btn" aria-expanded="true" aria-controls="filter-rows">Filters <span class="filter-caret" aria-hidden="true">&#x25BE;</span></button>
     </div>
   </div>
   <div class="filter-rows-wrap" id="filter-rows"><div class="filter-rows-inner">
-  {% if all_seasons | length > 0 %}
-  <div class="set-filter-bar">
-    <span class="set-label">Season:</span>
-    <a href="{{ season_urls['all'] }}" class="set-chip {% if not active_season %}active{% endif %}">All</a>
-    {% for s in all_seasons %}
-    <a href="{{ season_urls[s] }}" class="set-chip {% if s == active_season %}active{% endif %}">{{ s }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if all_game_teams | length > 1 %}
-  <div class="set-filter-bar">
-    <span class="set-label">Team:</span>
-    <a href="{{ team_urls['all'] }}" class="set-chip {% if not active_team %}active{% endif %}">All</a>
-    {% for t in all_game_teams %}
-    <a href="{{ team_urls[t] }}" class="set-chip {% if t == active_team %}active{% endif %}">{{ t }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if all_club_teams | length > 0 %}
-  <div class="set-filter-bar">
-    <span class="set-label">Roster:</span>
-    <a href="{{ club_team_urls['all'] }}" class="set-chip {% if not active_club_team %}active{% endif %}">All players</a>
-    {% for ct in all_club_teams %}
-    <a href="{{ club_team_urls[ct.name] }}" class="set-chip {% if ct.name == active_club_team %}active{% endif %}">{{ ct.name }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if game_chips %}
-  <div class="set-filter-bar" style="flex-wrap:wrap;">
-    <span class="set-label">Games:</span>
-    {% for chip in game_chips %}
-    <a href="{{ chip.toggle_url }}" class="set-chip {% if chip.active %}active{% endif %}">{{ chip.label }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
+  <form method="get" id="player-filter-form">
+    {% for p in active_players %}<input type="hidden" name="player" value="{{ p }}">{% endfor %}
+    {% if active_set_type %}<input type="hidden" name="type" value="{{ active_set_type }}">{% endif %}
+    {% if all_seasons | length > 0 or all_game_teams | length > 1 %}
+    <div class="filter-bar">
+      {% if all_seasons | length > 0 %}
+      {% call filter_select('season', 'Alle seizoenen') %}
+        {% for s in all_seasons %}
+        <option value="{{ s }}" {% if s == active_season %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      {% endcall %}
+      {% endif %}
+      {% if all_game_teams | length > 1 %}
+      {% call filter_select('team', 'Alle teams') %}
+        {% for t in all_game_teams %}
+        <option value="{{ t.id }}" {% if t.id == active_team %}selected{% endif %}>{{ t.short_name or t.name }}</option>
+        {% endfor %}
+      {% endcall %}
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if candidate_games %}
+    <div class="set-filter-bar" style="flex-wrap:wrap;">
+      <span class="set-label">Wedstrijden:</span>
+      {% for g in candidate_games %}
+      <label class="set-chip game-chip-label{% if g.id in selected_game_ids %} active{% endif %}">
+        <input type="checkbox" name="game" value="{{ g.id }}" {% if g.id in selected_game_ids %}checked{% endif %} style="display:none">
+        {{ g.played_at | fmt_date }} vs {{ g.opponent }}
+      </label>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary btn-sm">Toepassen</button>
+    </div>
+    {% endif %}
+  </form>
 
   {% if has_main or has_reserve %}
   <div class="set-filter-bar">
     <span class="set-label">Type:</span>
-    <a href="{{ filter_urls.all }}" class="set-chip {% if not active_set_type %}active{% endif %}">All</a>
+    <a href="{{ filter_urls.all }}" class="set-chip {% if not active_set_type %}active{% endif %}">Alles</a>
     {% if has_main %}
-    <a href="{{ filter_urls.main }}" class="set-chip {% if active_set_type == 'main' %}active{% endif %}">Main</a>
+    <a href="{{ filter_urls.main }}" class="set-chip {% if active_set_type == 'main' %}active{% endif %}">Hoofd</a>
     {% endif %}
     {% if has_reserve %}
     <a href="{{ filter_urls.reserve }}" class="set-chip {% if active_set_type == 'reserve' %}active{% endif %}">Reserve</a>
@@ -71,7 +68,7 @@
     <button id="split-toggle"
             class="set-chip split-toggle{% if not split_available %} disabled{% endif %}"
             {% if not split_available %}disabled{% endif %}
-            title="{% if split_available %}Split charts by set{% else %}Available for Main or Reserve filter only{% endif %}">
+            title="{% if split_available %}Grafieken splitsen per set{% else %}Alleen beschikbaar voor Hoofd- of Reservefilter{% endif %}">
       &#x229E; Split
     </button>
   </div>
@@ -79,10 +76,10 @@
 
   {% if player_chips | length > 1 %}
   <div class="set-filter-bar" style="flex-wrap:wrap; gap:0.3rem 0.4rem;">
-    <span class="set-label">{% if is_comparison %}Compare:{% else %}Player:{% endif %}</span>
+    <span class="set-label">{% if is_comparison %}Vergelijking:{% else %}Speler:{% endif %}</span>
     {% for chip in player_chips %}
     <a href="{{ player_urls[chip.slug] }}" class="set-chip {% if chip.slug in active_players %}active{% endif %}">
-      {% if chip.number %}#{{ chip.number }} {% endif %}{{ chip.name }}
+      {% if chip.number %}#{{ chip.number }} {% endif %}{{ chip.display_name }}
     </a>
     {% endfor %}
     {% if is_comparison %}
@@ -98,33 +95,24 @@
   'kill':'Kill','1-receive':'R1','2-receive':'R2','3-receive':'R3','overpass':'OvP',
   '1-freeball':'F1','2-freeball':'F2','3-freeball':'F3','fault':'Flt'
 } %}
+{% set stat_nl = {'serve': 'Opslag', 'attack': 'Aanval', 'receive': 'Receptie', 'block': 'Blok', 'freeball': 'Vrije bal', 'fault': 'Fout'} %}
 
 {% if not players_data %}
 <!-- ── Empty state ────────────────────────────────────────────────────── -->
 <div class="player-empty-state">
-  {% if active_club_team %}
-  <div class="player-empty-icon">👤</div>
-  <h2>No stats found for <span class="season-tag">{{ active_club_team }}</span> roster</h2>
-  <p>The selected roster players haven't recorded any events in the filtered games.</p>
-  <div class="player-empty-actions">
-    <a href="{{ club_team_urls['all'] }}" class="btn btn-outline">Show all players</a>
-    {% if active_season or active_team or selected_game_ids %}
-    <a href="{{ url_for('player_report', club_team=active_club_team) }}" class="btn btn-outline">Clear other filters</a>
-    {% endif %}
-  </div>
-  {% elif active_season or active_team or selected_game_ids %}
+  {% if active_season or active_team or selected_game_ids %}
   <div class="player-empty-icon">📊</div>
-  <h2>No stats for current filter</h2>
-  <p>No player events recorded in the selected games.</p>
+  <h2>Geen statistieken voor huidig filter</h2>
+  <p>Geen spelersgebeurtenissen geregistreerd in de geselecteerde wedstrijden.</p>
   <div class="player-empty-actions">
-    <a href="{{ url_for('player_report') }}" class="btn btn-outline">Clear all filters</a>
+    <a href="{{ url_for('player_report') }}" class="btn btn-outline">Alle filters wissen</a>
   </div>
   {% else %}
   <div class="player-empty-icon">🏐</div>
-  <h2>No player stats yet</h2>
-  <p>Record stats in a game to see player reports here.</p>
+  <h2>Nog geen spelersstatistieken</h2>
+  <p>Registreer statistieken in een wedstrijd om spelersrapporten hier te zien.</p>
   <div class="player-empty-actions">
-    <a href="{{ url_for('index') }}" class="btn btn-outline">Go to Games</a>
+    <a href="{{ url_for('index') }}" class="btn btn-outline">Naar wedstrijden</a>
   </div>
   {% endif %}
 </div>
@@ -142,7 +130,7 @@
   <!-- Row 1: Points Made / Lost -->
   <div class="charts-row charts-row-wide">
     <div class="chart-card" style="flex:1">
-      <div class="chart-title">Points Made / Lost per Game</div>
+      <div class="chart-title">Punten gemaakt/verloren per wedstrijd</div>
       <div class="chart-body"><canvas id="{{ player.slug }}-pointsChart"></canvas></div>
     </div>
   </div>
@@ -151,9 +139,9 @@
   <div class="charts-row charts-row-2">
     {% for stat in ['serve', 'receive'] %}
     <div class="dual-chart-card">
-      <div class="chart-title">{{ stat | title }}</div>
+      <div class="chart-title">{{ stat_nl.get(stat, stat | title) }}</div>
       <div class="dual-top"><canvas id="{{ player.slug }}-chart-{{ stat }}-top"></canvas></div>
-      <div class="dual-sep">Quality</div>
+      <div class="dual-sep">Kwaliteit</div>
       <div class="dual-bottom"><canvas id="{{ player.slug }}-chart-{{ stat }}-qual"></canvas></div>
     </div>
     {% endfor %}
@@ -163,7 +151,7 @@
   <div class="charts-row charts-row-2">
     {% for stat in ['attack', 'block'] %}
     <div class="chart-card">
-      <div class="chart-title">{{ stat | title }}</div>
+      <div class="chart-title">{{ stat_nl.get(stat, stat | title) }}</div>
       <div class="chart-body"><canvas id="{{ player.slug }}-chart-{{ stat }}"></canvas></div>
     </div>
     {% endfor %}
@@ -172,40 +160,40 @@
   <!-- Row 4: Freeball + Fault -->
   <div class="charts-row charts-row-2">
     <div class="dual-chart-card">
-      <div class="chart-title">Freeball</div>
+      <div class="chart-title">Vrije bal</div>
       <div class="dual-top"><canvas id="{{ player.slug }}-chart-freeball-top"></canvas></div>
-      <div class="dual-sep">Quality</div>
+      <div class="dual-sep">Kwaliteit</div>
       <div class="dual-bottom"><canvas id="{{ player.slug }}-chart-freeball-qual"></canvas></div>
     </div>
     <div class="chart-card">
-      <div class="chart-title">Fault</div>
+      <div class="chart-title">Fout</div>
       <div class="chart-body"><canvas id="{{ player.slug }}-chart-fault"></canvas></div>
     </div>
   </div>
 
   <!-- ── Stat Tables ──────────────────────────────────────────────── -->
-  <h3 class="player-stats-heading">Game Stats</h3>
+  <h3 class="player-stats-heading">Wedstrijdstatistieken</h3>
   <div class="stat-sections-grid">
   {% for stat, results in stat_results.items() %}
   <div class="stat-section" data-stat="{{ stat }}" data-slug="{{ player.slug }}">
-    <h3 class="stat-section-title stat-{{ stat }}">{{ stat | title }}</h3>
+    <h3 class="stat-section-title stat-{{ stat }}">{{ stat_nl.get(stat, stat | title) }}</h3>
     <table class="table report-table">
       <thead>
         <tr>
-          <th>Game</th>
+          <th>Wedstrijd</th>
           {% for result in results %}
           <th class="r-{{ result }}">{{ abbrev.get(result, result) }}</th>
           {% endfor %}
           <th class="derived-col">Tot</th>
           <th class="derived-col">Pts±</th>
-          <th class="derived-col">Err%</th>
-          {% if stat in quality_stats %}<th class="derived-col">Qual</th>{% endif %}
+          <th class="derived-col">Fout%</th>
+          {% if stat in quality_stats %}<th class="derived-col">Kwal</th>{% endif %}
         </tr>
       </thead>
       <tbody>
         {% for gt in player.game_rows %}
         <tr class="game-row">
-          <td><a href="{{ url_for('report', game_id=gt.game_id) }}" class="muted">{{ gt.played_at }} vs {{ gt.opponent }}</a></td>
+          <td><a href="{{ url_for('report', game_id=gt.game_id) }}" class="muted">{{ gt.played_at | fmt_date }} vs {{ gt.opponent }}</a></td>
           {% if gt.stats[stat].total == 0 %}
           <td colspan="{{ results|length + (4 if stat in quality_stats else 3) }}" class="no-data">—</td>
           {% else %}
@@ -226,7 +214,7 @@
         </tr>
         {% endfor %}
         <tr class="totals-row">
-          <td><strong>Player Total</strong></td>
+          <td><strong>Spelerstotaal</strong></td>
           {% for result in results %}
           <td><strong>{{ player.totals[stat][result] }}</strong></td>
           {% endfor %}
@@ -252,14 +240,14 @@
 <!-- ── Comparison section ─────────────────────────────────────────── -->
 <section id="compare-section" class="player-section">
   <h2 class="player-section-title">
-    Comparing:
+    Vergelijking:
     {% for p in players_data %}{% if not loop.first %} <span class="muted">vs</span> {% endif %}{% if p.number %}<span class="season-tag">#{{ p.number }}</span> {% endif %}{{ p.name }}{% endfor %}
   </h2>
 
   <!-- Points Made / Lost per Game -->
   <div class="charts-row charts-row-wide">
     <div class="chart-card" style="flex:1">
-      <div class="chart-title">Points Made / Lost per Game</div>
+      <div class="chart-title">Punten gemaakt/verloren per wedstrijd</div>
       <div class="chart-body"><canvas id="compare-pointsChart"></canvas></div>
     </div>
   </div>
@@ -267,15 +255,15 @@
   <!-- Serve + Receive Quality -->
   <div class="charts-row charts-row-2">
     <div class="dual-chart-card">
-      <div class="chart-title">Serve</div>
+      <div class="chart-title">Opslag</div>
       <div class="dual-top"><canvas id="compare-serve-top"></canvas></div>
-      <div class="dual-sep">Quality</div>
+      <div class="dual-sep">Kwaliteit</div>
       <div class="dual-bottom"><canvas id="compare-serve-qual"></canvas></div>
     </div>
     <div class="dual-chart-card">
-      <div class="chart-title">Receive</div>
+      <div class="chart-title">Receptie</div>
       <div class="dual-top"><canvas id="compare-receive-top"></canvas></div>
-      <div class="dual-sep">Quality</div>
+      <div class="dual-sep">Kwaliteit</div>
       <div class="dual-bottom"><canvas id="compare-receive-qual"></canvas></div>
     </div>
   </div>
@@ -283,11 +271,11 @@
   <!-- Attack Kills + Block Kills -->
   <div class="charts-row charts-row-2">
     <div class="chart-card">
-      <div class="chart-title">Attack Kills</div>
+      <div class="chart-title">Aanvalskills</div>
       <div class="chart-body"><canvas id="compare-attack"></canvas></div>
     </div>
     <div class="chart-card">
-      <div class="chart-title">Block Kills</div>
+      <div class="chart-title">Blokpunten</div>
       <div class="chart-body"><canvas id="compare-block"></canvas></div>
     </div>
   </div>
@@ -299,7 +287,7 @@
   <div class="chart-modal-card">
     <div class="chart-modal-header">
       <span id="chart-modal-title" class="chart-modal-title-text"></span>
-      <button id="chart-modal-close" class="chart-modal-close" title="Close">✕</button>
+      <button id="chart-modal-close" class="chart-modal-close" title="Sluiten">✕</button>
     </div>
     <div id="chart-modal-body" class="chart-modal-body"></div>
   </div>
@@ -307,6 +295,7 @@
 
 <script src="{{ url_for('static', filename='js/charts-common.js') }}"></script>
 <script>
+function fmtDate(iso) { if (!iso) return ''; const p = iso.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : iso; }
 const ALL_PLAYERS_DATA = {{ players_data_js | tojson }};
 const STAT_RESULTS     = {{ stat_results | tojson }};
 const QUALITY_STATS    = new Set({{ quality_stats | list | tojson }});
@@ -317,62 +306,6 @@ const IS_COMPARISON    = {{ is_comparison | tojson }};
 const COMPARISON_DATA  = {{ comparison_data_js | tojson }};
 const PLAYER_COLORS    = ['79,142,247','62,207,111','247,201,72','232,81,74','163,116,245','79,223,192','247,158,79','232,125,232'];
 
-const chartRegistry  = {};
-const chartInstances = {};
-const cssGreen  = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
-const cssRed    = getComputedStyle(document.documentElement).getPropertyValue('--red').trim();
-const cssBorder = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
-
-const splitGroupPlugin = {
-  id: "splitGroup",
-  afterDraw(chart) {
-    const groups = chart.options.splitGroups;
-    if (!groups || !groups.length) return;
-    const { ctx, scales: { x }, chartArea: { top, bottom } } = chart;
-    const totalBars = chart.data.labels.length;
-    if (!totalBars) return;
-    const step = (x.right - x.left) / totalBars;
-    ctx.save();
-    groups.forEach((g, gi) => {
-      const x0 = x.getPixelForValue(g.start) - step / 2;
-      const x1 = x.getPixelForValue(g.start + g.count - 1) + step / 2;
-      if (gi % 2 === 1) {
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--split-fill').trim();
-        ctx.fillRect(x0, top, x1 - x0, bottom - top);
-      }
-      if (gi > 0) {
-        ctx.strokeStyle = cssBorder;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.moveTo(x0, top - 14);
-        ctx.lineTo(x0, bottom);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      ctx.fillStyle = xAxis.ticks.color;
-      ctx.font = "bold 10px 'Segoe UI', system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(g.name, (x0 + x1) / 2, top - 4);
-    });
-    ctx.restore();
-  }
-};
-
-let _splitGroups = null;
-function mkChart(id, cfg) {
-  if (_splitGroups) {
-    cfg = {
-      ...cfg,
-      plugins: [...(cfg.plugins || []), splitGroupPlugin],
-      options: { ...cfg.options, splitGroups: _splitGroups, layout: { padding: { top: 18 } } },
-    };
-  }
-  chartRegistry[id] = cfg;
-  const c = new Chart(document.getElementById(id), cfg);
-  chartInstances[id] = c;
-  return c;
-}
 function destroyPlayerCharts(slug) {
   const pfx = slug + '-';
   Object.keys(chartInstances).filter(k => k.startsWith(pfx)).forEach(k => {
@@ -380,77 +313,6 @@ function destroyPlayerCharts(slug) {
     delete chartInstances[k];
     delete chartRegistry[k];
   });
-}
-
-// ── Plugin: net total label above diverging bars ──────────────────────
-const netTotalPlugin = {
-  id: "netTotal",
-  afterDatasetsDraw(chart) {
-    const { ctx, data, scales: { x, y } } = chart;
-    const n = data.labels.length;
-    ctx.save();
-    ctx.font = "bold 11px 'Segoe UI', system-ui, sans-serif";
-    ctx.textAlign = "center";
-    for (let i = 0; i < n; i++) {
-      let net = 0;
-      data.datasets.forEach(ds => { if (!ds.neutral) net += (ds.data[i] || 0); });
-      const xPos  = x.getPixelForValue(i);
-      const yPos  = chart.chartArea.bottom - 5;
-      const label = net > 0 ? `+${net}` : `${net}`;
-      ctx.fillStyle = net >= 0 ? cssGreen : cssRed;
-      ctx.fillText(label, xPos, yPos);
-    }
-    ctx.restore();
-  }
-};
-
-// ── Full-screen modal ─────────────────────────────────────────────────
-function cloneCfg(cfg) {
-  return { ...cfg, data: { ...cfg.data, datasets: cfg.data.datasets.map(ds => ({ ...ds })) } };
-}
-let modalCharts = [];
-function openChartModal(card) {
-  const title = card.querySelector('.chart-title').textContent.trim();
-  document.getElementById('chart-modal-title').textContent = title;
-  const body = document.getElementById('chart-modal-body');
-  body.innerHTML = '';
-  modalCharts.forEach(c => c.destroy());
-  modalCharts = [];
-  if (card.classList.contains('dual-chart-card')) {
-    const topId  = card.querySelector('.dual-top canvas').id;
-    const qualId = card.querySelector('.dual-bottom canvas').id;
-    const topWrap = Object.assign(document.createElement('div'), { className:'modal-chart-top' });
-    const tc = document.createElement('canvas');
-    tc.id = topId + '-modal';
-    topWrap.appendChild(tc);
-    body.appendChild(topWrap);
-    const sep = Object.assign(document.createElement('div'), { className:'dual-sep', textContent:'Quality' });
-    body.appendChild(sep);
-    const qualWrap = Object.assign(document.createElement('div'), { className:'modal-chart-qual' });
-    const qc = document.createElement('canvas');
-    qc.id = qualId + '-modal';
-    qualWrap.appendChild(qc);
-    body.appendChild(qualWrap);
-    if (chartRegistry[topId])  modalCharts.push(mkChart(topId + '-modal', cloneCfg(chartRegistry[topId])));
-    if (chartRegistry[qualId]) modalCharts.push(mkChart(qualId + '-modal', cloneCfg(chartRegistry[qualId])));
-  } else {
-    const srcId = card.querySelector('canvas').id;
-    const wrap = Object.assign(document.createElement('div'), { className:'modal-chart-wrap' });
-    const c = document.createElement('canvas');
-    c.id = srcId + '-modal';
-    wrap.appendChild(c);
-    body.appendChild(wrap);
-    if (chartRegistry[srcId]) modalCharts.push(mkChart(srcId + '-modal', cloneCfg(chartRegistry[srcId])));
-  }
-  document.getElementById('chart-modal').hidden = false;
-  document.body.classList.add('modal-open');
-}
-function closeChartModal() {
-  document.getElementById('chart-modal').hidden = true;
-  document.body.classList.remove('modal-open');
-  modalCharts.forEach(c => c.destroy());
-  modalCharts = [];
-  document.getElementById('chart-modal-body').innerHTML = '';
 }
 
 // ── Per-player chart initialiser ──────────────────────────────────────
@@ -648,7 +510,7 @@ function renderSplitTables(slug, gameSetData) {
       hLink.href = `/games/${game.game_id}/report`;
       hLink.className = 'muted';
       const hStrong = document.createElement('strong');
-      hStrong.textContent = `${game.played_at} ${game.label}`;
+      hStrong.textContent = `${fmtDate(game.played_at)} ${game.label}`;
       hLink.appendChild(hStrong);
       hTd.appendChild(hLink);
       hRow.appendChild(hTd);
@@ -1129,22 +991,22 @@ if (splitBtn && SPLIT_AVAILABLE) {
     }
   });
 }
-
-// ── Modal wiring + expand buttons ─────────────────────────────────────
-document.getElementById('chart-modal').addEventListener('click', e => {
-  if (e.target.id === 'chart-modal') closeChartModal();
+initChartModalListeners();
+// Game chip checkbox toggle — update active class on click
+document.querySelectorAll('.game-chip-label input[type="checkbox"]').forEach(function(cb) {
+  cb.addEventListener('change', function() {
+    cb.closest('.game-chip-label').classList.toggle('active', cb.checked);
+  });
 });
-document.getElementById('chart-modal-close').addEventListener('click', closeChartModal);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChartModal(); });
-
-document.querySelectorAll('.chart-card, .dual-chart-card').forEach(card => {
-  const btn = document.createElement('button');
-  btn.className = 'chart-expand-btn';
-  btn.title = 'Focus chart';
-  btn.setAttribute('aria-label', 'Focus chart');
-  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 5V1h4M8 1h4v4M12 8v4H8M5 12H1V8"/></svg>`;
-  btn.addEventListener('click', e => { e.stopPropagation(); openChartModal(card); });
-  card.appendChild(btn);
+// Clear game selection when season or team changes (fires before base.html auto-submit)
+document.querySelectorAll('#player-filter-form select.filter-select').forEach(function(sel) {
+  sel.addEventListener('change', function() {
+    document.querySelectorAll('#player-filter-form .game-chip-label').forEach(function(lbl) {
+      var cb = lbl.querySelector('input[type="checkbox"]');
+      cb.checked = false;
+      lbl.classList.remove('active');
+    });
+  });
 });
 initFilterToggle('filters_players');
 </script>

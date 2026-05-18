@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Nieuwe trainingsgroep — VolleyStats{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Nieuwe trainingsgroep</h1>
+  <a href="{{ url_for('training_group_list') }}" class="btn btn-outline btn-sm">← Groepen</a>
+</div>
+
+{% if error %}
+<div class="auth-error" style="margin-bottom:1rem">{{ error }}</div>
+{% endif %}
+
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <section class="card" style="margin-bottom:1rem">
+    <h2>Groepsgegevens</h2>
+    <div style="display:flex;flex-direction:column;gap:.65rem">
+      <label>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">
+          Naam <span style="color:var(--red)">*</span>
+        </span>
+        <input type="text" name="name" required value="{{ name }}" placeholder="bijv. U18 Spelverdelers"
+               style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                      color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
+      </label>
+      <label>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Beschrijving</span>
+        <textarea name="description" rows="3" placeholder="Optionele beschrijving…"
+                  style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                         color:var(--fg);padding:.4rem .55rem;font-size:0.9rem;resize:vertical;box-sizing:border-box">{{ description }}</textarea>
+      </label>
+    </div>
+  </section>
+  <div class="form-actions" style="gap:.75rem">
+    <a href="{{ url_for('training_group_list') }}" class="btn btn-outline">Annuleren</a>
+    <button type="submit" class="btn btn-primary btn-lg">Groep aanmaken</button>
+  </div>
+</form>
+{% endblock %}

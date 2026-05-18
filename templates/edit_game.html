@@ -1,72 +1,59 @@
 {% extends "base.html" %}
-{% block title %}Edit Game — VolleyStats{% endblock %}
+{% from "_macros.html" import player_roster_section %}
+{% block title %}Wedstrijd bewerken — VolleyStats{% endblock %}
 {% block content %}
-<h1>Edit Game</h1>
+<h1>Wedstrijd bewerken</h1>
 <form method="POST" id="edit-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <section class="card">
-    <h2>Game Info</h2>
+    <h2>Wedstrijdinfo</h2>
     <div class="field-row">
-      <label>Season
-        <input type="text" name="season" value="{{ game.season }}" placeholder="e.g. 2025-2026" list="season-list" />
+      <label>Seizoen
+        <input type="text" name="season" value="{{ game.season }}" placeholder="bijv. 2025-2026" list="season-list" />
         <datalist id="season-list">
           {% for s in existing_seasons %}<option value="{{ s }}">{% endfor %}
         </datalist>
       </label>
-      <label>Your Team Name
-        <input type="text" name="team_name" required value="{{ game.team_name }}" />
+      <label>Uw team
+        <select id="team-select-edit">
+          <option value="" data-id="">— Selecteer team —</option>
+          {% for t in club_teams %}
+          <option value="{{ t.name }}" data-id="{{ t.id }}" {% if t.id == game.club_team_id %}selected{% endif %}>{{ t.short_name or t.name }}</option>
+          {% endfor %}
+        </select>
+        <input type="hidden" name="team_name" id="team-value-edit" value="{{ game.team_name }}" />
+        <input type="hidden" name="club_team_id" id="club-team-id-edit" value="{{ game.club_team_id or '' }}" />
       </label>
-      <label>Opponent
+      <label>Tegenstander
         <input type="text" name="opponent" required value="{{ game.opponent }}" />
       </label>
-      <label>Date
+      <label>Datum
         <input type="date" name="played_at" value="{{ game.played_at }}" />
       </label>
     </div>
   </section>
 
-  <section class="card">
-    <h2>Players</h2>
-    <p class="grid-hint">Removing a player here does not delete their recorded events — they will still appear in reports.</p>
-    <table class="table" id="players-table">
-      <thead>
-        <tr><th class="num-col">#</th><th>Name</th><th></th></tr>
-      </thead>
-      <tbody id="players-body">
-        {% for p in players %}
-        <tr>
-          <td><input type="text" name="player_number" value="{{ p.number or '' }}" placeholder="#" /></td>
-          <td><input type="text" name="player_name"   value="{{ p.name | title }}" placeholder="Player name" /></td>
-          <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <button type="button" class="btn btn-outline" id="add-player">+ Add Player</button>
-  </section>
+  {{ player_roster_section(players, all_profiles,
+       note='Een speler verwijderen hier verwijdert hun geregistreerde gebeurtenissen niet — zij blijven zichtbaar in rapporten.',
+       show_clear=False) }}
 
   <div class="form-actions" style="gap:0.75rem">
-    <a href="{{ url_for('index') }}" class="btn btn-outline">Cancel</a>
-    <button type="submit" class="btn btn-primary btn-lg">Save Changes</button>
+    <a href="{{ url_for('index') }}" class="btn btn-outline">Annuleren</a>
+    <button type="submit" class="btn btn-primary btn-lg">Wijzigingen opslaan</button>
   </div>
 </form>
 
+<script src="{{ url_for('static', filename='js/player-picker.js') }}"></script>
 <script>
-  document.getElementById("add-player").addEventListener("click", () => {
-    const tbody = document.getElementById("players-body");
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td><input type="text" name="player_number" placeholder="#" /></td>
-      <td><input type="text" name="player_name" placeholder="Player name" /></td>
-      <td><button type="button" class="btn btn-sm btn-danger remove-row">✕</button></td>`;
-    tbody.appendChild(row);
-  });
+  initPlayerPicker({{ all_profiles | tojson }}, { showClear: false });
 
-  document.getElementById("players-body").addEventListener("click", (e) => {
-    if (e.target.classList.contains("remove-row")) {
-      const rows = document.querySelectorAll("#players-body tr");
-      if (rows.length > 1) e.target.closest("tr").remove();
-    }
+  const teamSelectEdit = document.getElementById('team-select-edit');
+  const teamValueEdit  = document.getElementById('team-value-edit');
+  const clubTeamIdEdit = document.getElementById('club-team-id-edit');
+  teamSelectEdit.addEventListener('change', () => {
+    const opt = teamSelectEdit.options[teamSelectEdit.selectedIndex];
+    teamValueEdit.value  = teamSelectEdit.value;
+    clubTeamIdEdit.value = opt.dataset.id || '';
   });
 </script>
 {% endblock %}
