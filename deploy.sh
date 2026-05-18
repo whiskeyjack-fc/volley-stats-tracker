@@ -3,6 +3,9 @@ set -e
 
 cd ~/PlayerStats
 
+# Snapshot the database before pulling (safety net before any migration runs)
+python backup.py
+
 # Record the current HEAD before pulling
 OLD_HASH=$(git rev-parse HEAD)
 

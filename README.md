@@ -153,6 +153,47 @@ chmod +x deploy.sh
 
 The SQLite database (`stats.db`) is created automatically in the project root on first run. It contains the following tables:
 
+## Database backups
+
+Three layers of backup are implemented:
+
+**1. Admin on-demand download**
+Any `admin` user can download a live hot-backup from `GET /admin/backup/download`. The route uses SQLite's built-in `Connection.backup()` API so the snapshot is always consistent, even under concurrent writes.
+
+**2. Daily local rotation on PythonAnywhere (7 copies)**
+`backup.py` (project root) creates `backups/stats_YYYY-MM-DD.db` and prunes the oldest files to keep exactly 7. Register it once as a PythonAnywhere scheduled task (free Beginner tier: 1 task allowed):
+
+- Go to **Dashboard → Tasks** on PythonAnywhere
+- Add a daily task at e.g. `03:00 UTC`:
+  ```
+  python ~/PlayerStats/backup.py
+  ```
+
+`deploy.sh` also calls `python backup.py` before `git pull`, ensuring a snapshot is captured before any schema migration runs.
+
+**3. Weekly off-site backup to GitHub (`backups` branch)**
+`.github/workflows/weekly-backup.yml` runs every Monday at 06:00 UTC. It downloads `stats.db` via the PythonAnywhere Files API and commits it to the `backups` branch of this repository.
+
+Required GitHub repository secrets (Settings → Secrets → Actions):
+
+| Secret | Value |
+|--------|-------|
+| `PA_API_TOKEN` | Your PythonAnywhere API token (same as `.env`) |
+| `PA_USERNAME` | Your PythonAnywhere username (same as `.env`) |
+
+Create the `backups` branch once before the first run:
+```bash
+git checkout --orphan backups
+git rm -rf .
+git commit --allow-empty -m "init: backups branch"
+git push origin backups
+git checkout main
+```
+
+You can also trigger the Action manually from the **Actions** tab using **Run workflow**.
+
+
+
 | Table               | Description                                      |
 |---------------------|--------------------------------------------------|
 | `users`             | Trainer accounts (email, hashed password, role)  |

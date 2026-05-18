@@ -2370,6 +2370,33 @@ def admin_link_profile(user_id):
     return redirect(url_for("admin_users"))
 
 
+@app.route("/admin/backup/download")
+@login_required
+def admin_backup_download():
+    if not is_admin():
+        return "Forbidden", 403
+    import tempfile
+    today = datetime.now().strftime("%Y-%m-%d")
+    tmp_path = tempfile.mktemp(suffix=".db")
+    try:
+        src = sqlite3.connect(DATABASE)
+        dst = sqlite3.connect(tmp_path)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+        with open(tmp_path, "rb") as f:
+            data = f.read()
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+    resp = make_response(data)
+    resp.headers["Content-Disposition"] = f'attachment; filename="stats_{today}.db"'
+    resp.headers["Content-Type"] = "application/octet-stream"
+    return resp
+
+
 # ── Roster / Player Profiles ──────────────────────────────────────────────────
 
 @app.route("/roster")
@@ -3178,7 +3205,7 @@ def kit_list():
         params
     ).fetchall()
 
-    all_teams    = db.execute("SELECT id, name, short_name FROM club_teams ORDER BY name COLLATE NOCASE").fetchall()
+    all_teams    = db.execute("SELECT id, name, short_name FROM club_teams ORDER BY COALESCE(NULLIF(short_name,''), name) COLLATE NOCASE").fetchall()
     all_profiles = db.execute(
         "SELECT id, first_name, last_name FROM player_profiles "
         "WHERE status != 'inactive' ORDER BY last_name, first_name"

@@ -1,0 +1,42 @@
+name: Weekly DB backup
+
+on:
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout backups branch
+        uses: actions/checkout@v4
+        with:
+          ref: backups
+          fetch-depth: 0
+
+      - name: Download stats.db from PythonAnywhere
+        env:
+          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+          PA_USERNAME: ${{ secrets.PA_USERNAME }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          mkdir -p backups
+          curl --fail \
+            --header "Authorization: Token ${PA_API_TOKEN}" \
+            "https://www.pythonanywhere.com/api/v0/user/${PA_USERNAME}/files/path/home/${PA_USERNAME}/PlayerStats/stats.db" \
+            --output "backups/stats_${DATE}.db"
+          echo "Downloaded backups/stats_${DATE}.db"
+
+      - name: Commit backup to backups branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backups/
+          # Skip commit if nothing changed (e.g. duplicate run on same day)
+          git diff --cached --quiet && echo "Nothing to commit" || git commit -m "chore: weekly DB backup $(date +%Y-%m-%d)"
+          git push origin backups
