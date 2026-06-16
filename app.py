@@ -3889,6 +3889,32 @@ def conflicts_refresh():
     return redirect(url_for("conflicts_page", season_id=season_id))
 
 
+@app.route("/conflicts/upload-xml", methods=["POST"])
+@login_required
+def conflicts_upload_xml():
+    """Accept a manually uploaded Volleyadmin2 XML file and store it as the match cache."""
+    season_id_str = request.form.get("season_id", "").strip()
+    season_id = int(season_id_str) if season_id_str.isdigit() else None
+    f = request.files.get("xml_file")
+    if not f or not f.filename:
+        flash("Selecteer een XML-bestand om te uploaden.", "error")
+        return redirect(url_for("conflicts_page", season_id=season_id))
+    try:
+        xml_bytes = f.read()
+    except Exception as exc:
+        flash(f"Bestand kon niet worden gelezen: {exc}", "error")
+        return redirect(url_for("conflicts_page", season_id=season_id))
+    matches = _parse_federation_xml(xml_bytes)
+    if not matches:
+        flash("Het XML-bestand bevat geen wedstrijdgegevens of is ongeldig.", "error")
+        return redirect(url_for("conflicts_page", season_id=season_id))
+    db = get_db()
+    _store_match_cache(db, matches)
+    db.commit()
+    flash(f"Wedstrijddata geladen: {len(matches)} wedstrijden.", "success")
+    return redirect(url_for("conflicts_page", season_id=season_id))
+
+
 # ── Federation conflict-checker helpers ───────────────────────────────────────
 
 BELVOC_STAMNUMMER = "O-2186"

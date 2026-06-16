@@ -23,11 +23,30 @@
   <button type="submit" class="btn btn-sm btn-outline" style="display:none">Filter</button>
 </form>
 
-<form method="post" action="{{ url_for('conflicts_refresh') }}" style="margin:0 0 1.5rem">
+<form method="post" action="{{ url_for('conflicts_refresh') }}" style="margin:0 0 0.5rem">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
   <button type="submit" class="btn btn-sm btn-primary">↻ Data vernieuwen</button>
 </form>
+
+<details class="upload-xml-details" style="margin-bottom:1.5rem">
+  <summary class="btn btn-sm btn-outline" style="display:inline-flex;cursor:pointer">📂 XML handmatig uploaden</summary>
+  <div class="card" style="margin-top:.5rem;padding:1rem">
+    <p style="margin:0 0 .5rem;font-size:.9rem;color:var(--muted)">
+      Als automatisch ophalen mislukt (bv. door een serverbeperking), kan je de XML zelf downloaden via
+      <a href="http://www.volleyadmin2.be/services/wedstrijden_xml.php?stamnummer=O-2186" target="_blank" rel="noopener">
+        volleyadmin2.be
+      </a>
+      en hier uploaden.
+    </p>
+    <form method="post" action="{{ url_for('conflicts_upload_xml') }}" enctype="multipart/form-data" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
+      <input type="file" name="xml_file" accept=".xml,text/xml,application/xml" required style="font-size:.85rem">
+      <button type="submit" class="btn btn-sm btn-primary">Uploaden</button>
+    </form>
+  </div>
+</details>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, message in messages %}
