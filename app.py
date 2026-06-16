@@ -3914,7 +3914,12 @@ def _overlap_duration(s1, e1, s2, e2):
 def _fetch_federation_xml():
     """Fetch the Volleyadmin2 XML for BELVOC_STAMNUMMER; returns (bytes, None) or (None, str_error)."""
     url = f"http://www.volleyadmin2.be/services/wedstrijden_xml.php?stamnummer={BELVOC_STAMNUMMER}"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "http://www.volleyadmin2.be/",
+        "Accept": "text/xml,application/xml,application/xhtml+xml,*/*;q=0.9",
+        "Accept-Language": "nl-BE,nl;q=0.9,en;q=0.8",
+    }
     try:
         resp = requests.get(url, headers=headers, timeout=20)
         resp.raise_for_status()
