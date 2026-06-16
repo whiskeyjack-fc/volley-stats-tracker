@@ -5,6 +5,7 @@
             "name": "Flask: Run app.py",
             "type": "debugpy",
             "request": "launch",
+            "python": "C:\\Python312\\python.exe",
             "program": "${workspaceFolder}/app.py",
             "args": [],
             "env": {

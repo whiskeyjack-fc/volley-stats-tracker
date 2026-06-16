@@ -5,7 +5,9 @@ import csv
 import io
 import re
 import json
-from datetime import datetime, UTC
+import requests
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, UTC
 from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, g, flash, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_limiter import Limiter
@@ -486,6 +488,12 @@ def migrate_db():
             note       TEXT,
             created_by INTEGER REFERENCES users(id),
             created_at TEXT NOT NULL
+        )""",
+        "ALTER TABLE club_teams ADD COLUMN federation_reeks TEXT",
+        """CREATE TABLE IF NOT EXISTS federation_match_cache (
+            id           INTEGER PRIMARY KEY CHECK(id=1),
+            fetched_at   TEXT NOT NULL,
+            matches_json TEXT NOT NULL
         )""",
     ]:
         try:
@@ -2057,9 +2065,10 @@ def new_team():
         f"SELECT id, name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
     ).fetchall()]
     if request.method == "POST":
-        name       = request.form.get("team_name", "").strip()
-        division   = request.form.get("division", "").strip() or None
-        short_name = request.form.get("short_name", "").strip() or None
+        name             = request.form.get("team_name", "").strip()
+        division         = request.form.get("division", "").strip() or None
+        short_name       = request.form.get("short_name", "").strip() or None
+        federation_reeks = request.form.get("federation_reeks", "").strip() or None
         if not name:
             return render_template("team_form.html", team=None, players=[], all_profiles=[],
                                    seasons=seasons, selected_season_id=None, error="Team name is required.",
@@ -2074,7 +2083,7 @@ def new_team():
                                        error="A team with this short name already exists.",
                                        team_member_roles=TEAM_MEMBER_ROLES)
         try:
-            cur = db.execute("INSERT INTO club_teams (user_id, name, division, short_name) VALUES (?,?,?,?)", (current_user.id, name, division, short_name))
+            cur = db.execute("INSERT INTO club_teams (user_id, name, division, short_name, federation_reeks) VALUES (?,?,?,?,?)", (current_user.id, name, division, short_name, federation_reeks))
             db.commit()
         except sqlite3.IntegrityError:
             db.rollback()
@@ -2106,10 +2115,11 @@ def edit_team(team_id):
         f"SELECT id, name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
     ).fetchall()]
     if request.method == "POST":
-        name          = request.form.get("team_name", "").strip()
-        division      = request.form.get("division", "").strip() or None
-        short_name    = request.form.get("short_name", "").strip() or None
-        season_id_str = request.form.get("season_id", "").strip()
+        name             = request.form.get("team_name", "").strip()
+        division         = request.form.get("division", "").strip() or None
+        short_name       = request.form.get("short_name", "").strip() or None
+        federation_reeks = request.form.get("federation_reeks", "").strip() or None
+        season_id_str    = request.form.get("season_id", "").strip()
         season_id     = int(season_id_str) if season_id_str.isdigit() else None
         if season_id:
             players = db.execute(
@@ -2138,8 +2148,8 @@ def edit_team(team_id):
                                        season_info=season_info, team_member_roles=TEAM_MEMBER_ROLES)
         try:
             if season_id:
-                # Only update the team name globally; short_name/division are season-specific
-                cur = db.execute("UPDATE club_teams SET name=? WHERE id=?", (name, team_id))
+                # Only update global team fields; short_name/division are season-specific
+                cur = db.execute("UPDATE club_teams SET name=?, federation_reeks=? WHERE id=?", (name, federation_reeks, team_id))
                 if cur.rowcount == 0:
                     return "Team not found", 404
                 db.execute(
@@ -2148,7 +2158,7 @@ def edit_team(team_id):
                     (team_id, season_id, short_name, division)
                 )
             else:
-                cur = db.execute("UPDATE club_teams SET name=?, division=?, short_name=? WHERE id=?", (name, division, short_name, team_id))
+                cur = db.execute("UPDATE club_teams SET name=?, division=?, short_name=?, federation_reeks=? WHERE id=?", (name, division, short_name, federation_reeks, team_id))
                 if cur.rowcount == 0:
                     return "Team not found", 404
             if season_id:
@@ -3823,6 +3833,381 @@ def kit_import_confirm():
         return redirect(url_for("kit_list"))
     flash(f"Import voltooid: {inserted} ingevoegd, {updated} bijgewerkt.", "success")
     return redirect(url_for("kit_list"))
+
+
+# ── /conflicts routes ─────────────────────────────────────────────────────────
+
+@app.route("/conflicts")
+@login_required
+def conflicts_page():
+    db = get_db()
+    ucond, uparams = _uid_cond()
+    seasons = [dict(s) for s in db.execute(
+        f"SELECT id, name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
+    ).fetchall()]
+
+    valid_season_ids = {s['id'] for s in seasons}
+    selected_season_id = request.args.get("season_id", type=int)
+    if selected_season_id not in valid_season_ids:
+        selected_season_id = seasons[0]['id'] if seasons else None
+
+    fetched_at, all_matches = _get_match_cache(db)
+    no_cache = all_matches is None
+
+    sporthal_conflicts = []
+    person_conflicts   = {}
+    if not no_cache and selected_season_id:
+        future = _filter_future_matches(all_matches)
+        sporthal_conflicts = _detect_sporthal_conflicts(future)
+        merged = _merge_matches_with_people(future, db, selected_season_id)
+        person_conflicts = _detect_person_conflicts(merged)
+
+    return render_template(
+        "conflicts.html",
+        sporthal_conflicts=sporthal_conflicts,
+        person_conflicts=person_conflicts,
+        fetched_at=fetched_at,
+        no_cache=no_cache,
+        seasons=seasons,
+        selected_season_id=selected_season_id,
+    )
+
+
+@app.route("/conflicts/refresh", methods=["POST"])
+@login_required
+def conflicts_refresh():
+    season_id_str = request.form.get("season_id", "").strip()
+    season_id = int(season_id_str) if season_id_str.isdigit() else None
+    xml_bytes = _fetch_federation_xml()
+    if xml_bytes is None:
+        flash("Fout bij ophalen wedstrijddata.", "error")
+        return redirect(url_for("conflicts_page"))
+    matches = _parse_federation_xml(xml_bytes)
+    db = get_db()
+    _store_match_cache(db, matches)
+    db.commit()
+    return redirect(url_for("conflicts_page", season_id=season_id))
+
+
+# ── Federation conflict-checker helpers ───────────────────────────────────────
+
+BELVOC_STAMNUMMER = "O-2186"
+BELVOC_SPORTHAL   = "Belsele, Sporthal De Klavers"
+
+
+def _normalize_ploeg(name):
+    """Strip (+) suffix, collapse whitespace, lowercase — used for team-name matching."""
+    return ' '.join(name.replace('(+)', '').split()).lower()
+
+
+def _overlap_duration(s1, e1, s2, e2):
+    """Return 'N min (P%)' overlap string, or None when the intervals do not overlap."""
+    overlap_start = max(s1, s2)
+    overlap_end   = min(e1, e2)
+    if overlap_start < overlap_end:
+        duration = (overlap_end - overlap_start).total_seconds() / 60
+        pct      = duration / ((e2 - s2).total_seconds() / 60) * 100
+        return f"{duration:.0f} min ({pct:.0f}%)"
+    return None
+
+
+def _fetch_federation_xml():
+    """Fetch the Volleyadmin2 XML for BELVOC_STAMNUMMER; returns bytes or None on error."""
+    url = f"http://www.volleyadmin2.be/services/wedstrijden_xml.php?stamnummer={BELVOC_STAMNUMMER}"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.content
+    except Exception as exc:
+        print(f"_fetch_federation_xml error: {exc}", file=sys.stderr)
+        return None
+
+
+def _parse_federation_xml(xml_bytes):
+    """Parse Volleyadmin2 XML bytes; returns list of match dicts."""
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError as exc:
+        print(f"_parse_federation_xml parse error: {exc}", file=sys.stderr)
+        return []
+    matches = []
+    for w in root.findall('.//wedstrijd'):
+        datum       = w.findtext('datum', default='')
+        aanvangsuur = w.findtext('aanvangsuur', default='')
+        reeks       = w.findtext('reeks', default='')
+        promo       = reeks.startswith(('OHP', 'ODP', 'OBP'))
+        try:
+            base_dt  = datetime.strptime(f"{datum} {aanvangsuur}", "%d/%m/%Y %H:%M")
+            offset   = timedelta(minutes=150) if promo else timedelta(minutes=60)
+            start_dt = base_dt - offset
+            einde_dt = base_dt + timedelta(hours=2)
+            start_str = start_dt.strftime("%d/%m/%Y %H:%M")
+            einde_str = einde_dt.strftime("%d/%m/%Y %H:%M")
+        except ValueError:
+            start_str = datum + ' ' + aanvangsuur
+            einde_str = ''
+        thuisploeg     = w.findtext('thuisploeg', default='')
+        bezoekersploeg = w.findtext('bezoekersploeg', default='')
+        ploeg = thuisploeg if 'vc belvoc belsele' in thuisploeg.lower() else bezoekersploeg
+        matches.append({
+            'datum':          datum,
+            'aanvangsuur':    aanvangsuur,
+            'reeks':          reeks,
+            'thuisploeg':     thuisploeg,
+            'bezoekersploeg': bezoekersploeg,
+            'ploeg':          ploeg,
+            'sporthal':       w.findtext('sporthal', default=''),
+            'start':          start_str,
+            'einde':          einde_str,
+        })
+    return matches
+
+
+def _filter_future_matches(matches):
+    """Return only matches with start >= now()."""
+    now = datetime.now()
+    result = []
+    for m in matches:
+        try:
+            start_dt = datetime.strptime(m['start'], "%d/%m/%Y %H:%M")
+        except Exception:
+            continue
+        if start_dt >= now:
+            result.append(m)
+    return result
+
+
+def _get_match_cache(db):
+    """Return (fetched_at_str, matches_list) or (None, None) when cache is empty."""
+    row = db.execute(
+        "SELECT fetched_at, matches_json FROM federation_match_cache WHERE id=1"
+    ).fetchone()
+    if not row:
+        return None, None
+    try:
+        return row['fetched_at'], json.loads(row['matches_json'])
+    except Exception:
+        return None, None
+
+
+def _store_match_cache(db, matches):
+    """Upsert the full match list into federation_match_cache."""
+    fetched_at = datetime.now(UTC).isoformat()
+    db.execute(
+        "INSERT OR REPLACE INTO federation_match_cache (id, fetched_at, matches_json) VALUES (1,?,?)",
+        (fetched_at, json.dumps(matches))
+    )
+
+
+def _detect_sporthal_conflicts(matches):
+    """Return list of conflict groups (each group = list of match dicts with overlap_duration).
+    A group contains 3+ overlapping matches at BELVOC_SPORTHAL on the same day."""
+    sporthal_matches = [m for m in matches if m.get('sporthal') == BELVOC_SPORTHAL]
+
+    # Attach datetime objects temporarily
+    for m in sporthal_matches:
+        try:
+            m['_s'] = datetime.strptime(m['start'], "%d/%m/%Y %H:%M")
+            m['_e'] = datetime.strptime(m['einde'], "%d/%m/%Y %H:%M")
+        except Exception:
+            m['_s'] = None
+            m['_e'] = None
+
+    sporthal_matches = [m for m in sporthal_matches if m['_s'] and m['_e']]
+
+    per_day = {}
+    for m in sporthal_matches:
+        per_day.setdefault(m['_s'].date(), []).append(m)
+
+    groups = []
+    for _, day_ms in per_day.items():
+        day_ms = sorted(day_ms, key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))
+        n = len(day_ms)
+        if n < 3:
+            continue
+        adj = [set() for _ in range(n)]
+        for i in range(n):
+            for j in range(i + 1, n):
+                a, b = day_ms[i], day_ms[j]
+                if a['_s'] <= b['_e'] and a['_e'] >= b['_s']:
+                    adj[i].add(j)
+                    adj[j].add(i)
+        visited = [False] * n
+        for i in range(n):
+            if visited[i]:
+                continue
+            stack, comp = [i], []
+            visited[i] = True
+            while stack:
+                cur = stack.pop()
+                comp.append(cur)
+                for nb in adj[cur]:
+                    if not visited[nb]:
+                        visited[nb] = True
+                        stack.append(nb)
+            if len(comp) <= 2:
+                continue
+            group = sorted([day_ms[idx] for idx in comp],
+                           key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))
+            for m in group:
+                best, best_min = None, -1
+                for other in group:
+                    if other is m:
+                        continue
+                    od = _overlap_duration(other['_s'], other['_e'], m['_s'], m['_e'])
+                    if od:
+                        mins = int(od.split(' ', 1)[0])
+                        if mins > best_min:
+                            best_min, best = mins, od
+                m['overlap_duration'] = best
+            groups.append(group)
+
+    groups.sort(key=lambda g: g[0]['_s'])
+
+    # Clean up temporary fields
+    for m in sporthal_matches:
+        m.pop('_s', None)
+        m.pop('_e', None)
+
+    return groups
+
+
+def _merge_matches_with_people(matches, db, season_id):
+    """Enrich match list with coach/player assignments from club_team_players.
+
+    Returns a flat list of dicts combining match fields with:
+        profile_id, person_name, involvement ('coach' | 'speler' | None)
+
+    For each match the team is resolved via
+        (_normalize_ploeg(ct.name), ct.federation_reeks) → club_team.id
+    Then club_team_players is queried for coaches (roles LIKE '%coach%').
+    Additionally, each found coach is checked for player roles on other teams
+    in the same season; those matches are added as involvement='speler' rows.
+    Matches with no resolved team produce a single row with None person fields.
+    """
+    # Build lookup: (norm_name, reeks) → team_id
+    team_rows = db.execute(
+        "SELECT id, name, federation_reeks FROM club_teams WHERE federation_reeks IS NOT NULL"
+    ).fetchall()
+    team_lookup = {}
+    for t in team_rows:
+        key = (_normalize_ploeg(t['name']), t['federation_reeks'])
+        team_lookup[key] = t['id']
+
+    # For each match resolve team_id and fetch coaches
+    merged = []
+    all_coach_teams = {}   # profile_id → set of team_ids where they are coach
+
+    for m in matches:
+        key = (_normalize_ploeg(m['ploeg']), m['reeks'])
+        team_id = team_lookup.get(key)
+        if team_id is None:
+            merged.append({**m, 'profile_id': None, 'person_name': None, 'involvement': None, '_team_id': None})
+            continue
+        coaches = db.execute(
+            "SELECT ctp.profile_id, pp.first_name, pp.last_name "
+            "FROM club_team_players ctp "
+            "JOIN player_profiles pp ON pp.id = ctp.profile_id "
+            "WHERE ctp.team_id=? AND ctp.season_id=? AND ctp.roles LIKE '%coach%'",
+            (team_id, season_id)
+        ).fetchall()
+        if not coaches:
+            merged.append({**m, 'profile_id': None, 'person_name': None, 'involvement': None, '_team_id': team_id})
+            continue
+        for c in coaches:
+            pid  = c['profile_id']
+            name = (c['first_name'] + ' ' + c['last_name']).strip()
+            merged.append({**m, 'profile_id': pid, 'person_name': name, 'involvement': 'coach', '_team_id': team_id})
+            all_coach_teams.setdefault(pid, set()).add(team_id)
+
+    # For each coach, find player roles on other teams in this season
+    for pid, coach_team_ids in all_coach_teams.items():
+        placeholders = ','.join('?' * len(coach_team_ids))
+        player_teams = db.execute(
+            f"SELECT ct.id AS team_id, ct.name, ct.federation_reeks "
+            f"FROM club_team_players ctp "
+            f"JOIN club_teams ct ON ct.id = ctp.team_id "
+            f"WHERE ctp.profile_id=? AND ctp.season_id=? AND ctp.roles LIKE '%player%' "
+            f"AND ctp.team_id NOT IN ({placeholders})",
+            [pid, season_id] + list(coach_team_ids)
+        ).fetchall()
+
+        # Fetch person_name once (already known but look it up for safety)
+        pp = db.execute(
+            "SELECT first_name, last_name FROM player_profiles WHERE id=?", (pid,)
+        ).fetchone()
+        person_name = (pp['first_name'] + ' ' + pp['last_name']).strip() if pp else ''
+
+        for pt in player_teams:
+            if not pt['federation_reeks']:
+                continue
+            pt_norm = _normalize_ploeg(pt['name'])
+            pt_reeks = pt['federation_reeks']
+            for m in matches:
+                if _normalize_ploeg(m['ploeg']) == pt_norm and m['reeks'] == pt_reeks:
+                    merged.append({
+                        **m,
+                        'profile_id':  pid,
+                        'person_name': person_name,
+                        'involvement': 'speler',
+                        '_team_id':    pt['team_id'],
+                    })
+
+    return merged
+
+
+def _detect_person_conflicts(merged_rows):
+    """Detect overlapping matches per person across coach and speler rows.
+
+    Returns dict: {person_name: [[group_row, ...], ...]}
+    where each inner list is a group of ≥2 time-overlapping matches.
+    """
+    person_games = {}
+    for row in merged_rows:
+        if not row.get('profile_id'):
+            continue
+        pid = row['profile_id']
+        try:
+            s = datetime.strptime(row['start'], "%d/%m/%Y %H:%M")
+            e = datetime.strptime(row['einde'], "%d/%m/%Y %H:%M")
+        except Exception:
+            continue
+        person_games.setdefault(pid, []).append({**row, '_s': s, '_e': e})
+
+    result = {}
+    for pid, games in person_games.items():
+        games.sort(key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))
+        n = len(games)
+        conflict_groups = []
+        for i in range(n):
+            group = [games[i]]
+            for j in range(n):
+                if i == j:
+                    continue
+                gi, gj = games[i], games[j]
+                if gi['_s'].date() != gj['_s'].date():
+                    continue
+                if gj['_s'] < group[-1]['_e'] and gj['_e'] > group[-1]['_s']:
+                    od = _overlap_duration(gi['_s'], gi['_e'], gj['_s'], gj['_e'])
+                    games[j]['overlap_duration'] = od
+                    group.append(games[j])
+            if len(group) > 1:
+                group = sorted(group, key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))
+                if group not in conflict_groups:
+                    conflict_groups.append(group)
+        if conflict_groups:
+            person_name = games[0].get('person_name') or str(pid)
+            result[person_name] = conflict_groups
+
+    # Strip internal datetime fields before returning
+    for groups in result.values():
+        for group in groups:
+            for row in group:
+                row.pop('_s', None)
+                row.pop('_e', None)
+                row.pop('_team_id', None)
+
+    return result
 
 
 # ── initialise db on startup (runs under both `python app.py` and WSGI) ───────

@@ -48,6 +48,11 @@
       <a href="{{ url_for('games_list') }}">Wedstrijden</a>
       <a href="{{ url_for('player_report') }}">Spelers</a>
       <a href="{{ url_for('season_list') }}">Seizoenen</a>
+      {% if not is_kit_manager() %}
+      <span class="nav-sep"></span>
+      <span class="nav-group-label">Planning</span>
+      <a href="{{ url_for('conflicts_page') }}">Wedstrijdconflicten</a>
+      {% endif %}
       {% if can_manage_kit() or is_kit_manager() %}
       <span class="nav-sep"></span>
       <span class="nav-group-label">Materiaal</span>
