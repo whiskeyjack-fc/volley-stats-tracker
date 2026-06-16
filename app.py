@@ -3878,9 +3878,9 @@ def conflicts_page():
 def conflicts_refresh():
     season_id_str = request.form.get("season_id", "").strip()
     season_id = int(season_id_str) if season_id_str.isdigit() else None
-    xml_bytes = _fetch_federation_xml()
+    xml_bytes, fetch_err = _fetch_federation_xml()
     if xml_bytes is None:
-        flash("Fout bij ophalen wedstrijddata.", "error")
+        flash(f"Fout bij ophalen wedstrijddata: {fetch_err}", "error")
         return redirect(url_for("conflicts_page"))
     matches = _parse_federation_xml(xml_bytes)
     db = get_db()
@@ -3912,15 +3912,16 @@ def _overlap_duration(s1, e1, s2, e2):
 
 
 def _fetch_federation_xml():
-    """Fetch the Volleyadmin2 XML for BELVOC_STAMNUMMER; returns bytes or None on error."""
+    """Fetch the Volleyadmin2 XML for BELVOC_STAMNUMMER; returns (bytes, None) or (None, str_error)."""
     url = f"http://www.volleyadmin2.be/services/wedstrijden_xml.php?stamnummer={BELVOC_STAMNUMMER}"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"}
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=20)
         resp.raise_for_status()
-        return resp.content
+        return resp.content, None
     except Exception as exc:
         print(f"_fetch_federation_xml error: {exc}", file=sys.stderr)
-        return None
+        return None, str(exc)
 
 
 def _parse_federation_xml(xml_bytes):
