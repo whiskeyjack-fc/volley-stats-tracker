@@ -1,0 +1,555 @@
+{% extends "base.html" %}
+{% from "_macros.html" import filter_select %}
+{% block title %}Wedstrijdconflicten — VolleyStats{% endblock %}
+{% block content %}
+<h1>Wedstrijdconflicten</h1>
+
+{# ── Control bar ── #}
+<form method="get" action="{{ url_for('conflicts_page') }}" class="filter-bar">
+  {% call filter_select("season_id", "— Seizoen —") %}
+    {% for s in seasons %}
+    <option value="{{ s.id }}" {% if s.id == selected_season_id %}selected{% endif %}>{{ s.name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  <span class="fetched-badge">
+    {% if fetched_at %}
+      Bijgewerkt: {{ fetched_at[:16] | replace("T", " ") }}
+    {% else %}
+      Nog niet opgehaald
+    {% endif %}
+  </span>
+
+  <button type="submit" class="btn btn-sm btn-outline" style="display:none">Filter</button>
+</form>
+
+<form method="post" action="{{ url_for('conflicts_refresh') }}" style="margin:0 0 1.5rem">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
+  <button type="submit" class="btn btn-sm btn-primary">↻ Data vernieuwen</button>
+</form>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <div class="flash flash-{{ category }}">{{ message }}</div>
+  {% endfor %}
+{% endwith %}
+
+{% if no_cache %}
+{# ── No-cache notice ── #}
+<div class="card" style="text-align:center;padding:2rem 1rem;color:var(--muted)">
+  <p style="font-size:1.1rem;margin:0 0 .5rem">Geen wedstrijddata beschikbaar.</p>
+  <p style="font-size:0.9rem;margin:0">Klik op <strong>↻ Data vernieuwen</strong> om de wedstrijdkalender op te halen bij Volleyadmin2.</p>
+</div>
+{% else %}
+
+{# ── Sporthal conflicts ── #}
+<section style="margin-bottom:2rem">
+  <h2 class="chart-title" style="display:flex;align-items:center;gap:.5rem">
+    Sporthalconflicten
+    <span class="count-badge {% if sporthal_conflicts %}badge-red{% else %}badge-green{% endif %}">
+      {{ sporthal_conflicts | length }}
+    </span>
+  </h2>
+
+  {% if sporthal_conflicts %}
+    {% for group in sporthal_conflicts %}
+    <div class="card conflict-card">
+      <div class="conflict-date-header">
+        <span class="conflict-date-icon">📅</span>
+        {{ group[0].datum }}
+        <span class="conflict-group-count">{{ group | length }} wedstrijd{{ 'en' if group | length != 1 else '' }}</span>
+      </div>
+      {% set ns = namespace(tl=[]) %}
+      {% for m in group %}{% set ns.tl = ns.tl + [{'aanvangsuur': m.aanvangsuur, 'reeks': m.reeks, 'ploeg': (m.ploeg or m.thuisploeg)}] %}{% endfor %}
+      <div class="conflict-timeline" data-matches='{{ ns.tl | tojson }}'></div>
+      <div class="conflict-table-toggle">
+        <button type="button" class="btn btn-sm btn-outline conflict-toggle-btn" aria-expanded="false">Tabel tonen</button>
+      </div>
+      <div class="conflict-table-wrap" hidden>
+        <table class="table conflict-table">
+          <thead>
+            <tr>
+              <th>Reeks</th>
+              <th>Thuisploeg</th>
+              <th>Bezoekersploeg</th>
+              <th class="col-time">Aanvang</th>
+              <th class="col-time">Einde</th>
+              <th class="col-overlap">Overlap</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in group %}
+            {% set overlap_pct = m.overlap_duration.split('(')[1].split('%')[0] | int if m.overlap_duration and '(' in m.overlap_duration else 0 %}
+            <tr>
+              <td><span class="reeks-badge">{{ m.reeks }}</span></td>
+              <td>{{ m.thuisploeg }}</td>
+              <td>{{ m.bezoekersploeg }}</td>
+              <td class="col-time">{{ m.aanvangsuur }}</td>
+              <td class="col-time">{{ m.einde.split(' ')[1] if ' ' in m.einde else m.einde }}</td>
+              <td class="col-overlap {% if overlap_pct >= 80 %}overlap-critical{% elif overlap_pct >= 50 %}overlap-high{% else %}overlap-low{% endif %}">
+                {{ m.overlap_duration or '—' }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="empty-state">Geen sporthalconflicten gevonden.</p>
+  {% endif %}
+</section>
+
+{# ── Person conflicts ── #}
+<section>
+  <h2 class="chart-title" style="display:flex;align-items:center;gap:.5rem">
+    Persoonlijke conflicten
+    <span class="count-badge {% if person_conflicts %}badge-red{% else %}badge-green{% endif %}">
+      {{ person_conflicts | length }}
+    </span>
+  </h2>
+
+  {% if person_conflicts %}
+    {% for person_name, groups in person_conflicts.items() %}
+    <div class="card conflict-card">
+      <div class="conflict-person-header">
+        <span class="conflict-person-icon">👤</span>
+        {{ person_name }}
+      </div>
+      {% for group in groups %}
+      {% set datum = group[0].datum %}
+      <div class="conflict-date-sub">{{ datum }}</div>
+      {% set pns = namespace(tl=[]) %}
+      {% for m in group %}{% set pns.tl = pns.tl + [{'aanvangsuur': m.aanvangsuur, 'reeks': m.reeks, 'ploeg': (m.ploeg or m.thuisploeg), 'rol': (m.involvement or '')}] %}{% endfor %}
+      <div class="conflict-timeline" data-matches='{{ pns.tl | tojson }}'></div>
+      <div class="conflict-table-toggle">
+        <button type="button" class="btn btn-sm btn-outline conflict-toggle-btn" aria-expanded="false">Tabel tonen</button>
+      </div>
+      <div class="conflict-table-wrap" hidden>
+        <table class="table conflict-table">
+          <thead>
+            <tr>
+              <th class="col-role">Rol</th>
+              <th>Reeks</th>
+              <th>Thuisploeg</th>
+              <th>Bezoekersploeg</th>
+              <th class="col-time">Aanvang</th>
+              <th>Sporthal</th>
+              <th class="col-overlap">Overlap</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in group %}
+            {% set overlap_pct = m.overlap_duration.split('(')[1].split('%')[0] | int if m.overlap_duration and '(' in m.overlap_duration else 0 %}
+            <tr>
+              <td class="col-role">
+                {% if m.involvement == 'coach' %}
+                <span class="role-badge role-coach">coach</span>
+                {% elif m.involvement == 'speler' %}
+                <span class="role-badge role-speler">speler</span>
+                {% else %}
+                <span class="role-badge">—</span>
+                {% endif %}
+              </td>
+              <td><span class="reeks-badge">{{ m.reeks }}</span></td>
+              <td>{{ m.thuisploeg }}</td>
+              <td>{{ m.bezoekersploeg }}</td>
+              <td class="col-time">{{ m.aanvangsuur }}</td>
+              <td>{{ m.sporthal }}</td>
+              <td class="col-overlap {% if overlap_pct >= 80 %}overlap-critical{% elif overlap_pct >= 50 %}overlap-high{% else %}overlap-low{% endif %}">
+                {{ m.overlap_duration or '—' }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="empty-state">Geen conflicten gevonden.</p>
+  {% endif %}
+</section>
+
+{% endif %}{# end no_cache #}
+
+<style>
+.fetched-badge {
+  font-size: 0.8rem;
+  color: var(--muted);
+  align-self: center;
+  margin-left: auto;
+}
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 .4rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.badge-red   { background: var(--red);   color: #fff; }
+.badge-green { background: var(--green); color: #fff; }
+.flash { padding: .6rem 1rem; border-radius: var(--radius); margin-bottom: .75rem; font-size: 0.9rem; }
+.flash-error { background: color-mix(in srgb, var(--red) 15%, var(--surface)); border: 1px solid var(--red); color: var(--fg); }
+.flash-success { background: color-mix(in srgb, var(--green) 15%, var(--surface)); border: 1px solid var(--green); color: var(--fg); }
+.empty-state { color: var(--muted); font-size: 0.9rem; padding: .75rem 0; }
+
+/* ── Conflict card structure ── */
+.conflict-card {
+  margin-bottom: 1rem;
+  padding: 0;
+  overflow: hidden;
+}
+.conflict-date-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .6rem 1rem;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+.conflict-date-icon { font-size: 0.9rem; }
+.conflict-group-count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.conflict-person-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .7rem 1rem;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+.conflict-person-icon { font-size: 1rem; }
+.conflict-date-sub {
+  padding: .45rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface2) 40%, var(--surface));
+}
+
+/* ── Conflict table ── */
+.conflict-table-wrap { overflow-x: auto; }
+.conflict-table { min-width: 580px; }
+.conflict-table th,
+.conflict-table td { white-space: nowrap; }
+.conflict-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface2) 50%, transparent); }
+.conflict-table tbody tr:hover { background: var(--surface2); }
+
+/* Column width hints */
+.col-time   { width: 70px; text-align: center; }
+.col-role   { width: 76px; }
+.col-overlap { width: 140px; font-variant-numeric: tabular-nums; }
+
+/* ── Reeks badge ── */
+.reeks-badge {
+  display: inline-block;
+  font-family: 'Courier New', monospace;
+  font-size: 0.76rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--gray);
+  letter-spacing: .02em;
+}
+
+/* ── Overlap severity ── */
+.overlap-critical { color: var(--red);    font-weight: 700; }
+.overlap-high     { color: var(--yellow); font-weight: 600; }
+.overlap-low      { color: var(--muted);  }
+
+/* ── Role badges ── */
+.role-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.role-coach  { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+.role-speler { background: color-mix(in srgb, var(--green)  15%, transparent); color: var(--green);  border: 1px solid color-mix(in srgb, var(--green)  40%, transparent); }
+
+/* ── Table toggle ── */
+.conflict-table-toggle { padding: .4rem 1rem; border-bottom: 1px solid var(--border); }
+.conflict-table-wrap[hidden] { display: none; }
+
+/* ── Conflict timeline ── */
+.conflict-timeline {
+  padding: .75rem 1rem .5rem;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── Dark-theme colour palette ─────────────────────────────────────────── */
+  var C = {
+    setup:       'rgba(100,112,148,0.55)',  /* gray  — warm-up / hall setup  */
+    reserve:     '#f5c842',                 /* yellow — reserve game         */
+    game:        '#4f8ef7',                 /* blue  — main match            */
+    overlap:     'rgba(232,81,74,0.18)',    /* red fill for overlap region   */
+    overlapEdge: 'rgba(232,81,74,0.75)',    /* red border of overlap         */
+    text:        '#e4e7f0',
+    textDark:    '#0f1117',
+    muted:       '#8891b2',
+    border:      '#2e3350',
+    bg:          '#22263a',
+    rowAlt:      'rgba(255,255,255,0.025)',
+  };
+
+  function minsOf(hhmm) {
+    var p = (hhmm || '00:00').split(':');
+    return parseInt(p[0], 10) * 60 + parseInt(p[1] || 0, 10);
+  }
+  function toHHMM(mins) {
+    var h = Math.floor(mins / 60), m = mins % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ── Build segment array for one match ─────────────────────────────────── */
+  /*
+   * Timing model (mirrors _parse_federation_xml in app.py):
+   *
+   * Promo (OHP / ODP / OBP) — senior reserve + main game:
+   *   aanvang-150 → aanvang-90  : warm-up                    (60 min)
+   *   aanvang-90  → aanvang-30  : reserve game, 3 sets        (60 min)
+   *   aanvang-30  → aanvang     : pauze / court changeover    (30 min)
+   *   aanvang     → aanvang+120 : main game, up to 5 sets    (120 min)
+   *
+   * Youth / other — warm-up + game:
+   *   aanvang-60  → aanvang     : warm-up + court setup       (60 min)
+   *   aanvang     → aanvang+120 : game, ≥4 sets (5th if 2-2)(120 min)
+   */
+  function buildRow(m) {
+    var isPromo = /^(OHP|ODP|OBP)/i.test(m.reeks || '');
+    var aanvang = minsOf(m.aanvangsuur);
+    var segs = isPromo
+      ? [
+          { type: 'warmup',  start: aanvang - 150, end: aanvang - 90,  label: 'Warming-up (60 min)' },
+          { type: 'reserve', start: aanvang - 90,  end: aanvang - 30,  label: 'Reserveploeg (60 min)' },
+          { type: 'warmup',  start: aanvang - 30,  end: aanvang,       label: 'Warming-up hoofdploeg (30 min)' },
+          { type: 'game',    start: aanvang,        end: aanvang + 120, label: 'Hoofdwedstrijd (~2u)' },
+        ]
+      : [
+          { type: 'warmup',  start: aanvang - 60,  end: aanvang,       label: 'Warming-up (60 min)' },
+          { type: 'game',    start: aanvang,        end: aanvang + 120, label: 'Wedstrijd (~2u, min. 4 sets)' },
+        ];
+    var ploeg = (m.ploeg || m.thuisploeg || '');
+    var rolSuffix = m.rol ? ' \u00b7 ' + m.rol : ''
+    return {
+      segs:       segs,
+      aanvang:    aanvang,
+      isPromo:    isPromo,
+      totalStart: segs[0].start,
+      totalEnd:   segs[segs.length - 1].end,
+      reeks:      m.reeks || '',
+      ploeg:      ploeg + rolSuffix,
+    };
+  }
+
+  /* ── Merge pairwise overlap intervals into non-overlapping bands ────────── */
+  function mergeOverlaps(rows) {
+    var raw = [];
+    for (var i = 0; i < rows.length; i++) {
+      for (var j = i + 1; j < rows.length; j++) {
+        var os = Math.max(rows[i].totalStart, rows[j].totalStart);
+        var oe = Math.min(rows[i].totalEnd,   rows[j].totalEnd);
+        if (os < oe) raw.push({ start: os, end: oe });
+      }
+    }
+    raw.sort(function (a, b) { return a.start - b.start; });
+    var merged = [];
+    raw.forEach(function (b) {
+      if (!merged.length || b.start > merged[merged.length - 1].end) {
+        merged.push({ start: b.start, end: b.end });
+      } else {
+        merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, b.end);
+      }
+    });
+    return merged;
+  }
+
+  function segFill(type) {
+    if (type === 'warmup') return C.setup;
+    if (type === 'reserve') return C.reserve;
+    return C.game;
+  }
+  function segTextColor(type) { return type === 'reserve' ? C.textDark : C.text; }
+
+  /* ── SVG renderer ─────────────────────────────────────────────────────── */
+  function render(container, matches) {
+    var rows = matches.map(buildRow);
+    if (!rows.length) return;
+
+    /* Time-axis range */
+    var allMins = rows.reduce(function (a, r) { return a.concat([r.totalStart, r.totalEnd]); }, []);
+    var tMin = Math.floor((Math.min.apply(null, allMins) - 10) / 30) * 30;
+    var tMax = Math.ceil( (Math.max.apply(null, allMins) + 10) / 30) * 30;
+    var range = tMax - tMin;
+
+    /* Layout */
+    var labelW = 172, padR = 16, rowH = 42, barH = 26, barY = (rowH - barH) / 2;
+    var axisH = 28, legendH = 32;
+    var svgW   = Math.max(container.offsetWidth || 680, 480);
+    var chartW = svgW - labelW - padR;
+    var nRows  = rows.length;
+    var totalH = nRows * rowH + axisH + legendH + 8;
+
+    function xOf(m)   { return labelW + (m - tMin) / range * chartW; }
+    function wOf(s,e) { return (e - s) / range * chartW; }
+
+    var bands = mergeOverlaps(rows);
+    var els = [];
+
+    /* Chart background */
+    els.push('<rect x="' + labelW + '" y="0" width="' + chartW + '" height="' + (nRows * rowH) + '" fill="' + C.bg + '" rx="4"/>');
+
+    /* Overlap bands (drawn first, behind bars) */
+    bands.forEach(function (b) {
+      var bx = xOf(b.start), bw = wOf(b.start, b.end);
+      els.push('<rect x="' + bx + '" y="0" width="' + bw + '" height="' + (nRows * rowH) + '" fill="' + C.overlap + '"/>');
+      els.push('<line x1="' + bx + '" y1="0" x2="' + bx + '" y2="' + (nRows * rowH) + '" stroke="' + C.overlapEdge + '" stroke-width="1.5"/>');
+      els.push('<line x1="' + (bx + bw) + '" y1="0" x2="' + (bx + bw) + '" y2="' + (nRows * rowH) + '" stroke="' + C.overlapEdge + '" stroke-width="1.5"/>');
+      /* Duration label at top of band */
+      if (bw > 30) {
+        var durMins = b.end - b.start;
+        els.push('<text x="' + (bx + bw / 2) + '" y="11" text-anchor="middle" fill="' + C.overlapEdge + '" font-size="9" font-weight="700">' + durMins + '\u00a0min</text>');
+      }
+    });
+
+    /* Grid lines + axis labels */
+    for (var t = tMin; t <= tMax; t += 30) {
+      var gx = xOf(t), isMajor = t % 60 === 0;
+      els.push('<line x1="' + gx + '" y1="0" x2="' + gx + '" y2="' + (nRows * rowH) + '" stroke="' + C.border + '" stroke-width="' + (isMajor ? '1' : '0.5') + '"/>');
+      els.push('<text x="' + gx + '" y="' + (nRows * rowH + axisH - 8) + '" fill="' + (isMajor ? C.muted : 'rgba(136,145,178,0.45)') + '" text-anchor="middle" font-size="10">' + toHHMM(t) + '</text>');
+    }
+
+    /* Axis baseline */
+    els.push('<line x1="' + labelW + '" y1="' + (nRows * rowH) + '" x2="' + (labelW + chartW) + '" y2="' + (nRows * rowH) + '" stroke="' + C.border + '"/>');
+
+    /* Rows */
+    rows.forEach(function (row, ri) {
+      var ry = ri * rowH;
+      if (ri % 2 === 1) {
+        els.push('<rect x="' + labelW + '" y="' + ry + '" width="' + chartW + '" height="' + rowH + '" fill="' + C.rowAlt + '"/>');
+      }
+
+      row.segs.forEach(function (seg) {
+        var sx = xOf(seg.start), sw = wOf(seg.start, seg.end);
+        var fill = segFill(seg.type), tc = segTextColor(seg.type);
+        els.push('<rect x="' + sx + '" y="' + (ry + barY) + '" width="' + sw + '" height="' + barH + '" fill="' + fill + '" rx="3"><title>' + esc(seg.label) + '</title></rect>');
+
+        /* Dashed kickoff line at the start of the main game */
+        if (seg.type === 'game') {
+          var ax = xOf(row.aanvang);
+          els.push('<line x1="' + ax + '" y1="' + (ry + barY) + '" x2="' + ax + '" y2="' + (ry + barY + barH) + '" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" stroke-dasharray="3,2"/>');
+        }
+
+        /* Label inside segment */
+        if (sw > 46) {
+          var shortName = { setup: 'Setup', warmup: 'Warm-up', reserve: 'Reserve', game: 'Wedstrijd' }[seg.type] || seg.type;
+          var timeRange = toHHMM(seg.start) + '\u2013' + toHHMM(seg.end);
+          els.push('<text x="' + (sx + sw / 2) + '" y="' + (ry + barY + barH / 2 - 3) + '" text-anchor="middle" fill="' + tc + '" font-size="10" font-weight="600" pointer-events="none">' + shortName + '</text>');
+          if (sw > 72) {
+            els.push('<text x="' + (sx + sw / 2) + '" y="' + (ry + barY + barH / 2 + 9) + '" text-anchor="middle" fill="' + tc + '" font-size="9" opacity=".8" pointer-events="none">' + timeRange + '</text>');
+          }
+        }
+      });
+
+      /* Left label — reeks (small, muted) above team name */
+      var lx = labelW - 8;
+      var reeksLbl = row.reeks.length > 20 ? row.reeks.slice(0, 19) + '\u2026' : row.reeks;
+      var ploegLbl = row.ploeg.length  > 24 ? row.ploeg.slice(0, 23)  + '\u2026' : row.ploeg;
+      els.push('<text x="' + lx + '" y="' + (ry + rowH / 2 - 4) + '" text-anchor="end" fill="' + C.muted + '" font-size="9.5">' + esc(reeksLbl) + '</text>');
+      els.push('<text x="' + lx + '" y="' + (ry + rowH / 2 + 9) + '" text-anchor="end" fill="' + C.text  + '" font-size="11" font-weight="500">' + esc(ploegLbl) + '</text>');
+    });
+
+    /* Legend */
+    var legendY = nRows * rowH + axisH + 6;
+    var legendItems = [
+      { fill: C.setup,   stroke: null,          text: 'Warm-up' },
+      { fill: C.reserve, stroke: null,          text: 'Reserveploeg' },
+      { fill: C.game,    stroke: null,          text: 'Hoofdwedstrijd' },
+      { fill: C.overlap, stroke: C.overlapEdge, text: 'Overlaptijd' },
+    ];
+    var lxLegend = labelW;
+    legendItems.forEach(function (item) {
+      var strokeAttr = item.stroke ? ' stroke="' + item.stroke + '" stroke-width="1"' : '';
+      els.push('<rect x="' + lxLegend + '" y="' + legendY + '" width="13" height="13" fill="' + item.fill + '"' + strokeAttr + ' rx="2"/>');
+      els.push('<text x="' + (lxLegend + 17) + '" y="' + (legendY + 10) + '" fill="' + C.muted + '" font-size="10">' + esc(item.text) + '</text>');
+      lxLegend += item.text.length * 6.5 + 28;
+    });
+
+    container.innerHTML =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + svgW + '" height="' + totalH + '"' +
+      ' style="display:block;font-family:\'Segoe UI\',system-ui,sans-serif;overflow:visible">' +
+      els.join('') + '</svg>';
+  }
+
+  /* ── Table toggle ── */
+  document.querySelectorAll('.conflict-toggle-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var wrap = btn.closest('.conflict-table-toggle').nextElementSibling;
+      var expanded = wrap.hasAttribute('hidden') ? false : true;
+      if (expanded) {
+        wrap.setAttribute('hidden', '');
+        btn.textContent = 'Tabel tonen';
+        btn.setAttribute('aria-expanded', 'false');
+      } else {
+        wrap.removeAttribute('hidden');
+        btn.textContent = 'Tabel verbergen';
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+
+  /* ── Bootstrap ────────────────────────────────────────────────────────── */
+  function initAll() {
+    document.querySelectorAll('.conflict-timeline[data-matches]').forEach(function (el) {
+      try { render(el, JSON.parse(el.dataset.matches)); }
+      catch (e) { console.error('Timeline render error:', e); }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAll);
+  } else {
+    initAll();
+  }
+
+  var _rt;
+  window.addEventListener('resize', function () { clearTimeout(_rt); _rt = setTimeout(initAll, 150); });
+}());
+</script>
+{% endblock %}

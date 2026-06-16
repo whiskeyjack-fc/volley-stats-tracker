@@ -19,7 +19,7 @@
                placeholder="bijv. VC Belvoc BELSELE B" />
       </label>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr{% if team %} 1fr{% endif %};gap:.75rem;margin-top:.75rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr{% if team %} 1fr{% endif %};gap:.75rem;margin-top:.75rem">
       <label>
         <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Korte naam</span>
         <input type="text" name="short_name" maxlength="20"
@@ -32,6 +32,13 @@
         <input type="text" name="division" maxlength="120"
                value="{{ (season_info.division if season_info else None) or (team.division if team and team.division else '') }}"
                placeholder="{% if selected_season_id %}e.g. Promo 3A / Promo 3B{% else %}e.g. HEREN PROMO 3A{% endif %}"
+               style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
+      </label>
+      <label>
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Reeks (Volleyadmin2)</span>
+        <input type="text" name="federation_reeks"
+               value="{{ team.federation_reeks or '' if team else '' }}"
+               placeholder="bijv. HPN-3B-OVL"
                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
       </label>
       {% if team %}
