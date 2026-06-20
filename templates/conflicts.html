@@ -62,8 +62,15 @@
 </div>
 {% else %}
 
+{# ── Section jump nav ── #}
+<nav class="conflict-jump-nav">
+  <a href="#section-sporthal" class="conflict-jump-link">Sporthalconflicten <span class="count-badge {% if sporthal_conflicts %}badge-red{% else %}badge-green{% endif %}">{{ sporthal_conflicts | length }}</span></a>
+  <a href="#section-teamoverlap" class="conflict-jump-link">Teamoverlap <span class="count-badge {% if team_overlaps %}badge-red{% else %}badge-green{% endif %}">{{ team_overlaps | length }}</span></a>
+  <a href="#section-persons" class="conflict-jump-link">Persoonlijke conflicten <span class="count-badge {% if person_conflicts %}badge-red{% else %}badge-green{% endif %}">{{ person_conflicts | length }}</span></a>
+</nav>
+
 {# ── Sporthal conflicts ── #}
-<section style="margin-bottom:2rem">
+<section id="section-sporthal" style="margin-bottom:2rem">
   <h2 class="chart-title" style="display:flex;align-items:center;gap:.5rem">
     Sporthalconflicten
     <span class="count-badge {% if sporthal_conflicts %}badge-red{% else %}badge-green{% endif %}">
@@ -121,8 +128,102 @@
   {% endif %}
 </section>
 
+{# ── Team overlaps ── #}
+<section id="section-teamoverlap" style="margin-bottom:2rem">
+  <h2 class="chart-title" style="display:flex;align-items:center;gap:.5rem">
+    Teamoverlap
+    <span class="count-badge {% if team_overlaps %}badge-red{% else %}badge-green{% endif %}">
+      {{ team_overlaps | length }}
+    </span>
+  </h2>
+  <p style="font-size:0.85rem;color:var(--muted);margin:.25rem 0 .75rem">
+    Dagen waarop 2 of meer geselecteerde Belvoc-teams gelijktijdig spelen. Nuttig voor transport- en logistieke planning.
+  </p>
+
+  {% if available_teams %}
+  <form method="get" action="{{ url_for('conflicts_page') }}" class="card team-picker-form">
+    <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
+    <div class="team-picker-label">Teams vergelijken:</div>
+    <div class="team-picker-checks">
+      {% for team in available_teams %}
+      <label class="team-check-label">
+        <input type="checkbox" name="compare_teams" value="{{ team }}"
+               {% if team in compare_teams %}checked{% endif %}>
+        <span>{{ team_labels.get(team, team) }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <div class="team-picker-actions">
+      <button type="submit" class="btn btn-sm btn-primary">Toepassen</button>
+      {% if compare_teams %}
+      <a href="{{ url_for('conflicts_page', season_id=selected_season_id) }}" class="btn btn-sm btn-outline">Wissen</a>
+      {% endif %}
+    </div>
+  </form>
+  {% endif %}
+
+  {% if compare_teams | length < 2 %}
+  <p class="empty-state" style="margin:.5rem 0 1rem">
+    Selecteer minstens 2 teams en klik op <strong>Toepassen</strong> om de overlap te berekenen.
+  </p>
+  {% endif %}
+
+  {% if team_overlaps %}
+    {% for group in team_overlaps %}
+    <div class="card conflict-card">
+      <div class="conflict-date-header">
+        <span class="conflict-date-icon">🏐</span>
+        {{ group[0].datum }}
+        <span class="conflict-group-count">{{ group | length }} team{{ 'overlap' if group | length == 2 else 's overlappen' }}</span>
+      </div>
+      {% set ns = namespace(tl=[]) %}
+      {% for m in group %}{% set ns.tl = ns.tl + [{'aanvangsuur': m.aanvangsuur, 'reeks': m.reeks, 'ploeg': (m.ploeg or m.thuisploeg)}] %}{% endfor %}
+      <div class="conflict-timeline" data-matches='{{ ns.tl | tojson }}'></div>
+      <div class="conflict-table-toggle">
+        <button type="button" class="btn btn-sm btn-outline conflict-toggle-btn" aria-expanded="false">Tabel tonen</button>
+      </div>
+      <div class="conflict-table-wrap" hidden>
+        <table class="table conflict-table">
+          <thead>
+            <tr>
+              <th>Reeks</th>
+              <th>Ploeg</th>
+              <th>Thuisploeg</th>
+              <th>Bezoekersploeg</th>
+              <th class="col-time">Aanvang</th>
+              <th class="col-time">Einde</th>
+              <th>Locatie</th>
+              <th class="col-overlap">Overlap</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in group %}
+            {% set overlap_pct = m.overlap_duration.split('(')[1].split('%')[0] | int if m.overlap_duration and '(' in m.overlap_duration else 0 %}
+            <tr>
+              <td><span class="reeks-badge">{{ m.reeks }}</span></td>
+              <td>{{ m.ploeg }}</td>
+              <td>{{ m.thuisploeg }}</td>
+              <td>{{ m.bezoekersploeg }}</td>
+              <td class="col-time">{{ m.aanvangsuur }}</td>
+              <td class="col-time">{{ m.einde.split(' ')[1] if ' ' in m.einde else m.einde }}</td>
+              <td>{{ m.sporthal }}</td>
+              <td class="col-overlap {% if overlap_pct >= 80 %}overlap-critical{% elif overlap_pct >= 50 %}overlap-high{% else %}overlap-low{% endif %}">
+                {{ m.overlap_duration or '—' }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="empty-state">Geen teamoverlap gevonden.</p>
+  {% endif %}
+</section>
+
 {# ── Person conflicts ── #}
-<section>
+<section id="section-persons">
   <h2 class="chart-title" style="display:flex;align-items:center;gap:.5rem">
     Persoonlijke conflicten
     <span class="count-badge {% if person_conflicts %}badge-red{% else %}badge-green{% endif %}">
@@ -196,6 +297,32 @@
 {% endif %}{# end no_cache #}
 
 <style>
+/* ── Section jump nav ── */
+.conflict-jump-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin-bottom: 1.25rem;
+}
+.conflict-jump-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .3rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  color: var(--fg);
+  background: var(--surface);
+  text-decoration: none;
+  transition: background .15s, border-color .15s;
+}
+.conflict-jump-link:hover {
+  background: var(--surface2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .fetched-badge {
   font-size: 0.8rem;
   color: var(--muted);
@@ -310,6 +437,45 @@
 }
 .role-coach  { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
 .role-speler { background: color-mix(in srgb, var(--green)  15%, transparent); color: var(--green);  border: 1px solid color-mix(in srgb, var(--green)  40%, transparent); }
+
+/* ── Team picker ── */
+.team-picker-form {
+  padding: .75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+}
+.team-picker-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.team-picker-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem .75rem;
+}
+.team-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: var(--fg);
+}
+.team-check-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+.team-picker-actions {
+  display: flex;
+  gap: .5rem;
+}
 
 /* ── Table toggle ── */
 .conflict-table-toggle { padding: .4rem 1rem; border-bottom: 1px solid var(--border); }

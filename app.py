@@ -2033,13 +2033,27 @@ def team_list():
             (t["id"],)
         ).fetchall()
         team_trainers[t["id"]] = [dict(tr) for tr in trainers]
-        non_players = db.execute(
-            "SELECT ctp.name, ctp.roles FROM club_team_players ctp "
-            "WHERE ctp.team_id=? AND ctp.roles IS NOT NULL AND ctp.roles != '' "
-            "AND ctp.roles NOT LIKE '%player%' "
-            "ORDER BY ctp.name COLLATE NOCASE",
-            (t["id"],)
-        ).fetchall()
+        if active_season_id:
+            non_players = db.execute(
+                "SELECT ctp.name, ctp.roles FROM club_team_players ctp "
+                "WHERE ctp.team_id=? AND ctp.season_id=? "
+                "AND ctp.roles IS NOT NULL AND ctp.roles != '' "
+                "AND ctp.roles NOT LIKE '%player%' "
+                "ORDER BY ctp.name COLLATE NOCASE",
+                (t["id"], active_season_id)
+            ).fetchall()
+        else:
+            non_players = db.execute(
+                """SELECT ctp.name, ctp.roles FROM club_team_players ctp
+                   WHERE ctp.team_id=? AND ctp.roles IS NOT NULL AND ctp.roles != ''
+                   AND ctp.roles NOT LIKE '%player%'
+                   AND ctp.season_id = (
+                       SELECT season_id FROM club_team_season_info
+                       WHERE team_id=? ORDER BY season_id DESC LIMIT 1
+                   )
+                   ORDER BY ctp.name COLLATE NOCASE""",
+                (t["id"], t["id"])
+            ).fetchall()
         team_non_players[t["id"]] = [dict(r) for r in non_players]
     all_trainers = db.execute(
         "SELECT id, email FROM users WHERE role='trainer' ORDER BY email COLLATE NOCASE"
@@ -3855,16 +3869,76 @@ def conflicts_page():
     no_cache = all_matches is None
 
     sporthal_conflicts = []
+    team_overlaps      = []
     person_conflicts   = {}
+    available_teams    = []
+    team_labels        = {}
+    compare_teams      = []
     if not no_cache and selected_season_id:
         future = _filter_future_matches(all_matches)
         sporthal_conflicts = _detect_sporthal_conflicts(future)
+
+        # All club teams that have a federation reeks code configured.
+        # Season-scoping is implicit: only reeks codes that appear in the current XML
+        # cache will produce ploeg values, so teams from old seasons (with stale reeks)
+        # drop off naturally once the XML is refreshed for the new season.
+        season_reeks_rows = db.execute(
+            "SELECT short_name, name, federation_reeks FROM club_teams "
+            "WHERE federation_reeks IS NOT NULL"
+        ).fetchall()
+        season_reeks = {r['federation_reeks'] for r in season_reeks_rows}
+
+        # All XML matches for the season's teams (past + future) so the picker stays
+        # populated even when all scheduled matches have already been played.
+        if season_reeks:
+            season_all    = [m for m in all_matches if m.get('reeks') in season_reeks]
+            season_future = [m for m in future     if m.get('reeks') in season_reeks]
+        else:
+            # Fallback: no players configured for this season → show all future teams
+            season_all    = list(future)
+            season_future = list(future)
+
+        available_teams = sorted(set(m['ploeg'] for m in season_all if m.get('ploeg')))
+        raw_compare = request.args.getlist('compare_teams')
+        compare_teams = [t for t in raw_compare if t in available_teams]
+        if len(compare_teams) >= 2:
+            overlap_matches = [m for m in season_future if m.get('ploeg') in compare_teams]
+            team_overlaps = _detect_team_overlaps(overlap_matches)
+        else:
+            team_overlaps = []
+
+        # Build display labels: match on (normalized ploeg name, reeks) so two teams
+        # sharing the same federation_reeks (combined competition) get distinct labels.
+        # Falls back to stripping the club prefix from the XML ploeg string.
+        import re as _re
+        name_reeks_to_label = {
+            (_normalize_ploeg(r['name']), r['federation_reeks']): r['short_name']
+            for r in season_reeks_rows
+            if r['federation_reeks']
+        }
+        def _strip_prefix(ploeg):
+            s = _re.sub(r'(?i)^vc\s+belvoc\s+belse[l]e\s*', '', ploeg).strip()
+            return s if s else ploeg
+        ploeg_reeks = {}
+        for m in season_all:
+            p = m.get('ploeg')
+            if p and p not in ploeg_reeks:
+                ploeg_reeks[p] = m.get('reeks', '')
+        team_labels = {
+            p: (name_reeks_to_label.get((_normalize_ploeg(p), reeks)) or _strip_prefix(p))
+            for p, reeks in ploeg_reeks.items()
+        }
+
         merged = _merge_matches_with_people(future, db, selected_season_id)
         person_conflicts = _detect_person_conflicts(merged)
 
     return render_template(
         "conflicts.html",
         sporthal_conflicts=sporthal_conflicts,
+        team_overlaps=team_overlaps,
+        available_teams=available_teams,
+        team_labels=team_labels,
+        compare_teams=compare_teams,
         person_conflicts=person_conflicts,
         fetched_at=fetched_at,
         no_cache=no_cache,
@@ -4098,6 +4172,84 @@ def _detect_sporthal_conflicts(matches):
 
     # Clean up temporary fields
     for m in sporthal_matches:
+        m.pop('_s', None)
+        m.pop('_e', None)
+
+    return groups
+
+
+def _detect_team_overlaps(matches):
+    """Return list of conflict groups where 2+ Belvoc teams have overlapping match windows.
+
+    Unlike sporthal conflicts (which require 3+ matches at the home hall), this considers
+    all venues and requires only 2 overlapping matches. Useful for transport / logistics planning.
+    Each group is a list of match dicts with 'overlap_duration' added.
+    """
+    belvoc = [m for m in matches if m.get('ploeg')]
+
+    for m in belvoc:
+        try:
+            m['_s'] = datetime.strptime(m['start'], "%d/%m/%Y %H:%M")
+            m['_e'] = datetime.strptime(m['einde'], "%d/%m/%Y %H:%M")
+        except Exception:
+            m['_s'] = None
+            m['_e'] = None
+
+    belvoc = [m for m in belvoc if m['_s'] and m['_e']]
+
+    per_day = {}
+    for m in belvoc:
+        per_day.setdefault(m['_s'].date(), []).append(m)
+
+    groups = []
+    for _, day_ms in per_day.items():
+        day_ms = sorted(day_ms, key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))
+        n = len(day_ms)
+        if n < 2:
+            continue
+        adj = [set() for _ in range(n)]
+        for i in range(n):
+            for j in range(i + 1, n):
+                a, b = day_ms[i], day_ms[j]
+                if a['_s'] < b['_e'] and a['_e'] > b['_s']:
+                    adj[i].add(j)
+                    adj[j].add(i)
+        visited = [False] * n
+        for i in range(n):
+            if visited[i]:
+                continue
+            stack, comp = [i], []
+            visited[i] = True
+            while stack:
+                cur = stack.pop()
+                comp.append(cur)
+                for nb in adj[cur]:
+                    if not visited[nb]:
+                        visited[nb] = True
+                        stack.append(nb)
+            if len(comp) < 2:
+                continue
+            # Require matches from at least 2 different teams
+            if len(set(day_ms[idx]['ploeg'] for idx in comp)) < 2:
+                continue
+            group = sorted([day_ms[idx] for idx in comp],
+                           key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))
+            for m in group:
+                best, best_min = None, -1
+                for other in group:
+                    if other is m:
+                        continue
+                    od = _overlap_duration(other['_s'], other['_e'], m['_s'], m['_e'])
+                    if od:
+                        mins = int(od.split(' ', 1)[0])
+                        if mins > best_min:
+                            best_min, best = mins, od
+                m['overlap_duration'] = best
+            groups.append(group)
+
+    groups.sort(key=lambda g: g[0]['_s'])
+
+    for m in belvoc:
         m.pop('_s', None)
         m.pop('_e', None)
 
