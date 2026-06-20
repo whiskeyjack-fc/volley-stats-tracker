@@ -23,11 +23,14 @@
   <button type="submit" class="btn btn-sm btn-outline" style="display:none">Filter</button>
 </form>
 
-<form method="post" action="{{ url_for('conflicts_refresh') }}" style="margin:0 0 0.5rem">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
-  <button type="submit" class="btn btn-sm btn-primary">↻ Data vernieuwen</button>
-</form>
+<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+  <form method="post" action="{{ url_for('conflicts_refresh') }}" style="margin:0">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
+    <button type="submit" class="btn btn-sm btn-primary">↻ Data vernieuwen</button>
+  </form>
+  <button type="button" id="btn-print-export" class="btn btn-sm btn-outline">🖨 Afdrukken / PDF</button>
+</div>
 
 <details class="upload-xml-details" style="margin-bottom:1.5rem">
   <summary class="btn btn-sm btn-outline" style="display:inline-flex;cursor:pointer">📂 XML handmatig uploaden</summary>
@@ -487,6 +490,32 @@
   border-bottom: 1px solid var(--border);
   overflow: hidden;
 }
+
+/* ── Print / PDF export ── */
+@media print {
+  @page { size: A4 landscape; margin: 1.2cm 1cm; }
+
+  /* Preserve dark background and colors */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  /* Hide interactive chrome */
+  nav, header, aside,
+  .filter-bar, #btn-print-export,
+  form[action*="refresh"], form[action*="upload"],
+  .upload-xml-details, .conflict-jump-nav,
+  .fetched-badge, .flash, .conflict-table-toggle { display: none !important; }
+
+  /* Keep table hidden/visible state as set by the user */
+  .conflict-table-wrap[hidden] { display: none !important; }
+
+  /* Avoid splitting a card across pages */
+  .conflict-card { break-inside: avoid; page-break-inside: avoid; margin-bottom: .5rem; }
+  section { page-break-before: auto; }
+  h2.chart-title { page-break-after: avoid; }
+
+  /* Scale SVG timelines to fill the print column (viewBox handles proportional scaling) */
+  .conflict-timeline svg { width: 100% !important; height: auto !important; }
+}
 </style>
 
 <script>
@@ -698,9 +727,14 @@
 
     container.innerHTML =
       '<svg xmlns="http://www.w3.org/2000/svg" width="' + svgW + '" height="' + totalH + '"' +
+      ' viewBox="0 0 ' + svgW + ' ' + totalH + '"' +
       ' style="display:block;font-family:\'Segoe UI\',system-ui,sans-serif;overflow:visible">' +
       els.join('') + '</svg>';
   }
+
+  /* ── Print / Export PDF ────────────────────────────────────────────────── */
+  var printBtn = document.getElementById('btn-print-export');
+  if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
 
   /* ── Table toggle ── */
   document.querySelectorAll('.conflict-toggle-btn').forEach(function (btn) {
