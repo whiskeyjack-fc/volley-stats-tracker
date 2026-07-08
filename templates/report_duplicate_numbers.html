@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Dubbele wedstrijdnummers — VolleyStats{% endblock %}
+{% block content %}
+{% set KIT_STATUS_NL = {'in stock': 'Op voorraad', 'assigned': 'Toegewezen', 'lost': 'Verloren', 'retired': 'Afgeschreven'} %}
+
+<div class="sticky-page-header">
+<div class="page-header">
+  <h1>Dubbele wedstrijdnummers</h1>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+    <a href="{{ url_for('report_duplicate_numbers_export') }}" class="btn btn-outline btn-sm">↓ CSV exporteren</a>
+  </div>
+</div>
+
+<p style="color:var(--muted);font-size:0.9rem;margin:0 0 1rem;max-width:70ch">
+  Toont wedstrijdshirts waarbij hetzelfde rugnummer binnen hetzelfde team aan meer dan één speler is toegewezen.
+  Gebruik deze lijst om nieuwe shirts te bestellen en het conflict op te lossen.
+</p>
+</div>{# /.sticky-page-header #}
+
+{% if not groups %}
+<div class="card" style="text-align:center;padding:2rem 1rem;color:var(--muted)">
+  <p style="font-size:1.05rem;margin:0">Geen dubbele nummers gevonden.</p>
+</div>
+{% else %}
+<style>
+  .dup-table tr.group-shade td { background: var(--surface2); }
+  .dup-table tr.group-start td { border-top: 2px solid var(--border); }
+  .dup-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+</style>
+<div class="table-scroll-wrap">
+  <table class="sticky-col-head table dup-table">
+    <thead>
+      <tr>
+        <th>Team</th>
+        <th>Nummer</th>
+        <th>Speler</th>
+        <th>Model</th>
+        <th>Maat</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for group in groups %}
+      {% set group_odd = loop.index0 is odd %}
+      {% for item in group.rows %}
+      <tr class="{% if group_odd %}group-shade{% endif %}{% if loop.first %} group-start{% endif %}">
+        <td>{{ group.team_name }}</td>
+        <td>{{ group.number }}</td>
+        <td><a href="{{ url_for('roster_detail', profile_id=item.profile_id) }}">{{ item.player_first_name }} {{ item.player_last_name }}</a></td>
+        <td>{{ item.model }}</td>
+        <td>{{ item.size }}</td>
+        <td>{{ KIT_STATUS_NL.get(item.status, item.status) }}</td>
+        <td><a href="{{ url_for('kit_detail', item_id=item.item_id) }}" class="btn btn-outline btn-sm">Bekijk item</a></td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

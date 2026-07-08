@@ -1,6 +1,7 @@
 {#
   VolleyStats shared Jinja2 macros
   Import with: {% from "_macros.html" import filter_select %}
+               {% from "_macros.html" import filter_multiselect %}
                {% from "_macros.html" import filter_chips %}
 #}
 
@@ -20,6 +21,51 @@
   <option value="">{{ all_label }}</option>
   {{ caller() }}
 </select>
+{% endmacro %}
+
+
+{# ── filter_multiselect ───────────────────────────────────────────────────
+   Renders an Excel-style multi-select checkbox dropdown for a .filter-bar.
+   Requires filter-multiselect.js to be loaded (self-initializing, no manual
+   init call needed). Unchecking one value acts as an implicit "exclude"
+   filter; leaving everything checked (or unchecking everything) is treated
+   as "no filter" by the backend and by the JS clean-URL rule on Apply.
+
+   Use the {% call %} block to provide the checkbox rows. Each row must be
+   an <label class="ms-option"> wrapping an <input type="checkbox"> with the
+   given name, so the JS and native form submission can find it.
+
+   Usage:
+     {% call filter_multiselect('status', 'Status', f_status|length) %}
+       {% for s in KIT_STATUSES %}
+       <label class="ms-option">
+         <input type="checkbox" name="status" value="{{ s }}"
+                {% if (not f_status) or (s in f_status) %}checked{% endif %}>
+         {{ s|capitalize }}
+       </label>
+       {% endfor %}
+     {% endcall %}
+#}
+{% macro filter_multiselect(name, label, count=0) %}
+<div class="ms-select">
+  <button type="button" class="ms-trigger">
+    {{ label }}{% if count %}<span class="ms-badge">{{ count }}</span>{% endif %}
+  </button>
+  <div class="ms-panel" hidden>
+    <input type="text" class="ms-search" placeholder="Zoeken…">
+    <label class="ms-option ms-selectall">
+      <input type="checkbox" class="ms-selectall-input" checked>
+      <strong>Alles selecteren</strong>
+    </label>
+    <div class="ms-options">
+      {{ caller() }}
+    </div>
+    <div class="ms-footer">
+      <button type="button" class="btn btn-sm ms-cancel">Annuleren</button>
+      <button type="button" class="btn btn-sm btn-primary ms-apply">Toepassen</button>
+    </div>
+  </div>
+</div>
 {% endmacro %}
 
 
@@ -192,7 +238,7 @@
       {% if short_name %}<span class="team-card-name">{{ short_name }}</span>{% else %}<span class="team-card-name">{{ name }}</span>{% endif %}
       {% if short_name %}<span style="font-size:0.78rem;color:var(--accent);font-weight:600">{{ name }}</span>{% endif %}
       {% if sub_label %}<span style="font-size:0.75rem;color:var(--muted)">{{ sub_label }}</span>{% endif %}
-      {% if player_count is not none %}<span class="team-card-count">{{ player_count }} speler{{ 's' if player_count != 1 else '' }}</span>{% endif %}
+      {% if player_count is not none %}<span class="team-card-count">{{ player_count }} {{ 'lid' if player_count == 1 else 'leden' }}</span>{% endif %}
       {% if description %}<span style="font-size:0.82rem;color:var(--muted);display:block;margin-top:.2rem">{{ description }}</span>{% endif %}
     </div>
     {% if show_actions %}

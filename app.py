@@ -103,6 +103,18 @@ def can_manage_kit():
     return current_user.is_authenticated and current_user.role in ('kit_manager', 'coordinator', 'admin')
 
 
+def _current_team_id_for_profile(db, profile_id):
+    """Return the club team a player profile currently belongs to, season-aware.
+    Prefers the row with the highest season_id (most recent season); falls back
+    to legacy season_id-less rows only if no dated rows exist."""
+    row = db.execute(
+        "SELECT team_id FROM club_team_players WHERE profile_id=? "
+        "ORDER BY (season_id IS NULL) ASC, season_id DESC LIMIT 1",
+        (profile_id,)
+    ).fetchone()
+    return row["team_id"] if row else None
+
+
 def _uid_cond():
     """Return (sql AND fragment, params) scoping queries to the current user.
     Returns ('', []) for coordinator/admin roles who see all data."""
@@ -495,6 +507,13 @@ def migrate_db():
             fetched_at   TEXT NOT NULL,
             matches_json TEXT NOT NULL
         )""",
+        # Backfill kit_items.team_id with the season-aware current team for the
+        # assigned profile (fixes stale team_id from the old non-season-aware lookup)
+        """UPDATE kit_items SET team_id = (
+            SELECT ctp.team_id FROM club_team_players ctp
+            WHERE ctp.profile_id = kit_items.profile_id
+            ORDER BY (ctp.season_id IS NULL) ASC, ctp.season_id DESC LIMIT 1
+        ) WHERE profile_id IS NOT NULL""",
     ]:
         try:
             db.execute(sql)
@@ -1988,6 +2007,10 @@ def team_list():
         season_join_params = []
     extra_conds  = ""
     extra_params = []
+    team_id_filter = request.args.get('team_id', type=int)
+    if team_id_filter:
+        extra_conds += " AND ct.id = ?"
+        extra_params += [team_id_filter]
     if q:
         extra_conds += " AND (ct.name LIKE ? OR ct.short_name LIKE ? OR ctsi.short_name LIKE ?)"
         like = '%' + q + '%'
@@ -2011,20 +2034,20 @@ def team_list():
     team_player_counts = {}
     team_trainers = {}
     team_non_players = {}
+    team_players = {}
     for t in teams:
         if active_season_id:
-            cnt = db.execute(
-                "SELECT COUNT(*) AS c FROM club_team_players WHERE team_id=? AND season_id=?",
-                (t["id"], active_season_id)
-            ).fetchone()["c"]
+            season_id_for_team = active_season_id
         else:
-            cnt = db.execute(
-                """SELECT COUNT(*) AS c FROM club_team_players
-                   WHERE team_id=? AND season_id = (
-                       SELECT season_id FROM club_team_season_info
-                       WHERE team_id=? ORDER BY season_id DESC LIMIT 1
-                   )""", (t["id"], t["id"])
-            ).fetchone()["c"]
+            row = db.execute(
+                "SELECT season_id FROM club_team_season_info WHERE team_id=? ORDER BY season_id DESC LIMIT 1",
+                (t["id"],)
+            ).fetchone()
+            season_id_for_team = row["season_id"] if row else None
+        cnt = db.execute(
+            "SELECT COUNT(*) AS c FROM club_team_players WHERE team_id=? AND season_id=?",
+            (t["id"], season_id_for_team)
+        ).fetchone()["c"]
         team_player_counts[t["id"]] = cnt
         trainers = db.execute(
             "SELECT u.id, u.email FROM users u "
@@ -2033,28 +2056,24 @@ def team_list():
             (t["id"],)
         ).fetchall()
         team_trainers[t["id"]] = [dict(tr) for tr in trainers]
-        if active_season_id:
-            non_players = db.execute(
-                "SELECT ctp.name, ctp.roles FROM club_team_players ctp "
-                "WHERE ctp.team_id=? AND ctp.season_id=? "
-                "AND ctp.roles IS NOT NULL AND ctp.roles != '' "
-                "AND ctp.roles NOT LIKE '%player%' "
-                "ORDER BY ctp.name COLLATE NOCASE",
-                (t["id"], active_season_id)
-            ).fetchall()
-        else:
-            non_players = db.execute(
-                """SELECT ctp.name, ctp.roles FROM club_team_players ctp
-                   WHERE ctp.team_id=? AND ctp.roles IS NOT NULL AND ctp.roles != ''
-                   AND ctp.roles NOT LIKE '%player%'
-                   AND ctp.season_id = (
-                       SELECT season_id FROM club_team_season_info
-                       WHERE team_id=? ORDER BY season_id DESC LIMIT 1
-                   )
-                   ORDER BY ctp.name COLLATE NOCASE""",
-                (t["id"], t["id"])
-            ).fetchall()
+        non_players = db.execute(
+            "SELECT ctp.name, ctp.roles FROM club_team_players ctp "
+            "WHERE ctp.team_id=? AND ctp.season_id=? "
+            "AND ctp.roles IS NOT NULL AND ctp.roles != '' "
+            "AND ctp.roles NOT LIKE '%player%' "
+            "ORDER BY ctp.name COLLATE NOCASE",
+            (t["id"], season_id_for_team)
+        ).fetchall()
         team_non_players[t["id"]] = [dict(r) for r in non_players]
+        players = db.execute(
+            "SELECT ctp.name, ctp.number, ctp.roles, pp.positions FROM club_team_players ctp "
+            "LEFT JOIN player_profiles pp ON pp.id = ctp.profile_id "
+            "WHERE ctp.team_id=? AND ctp.season_id=? "
+            "AND (ctp.roles IS NULL OR ctp.roles = '' OR ctp.roles LIKE '%player%') "
+            "ORDER BY ctp.name COLLATE NOCASE",
+            (t["id"], season_id_for_team)
+        ).fetchall()
+        team_players[t["id"]] = [dict(r) for r in players]
     all_trainers = db.execute(
         "SELECT id, email FROM users WHERE role='trainer' ORDER BY email COLLATE NOCASE"
     ).fetchall()
@@ -2062,9 +2081,11 @@ def team_list():
                            team_player_counts=team_player_counts,
                            team_trainers=team_trainers,
                            team_non_players=team_non_players,
+                           team_players=team_players,
                            all_trainers=all_trainers,
                            seasons=seasons,
                            active_season_id=active_season_id,
+                           team_id_filter=team_id_filter,
                            q=q)
 
 
@@ -2078,6 +2099,7 @@ def new_team():
     seasons = [dict(s) for s in db.execute(
         f"SELECT id, name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
     ).fetchall()]
+    known_reeks = _known_reeks_from_cache(db)
     if request.method == "POST":
         name             = request.form.get("team_name", "").strip()
         division         = request.form.get("division", "").strip() or None
@@ -2086,7 +2108,7 @@ def new_team():
         if not name:
             return render_template("team_form.html", team=None, players=[], all_profiles=[],
                                    seasons=seasons, selected_season_id=None, error="Team name is required.",
-                                   team_member_roles=TEAM_MEMBER_ROLES)
+                                   known_reeks=known_reeks, team_member_roles=TEAM_MEMBER_ROLES)
         if short_name:
             existing = db.execute(
                 "SELECT id FROM club_teams WHERE short_name=?", (short_name,)
@@ -2095,7 +2117,7 @@ def new_team():
                 return render_template("team_form.html", team=None, players=[], all_profiles=[],
                                        seasons=seasons, selected_season_id=None,
                                        error="A team with this short name already exists.",
-                                       team_member_roles=TEAM_MEMBER_ROLES)
+                                       known_reeks=known_reeks, team_member_roles=TEAM_MEMBER_ROLES)
         try:
             cur = db.execute("INSERT INTO club_teams (user_id, name, division, short_name, federation_reeks) VALUES (?,?,?,?,?)", (current_user.id, name, division, short_name, federation_reeks))
             db.commit()
@@ -2103,13 +2125,15 @@ def new_team():
             db.rollback()
             return render_template("team_form.html", team=None, players=[], all_profiles=[],
                                    seasons=seasons, selected_season_id=None, error="A team with this short name already exists.",
-                                   team_member_roles=TEAM_MEMBER_ROLES)
+                                   known_reeks=known_reeks, team_member_roles=TEAM_MEMBER_ROLES)
         except Exception:
             db.rollback()
             raise
+        if federation_reeks and known_reeks and federation_reeks not in known_reeks:
+            flash(f"Reeks code '{federation_reeks}' werd niet gevonden in de gecachte wedstrijdkalender. Conflictdetectie voor dit team kan onvolledig zijn.", "warning")
         return redirect(url_for("edit_team", team_id=cur.lastrowid))
     return render_template("team_form.html", team=None, players=[], all_profiles=[],
-                           seasons=seasons, selected_season_id=None, team_member_roles=TEAM_MEMBER_ROLES)
+                           seasons=seasons, selected_season_id=None, known_reeks=known_reeks, team_member_roles=TEAM_MEMBER_ROLES)
 
 
 @app.route("/teams/<int:team_id>/edit", methods=["GET", "POST"])
@@ -2128,6 +2152,7 @@ def edit_team(team_id):
     seasons = [dict(s) for s in db.execute(
         f"SELECT id, name FROM seasons WHERE 1=1{ucond} ORDER BY name DESC", uparams
     ).fetchall()]
+    known_reeks = _known_reeks_from_cache(db)
     if request.method == "POST":
         name             = request.form.get("team_name", "").strip()
         division         = request.form.get("division", "").strip() or None
@@ -2150,7 +2175,7 @@ def edit_team(team_id):
         if not name:
             return render_template("team_form.html", team=team, players=players, all_profiles=all_profiles,
                                    seasons=seasons, selected_season_id=selected_season_id, error="Team name is required.",
-                                   season_info=season_info, team_member_roles=TEAM_MEMBER_ROLES)
+                                   known_reeks=known_reeks, season_info=season_info, team_member_roles=TEAM_MEMBER_ROLES)
         if short_name and not season_id:
             existing = db.execute(
                 "SELECT id FROM club_teams WHERE short_name=? AND id!=?", (short_name, team_id)
@@ -2159,7 +2184,7 @@ def edit_team(team_id):
                 return render_template("team_form.html", team=team, players=players, all_profiles=all_profiles,
                                        seasons=seasons, selected_season_id=selected_season_id,
                                        error="A team with this short name already exists.",
-                                       season_info=season_info, team_member_roles=TEAM_MEMBER_ROLES)
+                                       known_reeks=known_reeks, season_info=season_info, team_member_roles=TEAM_MEMBER_ROLES)
         try:
             if season_id:
                 # Only update global team fields; short_name/division are season-specific
@@ -2204,10 +2229,12 @@ def edit_team(team_id):
             db.rollback()
             return render_template("team_form.html", team=team, players=players, all_profiles=all_profiles,
                                    seasons=seasons, selected_season_id=selected_season_id, error="A team with this short name already exists.",
-                                   season_info=season_info, team_member_roles=TEAM_MEMBER_ROLES)
+                                   known_reeks=known_reeks, season_info=season_info, team_member_roles=TEAM_MEMBER_ROLES)
         except Exception:
             db.rollback()
             raise
+        if federation_reeks and known_reeks and federation_reeks not in known_reeks:
+            flash(f"Reeks code '{federation_reeks}' werd niet gevonden in de gecachte wedstrijdkalender. Conflictdetectie voor dit team kan onvolledig zijn.", "warning")
         return redirect(url_for("team_list"))
     selected_season_id = request.args.get("season_id", type=int)
     season_info = None
@@ -2228,7 +2255,7 @@ def edit_team(team_id):
         ).fetchall()
     return render_template("team_form.html", team=team, players=players, all_profiles=all_profiles,
                            seasons=seasons, selected_season_id=selected_season_id,
-                           season_info=season_info, team_member_roles=TEAM_MEMBER_ROLES)
+                           known_reeks=known_reeks, season_info=season_info, team_member_roles=TEAM_MEMBER_ROLES)
 
 
 @app.route("/teams/<int:team_id>/delete", methods=["POST"])
@@ -2437,7 +2464,8 @@ def roster_list():
     status    = request.args.get("status", "")
     position  = request.args.get("position", "")
     tag       = request.args.get("tag", "").strip()
-    team      = request.args.get("team", type=int)
+    team_raw  = request.args.get("team", "").strip()
+    team      = "none" if team_raw == "none" else (int(team_raw) if team_raw.isdigit() else None)
     group     = request.args.get("group", type=int)
     season_id = request.args.get("season_id", type=int)
     role      = request.args.get("role", "").strip()
@@ -2456,7 +2484,9 @@ def roster_list():
     if tag:
         sql    += ' AND tags LIKE ?'
         params += [f'%"{tag}"%']
-    if team and season_id:
+    if team == "none":
+        sql    += " AND id NOT IN (SELECT profile_id FROM club_team_players WHERE profile_id IS NOT NULL)"
+    elif team and season_id:
         sql    += " AND id IN (SELECT profile_id FROM club_team_players WHERE team_id=? AND season_id=? AND profile_id IS NOT NULL)"
         params += [team, season_id]
     elif team:
@@ -2479,7 +2509,7 @@ def roster_list():
     if season_id:
         teams_rows = db.execute(
             "SELECT ctp.profile_id, ct.id, ct.name, "
-            "COALESCE(ctsi.short_name, ct.short_name) AS short_name, ctp.roles "
+            "COALESCE(ctsi.short_name, ct.short_name) AS short_name, ctp.roles, ctp.season_id "
             "FROM club_team_players ctp "
             "JOIN club_teams ct ON ct.id = ctp.team_id "
             "LEFT JOIN club_team_season_info ctsi ON ctsi.team_id = ctp.team_id AND ctsi.season_id = ctp.season_id "
@@ -2490,7 +2520,7 @@ def roster_list():
         # Show each team once — latest season per (team, player)
         teams_rows = db.execute(
             "SELECT ctp.profile_id, ct.id, ct.name, "
-            "COALESCE(ctsi.short_name, ct.short_name) AS short_name, ctp.roles "
+            "COALESCE(ctsi.short_name, ct.short_name) AS short_name, ctp.roles, ctp.season_id "
             "FROM club_team_players ctp "
             "JOIN club_teams ct ON ct.id = ctp.team_id "
             "LEFT JOIN club_team_season_info ctsi ON ctsi.team_id = ctp.team_id AND ctsi.season_id = ctp.season_id "
@@ -2501,7 +2531,7 @@ def roster_list():
             "))"
         ).fetchall()
     for row in teams_rows:
-        teams_by_pid.setdefault(row["profile_id"], []).append({"id": row["id"], "name": row["name"], "short_name": row["short_name"], "roles": row["roles"]})
+        teams_by_pid.setdefault(row["profile_id"], []).append({"id": row["id"], "name": row["name"], "short_name": row["short_name"], "roles": row["roles"], "season_id": row["season_id"]})
 
     ucond, uparams = _uid_cond()
     all_seasons = [dict(s) for s in db.execute(
@@ -3161,12 +3191,15 @@ def kit_list():
     require_kit_access()
     db  = get_db()
     q          = request.args.get("q", "").strip()
-    f_status   = request.args.get("status", "")
-    f_model    = request.args.get("model", "")
-    f_type     = request.args.get("type", "")
-    f_team_id  = request.args.get("team_id", "")
-    f_profile  = request.args.get("profile_id", "")
-    f_store    = request.args.get("store", "")
+    f_status   = request.args.getlist("status")
+    f_model    = request.args.getlist("model")
+    f_type     = request.args.getlist("type")
+    f_team_id  = request.args.getlist("team_id")
+    f_profile  = request.args.getlist("profile_id")
+    f_store    = request.args.getlist("store")
+    f_number   = request.args.getlist("number")
+    f_size     = request.args.getlist("size")
+    f_state    = request.args.getlist("state")
     f_remark   = request.args.get("remark", "").strip()
 
     where  = "WHERE ki.is_deleted = 0"
@@ -3179,28 +3212,38 @@ def kit_list():
         like = "%" + q + "%"
         params += [like, like, like, like, like]
     if f_status:
-        where += " AND ki.status = ?"
-        params.append(f_status)
+        where += " AND ki.status IN (%s)" % ",".join("?" * len(f_status))
+        params += f_status
     if f_model:
-        where += " AND ki.model = ?"
-        params.append(f_model)
+        where += " AND ki.model IN (%s)" % ",".join("?" * len(f_model))
+        params += f_model
     if f_type:
-        where += " AND ki.type = ?"
-        params.append(f_type)
+        where += " AND ki.type IN (%s)" % ",".join("?" * len(f_type))
+        params += f_type
     if f_team_id:
+        placeholders = ",".join("?" * len(f_team_id))
         where += (
-            " AND (ki.team_id = ?"
+            f" AND (ki.team_id IN ({placeholders})"
             " OR (ki.team_id IS NULL AND ki.profile_id IN"
-            "  (SELECT profile_id FROM club_team_players"
-            "   WHERE team_id = ? AND profile_id IS NOT NULL)))"
+            f"  (SELECT profile_id FROM club_team_players"
+            f"   WHERE team_id IN ({placeholders}) AND profile_id IS NOT NULL)))"
         )
-        params += [f_team_id, f_team_id]
+        params += f_team_id + f_team_id
     if f_profile:
-        where += " AND ki.profile_id = ?"
-        params.append(f_profile)
+        where += " AND ki.profile_id IN (%s)" % ",".join("?" * len(f_profile))
+        params += f_profile
     if f_store:
-        where += " AND ki.store = ?"
-        params.append(f_store)
+        where += " AND ki.store IN (%s)" % ",".join("?" * len(f_store))
+        params += f_store
+    if f_number:
+        where += " AND ki.number IN (%s)" % ",".join("?" * len(f_number))
+        params += f_number
+    if f_size:
+        where += " AND ki.size IN (%s)" % ",".join("?" * len(f_size))
+        params += f_size
+    if f_state:
+        where += " AND ki.state IN (%s)" % ",".join("?" * len(f_state))
+        params += f_state
     if f_remark:
         where += (
             " AND EXISTS (SELECT 1 FROM kit_log kl WHERE kl.item_id = ki.id"
@@ -3243,6 +3286,9 @@ def kit_list():
     all_stores = [r[0] for r in db.execute(
         "SELECT DISTINCT store FROM kit_items WHERE is_deleted=0 AND store IS NOT NULL ORDER BY store"
     ).fetchall()]
+    all_numbers = [r[0] for r in db.execute(
+        "SELECT DISTINCT number FROM kit_items WHERE is_deleted=0 AND number IS NOT NULL ORDER BY number"
+    ).fetchall()]
 
     return render_template(
         "kit_list.html",
@@ -3250,6 +3296,7 @@ def kit_list():
         all_teams=all_teams,
         all_profiles=all_profiles,
         all_stores=all_stores,
+        all_numbers=all_numbers,
         q=q,
         f_status=f_status,
         f_model=f_model,
@@ -3257,10 +3304,15 @@ def kit_list():
         f_team_id=f_team_id,
         f_profile=f_profile,
         f_store=f_store,
+        f_number=f_number,
+        f_size=f_size,
+        f_state=f_state,
         f_remark=f_remark,
         KIT_MODELS=KIT_MODELS,
         KIT_TYPES=KIT_TYPES,
         KIT_STATUSES=KIT_STATUSES,
+        KIT_SIZES=KIT_SIZES,
+        KIT_STATES=KIT_STATES,
     )
 
 
@@ -3299,14 +3351,7 @@ def kit_new():
         if state not in KIT_STATES:
             state = KIT_STATES[0]
 
-        team_id = None
-        if profile_id:
-            t_row = db.execute(
-                "SELECT team_id FROM club_team_players WHERE profile_id=? LIMIT 1",
-                (profile_id,)
-            ).fetchone()
-            if t_row:
-                team_id = t_row["team_id"]
+        team_id = _current_team_id_for_profile(db, profile_id) if profile_id else None
 
         cur = db.execute(
             "INSERT INTO kit_items "
@@ -3411,14 +3456,7 @@ def kit_edit(item_id):
         if state not in KIT_STATES:
             state = item["state"]
 
-        team_id = None
-        if profile_id:
-            t_row = db.execute(
-                "SELECT team_id FROM club_team_players WHERE profile_id=? LIMIT 1",
-                (profile_id,)
-            ).fetchone()
-            if t_row:
-                team_id = t_row["team_id"]
+        team_id = _current_team_id_for_profile(db, profile_id) if profile_id else None
 
         old_profile = str(item["profile_id"]) if item["profile_id"] else None
         old_status  = item["status"]
@@ -3568,6 +3606,50 @@ def kit_log_page():
     )
 
 
+@app.route("/api/kit/<int:item_id>", methods=["PATCH"])
+@csrf.exempt
+@login_required
+def api_patch_kit_item(item_id):
+    if not can_manage_kit():
+        return jsonify({"error": "Forbidden"}), 403
+    db = get_db()
+    item = db.execute("SELECT * FROM kit_items WHERE id=? AND is_deleted=0", (item_id,)).fetchone()
+    if not item:
+        return jsonify({"error": "Not found"}), 404
+    data = request.get_json(silent=True) or {}
+    field = data.get("field", "")
+    value = data.get("value")
+    ALLOWED = {"number", "status", "state", "store"}
+    if field not in ALLOWED:
+        return jsonify({"error": "Field not editable"}), 400
+    if field == "status":
+        if value not in KIT_STATUSES:
+            return jsonify({"error": "Invalid status"}), 400
+    elif field == "state":
+        if value not in KIT_STATES:
+            return jsonify({"error": "Invalid state"}), 400
+    else:
+        value = str(value).strip() if value is not None else None
+        if value == "":
+            value = None
+
+    old_value = item[field]
+    now = datetime.now(UTC).isoformat()
+    cur = db.execute(f"UPDATE kit_items SET {field}=? WHERE id=?", (value, item_id))
+    if cur.rowcount == 0:
+        return jsonify({"error": "Not found"}), 404
+
+    if field == "status" and value != old_value:
+        db.execute(
+            "INSERT INTO kit_log (item_id, action, profile_id, team_id, note, created_by, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (item_id, 'remark', item["profile_id"], item["team_id"],
+             f"Status changed from '{old_value}' to '{value}'", current_user.id, now)
+        )
+    db.commit()
+    return jsonify({"ok": True, "field": field, "value": value})
+
+
 @app.route("/kit/bulk-delete", methods=["POST"])
 @login_required
 def kit_bulk_delete():
@@ -3637,6 +3719,86 @@ def kit_export():
     response = make_response(output.getvalue())
     response.headers['Content-Type'] = 'text/csv; charset=utf-8'
     response.headers['Content-Disposition'] = 'attachment; filename="kit_export.csv"'
+    return response
+
+
+# ── Reports ──────────────────────────────────────────────────────────────────
+
+DUPLICATE_NUMBER_STATUSES = ('in stock', 'assigned')
+
+
+def _duplicate_number_rows(db):
+    """Rows for the duplicate-shirt-number report: 'wedstrijd' kit items where the
+    same team+number is assigned to 2+ distinct players. Ordered by team, numeric
+    shirt number, player full name (identity), then federation_id."""
+    status_placeholders = ",".join("?" * len(DUPLICATE_NUMBER_STATUSES))
+    return db.execute(
+        f"""
+        SELECT ki.id AS item_id, ki.number, ki.model, ki.size, ki.status,
+               ki.name_printed, ki.date_added, ki.profile_id,
+               pp.first_name AS player_first_name, pp.last_name AS player_last_name,
+               pp.federation_id,
+               COALESCE(ct.short_name, ct.name) AS team_name
+        FROM kit_items ki
+        JOIN player_profiles pp ON pp.id = ki.profile_id
+        JOIN club_teams ct ON ct.id = ki.team_id
+        WHERE ki.is_deleted = 0 AND ki.type = 'wedstrijd'
+          AND ki.status IN ({status_placeholders})
+          AND (ki.team_id || '|' || ki.number) IN (
+            SELECT team_id || '|' || number FROM kit_items
+            WHERE is_deleted = 0 AND type = 'wedstrijd'
+              AND status IN ({status_placeholders})
+              AND profile_id IS NOT NULL AND number IS NOT NULL AND number <> ''
+              AND team_id IS NOT NULL
+            GROUP BY team_id, number
+            HAVING COUNT(DISTINCT profile_id) > 1
+          )
+        ORDER BY team_name COLLATE NOCASE, CAST(ki.number AS INTEGER),
+                 (pp.last_name || ' ' || pp.first_name) COLLATE NOCASE, pp.federation_id
+        """,
+        list(DUPLICATE_NUMBER_STATUSES) * 2
+    ).fetchall()
+
+
+@app.route("/reports/duplicate-numbers")
+@login_required
+def report_duplicate_numbers():
+    require_kit_access()
+    db = get_db()
+    rows = _duplicate_number_rows(db)
+    groups = []
+    current_key = None
+    for r in rows:
+        key = (r["team_name"], r["number"])
+        if key != current_key:
+            groups.append({"team_name": r["team_name"], "number": r["number"], "rows": []})
+            current_key = key
+        groups[-1]["rows"].append(r)
+    for g in groups:
+        g["player_count"] = len({(it["player_first_name"], it["player_last_name"]) for it in g["rows"]})
+    return render_template("report_duplicate_numbers.html", groups=groups)
+
+
+@app.route("/reports/duplicate-numbers/export")
+@login_required
+def report_duplicate_numbers_export():
+    require_kit_access()
+    db = get_db()
+    rows = _duplicate_number_rows(db)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['team', 'number', 'player_first_name', 'player_last_name', 'federation_id',
+                     'model', 'size', 'status', 'name_printed', 'item_id'])
+    for r in rows:
+        writer.writerow([
+            r['team_name'], r['number'], r['player_first_name'], r['player_last_name'],
+            r['federation_id'] or '', r['model'], r['size'], r['status'],
+            r['name_printed'] or '', r['item_id']
+        ])
+    output.seek(0)
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    response.headers['Content-Disposition'] = 'attachment; filename="dubbele_wedstrijdnummers.csv"'
     return response
 
 
@@ -3851,9 +4013,10 @@ def kit_import_confirm():
 
 # ── /conflicts routes ─────────────────────────────────────────────────────────
 
-@app.route("/conflicts")
-@login_required
-def conflicts_page():
+_CONFLICT_VIEWS = ("sporthal", "teamoverlap", "persons")
+
+
+def _render_conflicts(conflict_view):
     db = get_db()
     ucond, uparams = _uid_cond()
     seasons = [dict(s) for s in db.execute(
@@ -3934,6 +4097,7 @@ def conflicts_page():
 
     return render_template(
         "conflicts.html",
+        conflict_view=conflict_view,
         sporthal_conflicts=sporthal_conflicts,
         team_overlaps=team_overlaps,
         available_teams=available_teams,
@@ -3947,6 +4111,38 @@ def conflicts_page():
     )
 
 
+@app.route("/conflicts")
+@login_required
+def conflicts_page():
+    return redirect(url_for("conflicts_sporthal", **request.args))
+
+
+@app.route("/conflicts/sporthal")
+@login_required
+def conflicts_sporthal():
+    return _render_conflicts("sporthal")
+
+
+@app.route("/conflicts/teamoverlap")
+@login_required
+def conflicts_teamoverlap():
+    return _render_conflicts("teamoverlap")
+
+
+@app.route("/conflicts/persons")
+@login_required
+def conflicts_persons():
+    return _render_conflicts("persons")
+
+
+def _conflicts_redirect_after_action(season_id):
+    view = request.form.get("view", "sporthal")
+    if view not in _CONFLICT_VIEWS:
+        view = "sporthal"
+    endpoint = "conflicts_" + view
+    return redirect(url_for(endpoint, season_id=season_id))
+
+
 @app.route("/conflicts/refresh", methods=["POST"])
 @login_required
 def conflicts_refresh():
@@ -3955,12 +4151,12 @@ def conflicts_refresh():
     xml_bytes, fetch_err = _fetch_federation_xml()
     if xml_bytes is None:
         flash(f"Fout bij ophalen wedstrijddata: {fetch_err}", "error")
-        return redirect(url_for("conflicts_page"))
+        return _conflicts_redirect_after_action(season_id)
     matches = _parse_federation_xml(xml_bytes)
     db = get_db()
     _store_match_cache(db, matches)
     db.commit()
-    return redirect(url_for("conflicts_page", season_id=season_id))
+    return _conflicts_redirect_after_action(season_id)
 
 
 @app.route("/conflicts/upload-xml", methods=["POST"])
@@ -3972,21 +4168,21 @@ def conflicts_upload_xml():
     f = request.files.get("xml_file")
     if not f or not f.filename:
         flash("Selecteer een XML-bestand om te uploaden.", "error")
-        return redirect(url_for("conflicts_page", season_id=season_id))
+        return _conflicts_redirect_after_action(season_id)
     try:
         xml_bytes = f.read()
     except Exception as exc:
         flash(f"Bestand kon niet worden gelezen: {exc}", "error")
-        return redirect(url_for("conflicts_page", season_id=season_id))
+        return _conflicts_redirect_after_action(season_id)
     matches = _parse_federation_xml(xml_bytes)
     if not matches:
         flash("Het XML-bestand bevat geen wedstrijdgegevens of is ongeldig.", "error")
-        return redirect(url_for("conflicts_page", season_id=season_id))
+        return _conflicts_redirect_after_action(season_id)
     db = get_db()
     _store_match_cache(db, matches)
     db.commit()
     flash(f"Wedstrijddata geladen: {len(matches)} wedstrijden.", "success")
-    return redirect(url_for("conflicts_page", season_id=season_id))
+    return _conflicts_redirect_after_action(season_id)
 
 
 # ── Federation conflict-checker helpers ───────────────────────────────────────
@@ -4103,6 +4299,14 @@ def _store_match_cache(db, matches):
         "INSERT OR REPLACE INTO federation_match_cache (id, fetched_at, matches_json) VALUES (1,?,?)",
         (fetched_at, json.dumps(matches))
     )
+
+
+def _known_reeks_from_cache(db):
+    """Return a sorted list of unique reeks codes from the match cache, or [] if no cache."""
+    _, matches = _get_match_cache(db)
+    if not matches:
+        return []
+    return sorted({m['reeks'] for m in matches if m.get('reeks')})
 
 
 def _detect_sporthal_conflicts(matches):

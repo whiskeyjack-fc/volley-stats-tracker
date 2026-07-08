@@ -51,13 +51,16 @@
       {% if not is_kit_manager() %}
       <span class="nav-sep"></span>
       <span class="nav-group-label">Planning</span>
-      <a href="{{ url_for('conflicts_page') }}">Wedstrijdconflicten</a>
+      <a href="{{ url_for('conflicts_sporthal') }}">Wedstrijdconflicten</a>
       {% endif %}
       {% if can_manage_kit() or is_kit_manager() %}
       <span class="nav-sep"></span>
       <span class="nav-group-label">Materiaal</span>
       <a href="{{ url_for('kit_list') }}">Materiaallijst</a>
       <a href="{{ url_for('kit_log_page') }}">Materiaallog</a>
+      <span class="nav-sep"></span>
+      <span class="nav-group-label">Rapporten</span>
+      <a href="{{ url_for('report_duplicate_numbers') }}">Dubbele wedstrijdnummers</a>
       {% endif %}
       {% if is_admin() %}
       <span class="nav-sep"></span>

@@ -198,6 +198,9 @@ main { max-width: 1600px; margin: 0 auto; padding: 1rem 1.25rem; }
   text-align: left;
 }
 .table th { color: var(--gray); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
+.table th.sortable { cursor: pointer; user-select: none; }
+.table th.sortable:hover { color: var(--accent); }
+.table th.sortable .sort-arrow { font-size: 0.75em; margin-left: 0.3em; color: var(--accent); }
 .num-col { width: 80px; }
 .table tbody tr:hover { background: var(--surface2); }
 .actions { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
@@ -491,11 +494,92 @@ button.set-chip { font: inherit; line-height: 1; }
   transition: border-color 0.15s;
 }
 .filter-select:focus { outline: none; border-color: var(--accent); }
+
+/* ── Excel-style multi-select filter dropdown ───────────────── */
+.ms-select {
+  position: relative;
+  display: inline-block;
+}
+.ms-trigger {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: .2rem .45rem;
+  font-size: 0.8rem;
+  max-width: 130px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.ms-trigger:hover,
+.ms-trigger:focus { outline: none; border-color: var(--accent); }
+.ms-badge {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.15rem 0.4rem;
+}
+.ms-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  width: 220px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.ms-panel[hidden] { display: none; }
+.ms-search {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: .3rem .5rem;
+  font-size: 0.82rem;
+}
+.ms-options {
+  max-height: 220px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0.2rem 0;
+}
+.ms-option {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.15rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.ms-option:hover { background: var(--surface2); }
+.ms-selectall { padding-bottom: 0.35rem; }
+.ms-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
 @media (max-width: 600px) {
   .filter-bar { gap: 0.4rem; }
   .filter-search { min-width: 0; width: 100%; }
   .filter-select { font-size: 0.78rem; }
+  .ms-panel { width: min(260px, calc(100vw - 2rem)); left: auto; right: 0; }
 }
+
 
 /* ── Filter bar collapse toggle ─────────────────────────────── */
 .filter-rows-wrap {

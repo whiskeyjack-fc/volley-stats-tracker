@@ -3,6 +3,7 @@
 {% block title %}Clubteams — VolleyStats{% endblock %}
 {% block content %}
 {% set ROLE_NL = {'player': 'Speler', 'head_coach': 'Hoofdcoach', 'assistant_coach': 'Assistent-coach', 'team_manager': 'Teammanager', 'medical': 'Medisch', 'scorer': 'Markeerder', 'marker': 'Markeerder', 'video_analyst': 'Video-analist', 'coach': 'Coach'} %}
+{% set POS_NL = {'setter': 'Spelverdeler', 'libero': 'Libero', 'outside': 'Hoekaanvaller', 'opposite': 'Opposite', 'middle': 'Middenaanvaller'} %}
 <div class="page-header">
   <h1>Clubteams</h1>
   {% if can_view_all() %}
@@ -18,7 +19,7 @@
     {% endfor %}
   {% endcall %}
   <button type="submit" class="btn btn-outline btn-sm">Filteren</button>
-  {% if q or active_season_id %}
+  {% if q or active_season_id or team_id_filter %}
   <a href="{{ url_for('team_list') }}" class="btn btn-sm" style="opacity:0.7">✕ Wissen</a>
   {% endif %}
 </form>
@@ -33,6 +34,7 @@
 {% else %}
 <div class="team-cards">
   {% for t in teams %}
+  <div id="team-{{ t.id }}">
   {% call card_with_actions(
       name=t.name,
       edit_url=url_for('edit_team', team_id=t.id),
@@ -42,6 +44,7 @@
       player_count=team_player_counts[t.id],
       short_name=t.season_short_name or t.short_name,
       sub_label=(t.season_division or t.division or '') + (' · ' + t.season_name if t.season_name else '')) %}
+
 
     {# Team Staff: trainer users + non-player roster members #}
     <div style="border-top:1px solid var(--border);padding-top:.5rem">
@@ -79,9 +82,107 @@
 
       </div>
     </div>
+
+    {# Players roster: collapsed by default #}
+    <div style="border-top:1px solid var(--border);padding-top:.5rem">
+      <button type="button" class="btn btn-sm btn-outline team-toggle-btn" aria-expanded="false" data-team-id="{{ t.id }}">Leden tonen</button>
+      <div class="team-members-wrap table-scroll-wrap" style="margin-top:.5rem" hidden>
+        {% if team_players[t.id] %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th data-sort-type="number">Nr</th>
+              <th data-sort-type="text">Naam</th>
+              <th data-sort-type="text">Rol</th>
+              <th data-sort-type="text">Posities</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in team_players[t.id] %}
+            <tr>
+              <td>{{ p.number or '' }}</td>
+              <td>{{ p.name | title }}</td>
+              <td>{% if p.roles %}{% for role in p.roles.split(',') %}{{ ROLE_NL.get(role.strip(), role.strip().replace('_', ' ')|title) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ ROLE_NL['player'] }}{% endif %}</td>
+              <td>
+                {% if p.positions %}
+                {% for pos in p.positions.split(',') %}
+                <span class="pos-pill">{{ POS_NL.get(pos.strip(), pos.strip()|capitalize) }}</span>
+                {% endfor %}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p style="color:var(--muted);font-size:0.82rem;margin:0">Geen spelers toegevoegd.</p>
+        {% endif %}
+      </div>
+    </div>
   {% endcall %}
+  </div>
   {% endfor %}
 </div>
 {% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.team-toggle-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var wrap = btn.parentElement.querySelector('.team-members-wrap');
+      var expanded = !wrap.hasAttribute('hidden');
+      if (expanded) {
+        wrap.setAttribute('hidden', '');
+        btn.textContent = 'Leden tonen';
+        btn.setAttribute('aria-expanded', 'false');
+      } else {
+        wrap.removeAttribute('hidden');
+        btn.textContent = 'Leden verbergen';
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+
+  /* ── Roster table column sorting ── */
+  document.querySelectorAll('.team-members-wrap table').forEach(function (table) {
+    table.querySelectorAll('th[data-sort-type]').forEach(function (th) {
+      th.classList.add('sortable');
+      var arrow = document.createElement('span');
+      arrow.className = 'sort-arrow';
+      th.appendChild(arrow);
+      th.addEventListener('click', function () {
+        var colIndex = Array.prototype.indexOf.call(th.parentElement.children, th);
+        var type = th.getAttribute('data-sort-type');
+        var asc = th.getAttribute('data-sort-dir') !== 'asc';
+        table.querySelectorAll('th[data-sort-type]').forEach(function (h) {
+          h.removeAttribute('data-sort-dir');
+          var a = h.querySelector('.sort-arrow');
+          if (a) a.textContent = '';
+        });
+        th.setAttribute('data-sort-dir', asc ? 'asc' : 'desc');
+        arrow.textContent = asc ? '\u25B2' : '\u25BC';
+        var tbody = table.querySelector('tbody');
+        var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+        rows.sort(function (r1, r2) {
+          var c1 = r1.children[colIndex], c2 = r2.children[colIndex];
+          if (type === 'number') {
+            var n1 = parseFloat(c1.textContent);
+            var n2 = parseFloat(c2.textContent);
+            var v1 = isNaN(n1) ? -Infinity : n1;
+            var v2 = isNaN(n2) ? -Infinity : n2;
+            return asc ? v1 - v2 : v2 - v1;
+          }
+          var t1 = c1.textContent.trim().toLowerCase();
+          var t2 = c2.textContent.trim().toLowerCase();
+          if (t1 < t2) return asc ? -1 : 1;
+          if (t1 > t2) return asc ? 1 : -1;
+          return 0;
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+      });
+    });
+  });
+});
+</script>
 {% endblock %}
 

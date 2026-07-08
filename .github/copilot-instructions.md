@@ -18,6 +18,13 @@
 - Auto-submit on select change is provided globally by `base.html` — no per-page JS needed for `.filter-bar select.filter-select` elements.
 - The `Filter` submit button must be kept as a no-JS fallback; it is invisible in normal use because auto-submit fires first.
 - New form-based filter pages must `{% from "_macros.html" import filter_select %}` and use the macro — do not write raw `<select>` elements with inline styles.
+- **Multi-value dropdown filters** (Excel-style include/exclude) use the `filter_multiselect(name, label, count)` macro from `_macros.html` plus `static/js/filter-multiselect.js` (self-initializing, load via a `<script>` tag on the page — not globally in base.html). Backend routes must read these fields with `request.args.getlist(name)` and build a parameterized `IN (...)` clause only when the list is non-empty; a fully-checked or fully-unchecked group must omit the query param entirely (handled client-side by disabling checkboxes before submit) so nullable columns aren't wrongly excluded.
+
+## Reports
+- New reports live under `/reports/<name>` (page) and `/reports/<name>/export` (CSV), guarded by the access rule appropriate to their source data (e.g. `require_kit_access()` for kit-derived reports).
+- Build a shared private helper (e.g. `_duplicate_number_rows()`) that both the page route and the export route call, so the on-screen table and CSV export can never drift out of sync.
+- Report pages group results into per-group `.card` sections (team/number/etc. as the heading) each containing a `.table`, following the card-per-group pattern in `conflicts.html`.
+- Nav: reports get their own `nav-group-label` ("Rapporten"), gated by the access rule matching their data source.
 
 ## UI & Styling
 - Preserve the dark theme; do not introduce light-mode colors or `#fff` backgrounds.

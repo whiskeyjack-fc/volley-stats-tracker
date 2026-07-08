@@ -36,10 +36,15 @@
       </label>
       <label>
         <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.2rem;text-transform:uppercase;letter-spacing:.03em">Reeks (Volleyadmin2)</span>
-        <input type="text" name="federation_reeks"
+        <input type="text" name="federation_reeks" list="reeks-list"
                value="{{ team.federation_reeks or '' if team else '' }}"
                placeholder="bijv. HPN-3B-OVL"
                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;box-sizing:border-box" />
+        {% if known_reeks %}
+        <datalist id="reeks-list">
+          {% for r in known_reeks %}<option value="{{ r }}">{% endfor %}
+        </datalist>
+        {% endif %}
       </label>
       {% if team %}
       <label id="season-label">

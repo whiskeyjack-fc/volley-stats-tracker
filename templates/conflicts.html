@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% from "_macros.html" import filter_select %}
-{% block title %}Wedstrijdconflicten — VolleyStats{% endblock %}
+{% block title %}{% if conflict_view == 'sporthal' %}Sporthalconflicten{% elif conflict_view == 'teamoverlap' %}Teamoverlap{% else %}Persoonlijke conflicten{% endif %} — VolleyStats{% endblock %}
 {% block content %}
 <h1>Wedstrijdconflicten</h1>
 
 {# ── Control bar ── #}
-<form method="get" action="{{ url_for('conflicts_page') }}" class="filter-bar">
+<form method="get" action="{{ url_for('conflicts_' ~ conflict_view) }}" class="filter-bar">
   {% call filter_select("season_id", "— Seizoen —") %}
     {% for s in seasons %}
     <option value="{{ s.id }}" {% if s.id == selected_season_id %}selected{% endif %}>{{ s.name }}</option>
@@ -27,6 +27,7 @@
   <form method="post" action="{{ url_for('conflicts_refresh') }}" style="margin:0">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
+    <input type="hidden" name="view" value="{{ conflict_view }}">
     <button type="submit" class="btn btn-sm btn-primary">↻ Data vernieuwen</button>
   </form>
   <button type="button" id="btn-print-export" class="btn btn-sm btn-outline">🖨 Afdrukken / PDF</button>
@@ -45,6 +46,7 @@
     <form method="post" action="{{ url_for('conflicts_upload_xml') }}" enctype="multipart/form-data" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
+      <input type="hidden" name="view" value="{{ conflict_view }}">
       <input type="file" name="xml_file" accept=".xml,text/xml,application/xml" required style="font-size:.85rem">
       <button type="submit" class="btn btn-sm btn-primary">Uploaden</button>
     </form>
@@ -67,12 +69,13 @@
 
 {# ── Section jump nav ── #}
 <nav class="conflict-jump-nav">
-  <a href="#section-sporthal" class="conflict-jump-link">Sporthalconflicten <span class="count-badge {% if sporthal_conflicts %}badge-red{% else %}badge-green{% endif %}">{{ sporthal_conflicts | length }}</span></a>
-  <a href="#section-teamoverlap" class="conflict-jump-link">Teamoverlap <span class="count-badge {% if team_overlaps %}badge-red{% else %}badge-green{% endif %}">{{ team_overlaps | length }}</span></a>
-  <a href="#section-persons" class="conflict-jump-link">Persoonlijke conflicten <span class="count-badge {% if person_conflicts %}badge-red{% else %}badge-green{% endif %}">{{ person_conflicts | length }}</span></a>
+  <a href="{{ url_for('conflicts_sporthal', season_id=selected_season_id) }}" class="conflict-jump-link {% if conflict_view == 'sporthal' %}conflict-jump-active{% endif %}">Sporthalconflicten <span class="count-badge {% if sporthal_conflicts %}badge-red{% else %}badge-green{% endif %}">{{ sporthal_conflicts | length }}</span></a>
+  <a href="{{ url_for('conflicts_teamoverlap', season_id=selected_season_id) }}" class="conflict-jump-link {% if conflict_view == 'teamoverlap' %}conflict-jump-active{% endif %}">Teamoverlap <span class="count-badge {% if team_overlaps %}badge-red{% else %}badge-green{% endif %}">{{ team_overlaps | length }}</span></a>
+  <a href="{{ url_for('conflicts_persons', season_id=selected_season_id) }}" class="conflict-jump-link {% if conflict_view == 'persons' %}conflict-jump-active{% endif %}">Persoonlijke conflicten <span class="count-badge {% if person_conflicts %}badge-red{% else %}badge-green{% endif %}">{{ person_conflicts | length }}</span></a>
 </nav>
 
 {# ── Sporthal conflicts ── #}
+{% if conflict_view == 'sporthal' %}
 <section id="section-sporthal" style="margin-bottom:2rem">
   <h2 class="chart-title" style="display:flex;align-items:center;gap:.5rem">
     Sporthalconflicten
@@ -130,8 +133,10 @@
   <p class="empty-state">Geen sporthalconflicten gevonden.</p>
   {% endif %}
 </section>
+{% endif %}{# end sporthal view #}
 
 {# ── Team overlaps ── #}
+{% if conflict_view == 'teamoverlap' %}
 <section id="section-teamoverlap" style="margin-bottom:2rem">
   <h2 class="chart-title" style="display:flex;align-items:center;gap:.5rem">
     Teamoverlap
@@ -144,7 +149,7 @@
   </p>
 
   {% if available_teams %}
-  <form method="get" action="{{ url_for('conflicts_page') }}" class="card team-picker-form">
+  <form method="get" action="{{ url_for('conflicts_teamoverlap') }}" class="card team-picker-form">
     <input type="hidden" name="season_id" value="{{ selected_season_id or '' }}">
     <div class="team-picker-label">Teams vergelijken:</div>
     <div class="team-picker-checks">
@@ -159,7 +164,7 @@
     <div class="team-picker-actions">
       <button type="submit" class="btn btn-sm btn-primary">Toepassen</button>
       {% if compare_teams %}
-      <a href="{{ url_for('conflicts_page', season_id=selected_season_id) }}" class="btn btn-sm btn-outline">Wissen</a>
+      <a href="{{ url_for('conflicts_teamoverlap', season_id=selected_season_id) }}" class="btn btn-sm btn-outline">Wissen</a>
       {% endif %}
     </div>
   </form>
@@ -224,8 +229,10 @@
   <p class="empty-state">Geen teamoverlap gevonden.</p>
   {% endif %}
 </section>
+{% endif %}{# end teamoverlap view #}
 
 {# ── Person conflicts ── #}
+{% if conflict_view == 'persons' %}
 <section id="section-persons">
   <h2 class="chart-title" style="display:flex;align-items:center;gap:.5rem">
     Persoonlijke conflicten
@@ -296,6 +303,7 @@
   <p class="empty-state">Geen conflicten gevonden.</p>
   {% endif %}
 </section>
+{% endif %}{# end persons view #}
 
 {% endif %}{# end no_cache #}
 
@@ -320,7 +328,8 @@
   text-decoration: none;
   transition: background .15s, border-color .15s;
 }
-.conflict-jump-link:hover {
+.conflict-jump-link:hover,
+.conflict-jump-link.conflict-jump-active {
   background: var(--surface2);
   border-color: var(--accent);
   color: var(--accent);

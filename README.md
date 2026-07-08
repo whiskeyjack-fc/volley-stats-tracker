@@ -14,6 +14,7 @@ A web-based volleyball statistics tracking application built with Flask and SQLi
 - **Multi-trainer support** — each trainer has their own account; data is fully isolated per user
 - **Role-based access** — three roles: `trainer` (own data only), `coordinator` (read all data), `admin` (read all data + manage user roles)
 - **Admin panel** — admins can view all registered users and assign or change roles at `/admin/users`
+- **Duplicate shirt-number report** — flags 'wedstrijd' kit items where the same team + number is assigned to 2+ different players, with CSV export, at `/reports/duplicate-numbers`
 
 ## Project Structure
 
@@ -38,7 +39,8 @@ PlayerStats/
 │   ├── season_report.html
 │   ├── login.html       # Login page
 │   ├── register.html    # Registration page
-│   └── admin_users.html # Admin panel — user list and role management
+│   ├── admin_users.html # Admin panel — user list and role management
+│   └── report_duplicate_numbers.html  # Duplicate shirt-number report
 ├── static/
 │   ├── css/style.css
 │   ├── js/tracker.js    # Tracking grid interactions (click, long-press, set bar)

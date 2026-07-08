@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% from "_macros.html" import filter_select %}
+{% from "_macros.html" import filter_multiselect %}
 {% block title %}Materiaallijst — VolleyStats{% endblock %}
 {% block content %}
 {% set KIT_STATUS_NL = {'in stock': 'Op voorraad', 'assigned': 'Toegewezen', 'lost': 'Verloren', 'retired': 'Afgeschreven'} %}
+{% set KIT_STATE_NL = {'nieuw': 'Nieuw', 'misdruk': 'Misdruk', 'gebruikt': 'Gebruikt', 'beschadigd': 'Beschadigd'} %}
 
 <div class="sticky-page-header">
 <div class="page-header">
@@ -23,39 +24,84 @@
          placeholder="Naam / nummer zoeken…"
          class="filter-search" />
 
-  {% call filter_select('status', 'Alle statussen') %}
+  {% call filter_multiselect('status', 'Status', f_status|length) %}
     {% for s in KIT_STATUSES %}
-    <option value="{{ s }}" {% if f_status == s %}selected{% endif %}>{{ KIT_STATUS_NL.get(s, s) }}</option>
+    <label class="ms-option">
+      <input type="checkbox" name="status" value="{{ s }}" {% if (not f_status) or (s in f_status) %}checked{% endif %}>
+      {{ KIT_STATUS_NL.get(s, s) }}
+    </label>
     {% endfor %}
   {% endcall %}
 
-  {% call filter_select('model', 'Alle modellen') %}
+  {% call filter_multiselect('model', 'Model', f_model|length) %}
     {% for m in KIT_MODELS %}
-    <option value="{{ m }}" {% if f_model == m %}selected{% endif %}>{{ m }}</option>
+    <label class="ms-option">
+      <input type="checkbox" name="model" value="{{ m }}" {% if (not f_model) or (m in f_model) %}checked{% endif %}>
+      {{ m }}
+    </label>
     {% endfor %}
   {% endcall %}
 
-  {% call filter_select('type', 'Alle types') %}
+  {% call filter_multiselect('type', 'Type', f_type|length) %}
     {% for t in KIT_TYPES %}
-    <option value="{{ t }}" {% if f_type == t %}selected{% endif %}>{{ t }}</option>
+    <label class="ms-option">
+      <input type="checkbox" name="type" value="{{ t }}" {% if (not f_type) or (t in f_type) %}checked{% endif %}>
+      {{ t }}
+    </label>
     {% endfor %}
   {% endcall %}
 
-  {% call filter_select('team_id', 'Alle teams') %}
+  {% call filter_multiselect('size', 'Maat', f_size|length) %}
+    {% for s in KIT_SIZES %}
+    <label class="ms-option">
+      <input type="checkbox" name="size" value="{{ s }}" {% if (not f_size) or (s in f_size) %}checked{% endif %}>
+      {{ s }}
+    </label>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_multiselect('number', 'Nr.', f_number|length) %}
+    {% for n in all_numbers %}
+    <label class="ms-option">
+      <input type="checkbox" name="number" value="{{ n }}" {% if (not f_number) or (n|string in f_number) %}checked{% endif %}>
+      {{ n }}
+    </label>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_multiselect('team_id', 'Team', f_team_id|length) %}
     {% for t in all_teams %}
-    <option value="{{ t.id }}" {% if f_team_id == t.id|string %}selected{% endif %}>{{ t.short_name or t.name }}</option>
+    <label class="ms-option">
+      <input type="checkbox" name="team_id" value="{{ t.id }}" {% if (not f_team_id) or (t.id|string in f_team_id) %}checked{% endif %}>
+      {{ t.short_name or t.name }}
+    </label>
     {% endfor %}
   {% endcall %}
 
-  {% call filter_select('profile_id', 'Alle leden') %}
+  {% call filter_multiselect('profile_id', 'Lid', f_profile|length) %}
     {% for p in all_profiles %}
-    <option value="{{ p.id }}" {% if f_profile == p.id|string %}selected{% endif %}>{{ p.first_name }} {{ p.last_name }}</option>
+    <label class="ms-option">
+      <input type="checkbox" name="profile_id" value="{{ p.id }}" {% if (not f_profile) or (p.id|string in f_profile) %}checked{% endif %}>
+      {{ p.first_name }} {{ p.last_name }}
+    </label>
     {% endfor %}
   {% endcall %}
 
-  {% call filter_select('store', 'Alle bakken') %}
+  {% call filter_multiselect('state', 'Staat', f_state|length) %}
+    {% for s in KIT_STATES %}
+    <label class="ms-option">
+      <input type="checkbox" name="state" value="{{ s }}" {% if (not f_state) or (s in f_state) %}checked{% endif %}>
+      {{ KIT_STATE_NL.get(s, s) }}
+    </label>
+    {% endfor %}
+  {% endcall %}
+
+  {% call filter_multiselect('store', 'Bak', f_store|length) %}
     {% for s in all_stores %}
-    <option value="{{ s }}" {% if f_store == s %}selected{% endif %}>{{ s }}</option>
+    <label class="ms-option">
+      <input type="checkbox" name="store" value="{{ s }}" {% if (not f_store) or (s in f_store) %}checked{% endif %}>
+      {{ s }}
+    </label>
     {% endfor %}
   {% endcall %}
 
@@ -64,6 +110,7 @@
          class="filter-search" style="max-width:14rem" />
 
   <button type="submit" class="btn btn-sm">Filteren</button>
+  <a href="{{ url_for('kit_list') }}" class="btn btn-sm btn-outline">Alles tonen</a>
 </form>
 </div>{# /.sticky-page-header #}
 
@@ -96,13 +143,12 @@
         <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Team</th>
         <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Toegevoegd</th>
         <th style="text-align:left;padding:.55rem .5rem;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.72rem">Opmerking</th>
-        <th style="padding:.55rem .5rem"></th>
       </tr>
     </thead>
     <tbody>
       {% for item in items %}
       <tr style="cursor:pointer;border-bottom:1px solid var(--border)" onclick="if(!event.target.closest('.editable-cell'))location.href='{{ url_for('kit_detail', item_id=item.id) }}'">
-        <td style="padding:.6rem .5rem">
+        <td style="padding:.6rem .5rem" onclick="event.stopPropagation()">
           <input type="checkbox" name="item_ids" value="{{ item.id }}" form="bulk-form">
         </td>
         <td style="padding:.6rem .5rem">{{ item.model }}</td>
@@ -155,13 +201,10 @@
           <span>—</span>
           {% endif %}
         </td>
-        <td style="padding:.6rem .5rem">
-          <a href="{{ url_for('kit_detail', item_id=item.id) }}" class="btn btn-sm btn-outline">Bekijken</a>
-        </td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="14" style="padding:1.5rem .5rem;text-align:center;color:var(--muted)">Geen materiaalinventaris gevonden.</td>
+        <td colspan="13" style="padding:1.5rem .5rem;text-align:center;color:var(--muted)">Geen materiaalinventaris gevonden.</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -280,4 +323,5 @@ select.ec-input { cursor:pointer; }
   }, true);
 }());
 </script>
+<script src="{{ url_for('static', filename='js/filter-multiselect.js') }}"></script>
 {% endblock %}

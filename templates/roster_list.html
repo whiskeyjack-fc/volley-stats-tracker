@@ -37,6 +37,7 @@
   {% endcall %}
 
   {% call filter_select('team', 'Alle teams') %}
+    <option value="none" {% if team_filter == 'none' %}selected{% endif %}>— Geen team</option>
     {% for t in teams %}
     <option value="{{ t.id }}" {% if team_filter == t.id %}selected{% endif %}>{{ t.short_name or t.name }}</option>
     {% endfor %}
@@ -142,7 +143,7 @@
           {% if pts %}
             {% for t in pts %}
             <span style="display:inline-block;vertical-align:top;margin:1px">
-              <span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:.1em .45em;font-size:0.72rem">{{ t.short_name or t.name }}</span>
+              <a href="{{ url_for('team_list') }}?team_id={{ t.id }}{% if t.season_id %}&amp;season={{ t.season_id }}{% endif %}" onclick="event.stopPropagation()" style="display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:.1em .45em;font-size:0.72rem;color:inherit;text-decoration:none">{{ t.short_name or t.name }}</a>
               {% if t.roles %}
                 {% for role in t.roles.split(',') %}
                 <span class="rl-pill rl-{{ role.strip() }}">{{ ROLE_NL.get(role.strip(), role.strip().replace('_', ' ')|title) }}</span>
