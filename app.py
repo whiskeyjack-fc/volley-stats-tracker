@@ -4032,6 +4032,7 @@ def _render_conflicts(conflict_view):
     no_cache = all_matches is None
 
     sporthal_conflicts = []
+    sporthal_warnings  = []
     team_overlaps      = []
     person_conflicts   = {}
     available_teams    = []
@@ -4039,7 +4040,9 @@ def _render_conflicts(conflict_view):
     compare_teams      = []
     if not no_cache and selected_season_id:
         future = _filter_future_matches(all_matches)
-        sporthal_conflicts = _detect_sporthal_conflicts(future)
+        sporthal_groups    = _detect_sporthal_conflicts(future)
+        sporthal_conflicts = [g for g in sporthal_groups if g['severity'] == 'conflict']
+        sporthal_warnings  = [g for g in sporthal_groups if g['severity'] == 'warning']
 
         # All club teams that have a federation reeks code configured.
         # Season-scoping is implicit: only reeks codes that appear in the current XML
@@ -4061,35 +4064,32 @@ def _render_conflicts(conflict_view):
             season_all    = list(future)
             season_future = list(future)
 
-        available_teams = sorted(set(m['ploeg'] for m in season_all if m.get('ploeg')))
+        # Team identity for the picker/overlap check must be the federation_reeks code,
+        # not the XML 'ploeg' string: several club teams (e.g. a shared "B" squad) can
+        # play under the exact same 'ploeg' name across different age-category reeks,
+        # so filtering by 'ploeg' would pull in matches from teams that weren't picked.
+        season_reeks_present = {m['reeks'] for m in season_all if m.get('reeks')}
+        available_teams = sorted(season_reeks & season_reeks_present)
         raw_compare = request.args.getlist('compare_teams')
         compare_teams = [t for t in raw_compare if t in available_teams]
         if len(compare_teams) >= 2:
-            overlap_matches = [m for m in season_future if m.get('ploeg') in compare_teams]
+            overlap_matches = [m for m in season_future if m.get('reeks') in compare_teams]
             team_overlaps = _detect_team_overlaps(overlap_matches)
         else:
             team_overlaps = []
 
-        # Build display labels: match on (normalized ploeg name, reeks) so two teams
-        # sharing the same federation_reeks (combined competition) get distinct labels.
-        # Falls back to stripping the club prefix from the XML ploeg string.
-        import re as _re
-        name_reeks_to_label = {
-            (_normalize_ploeg(r['name']), r['federation_reeks']): r['short_name']
-            for r in season_reeks_rows
-            if r['federation_reeks']
-        }
-        def _strip_prefix(ploeg):
-            s = _re.sub(r'(?i)^vc\s+belvoc\s+belse[l]e\s*', '', ploeg).strip()
-            return s if s else ploeg
-        ploeg_reeks = {}
-        for m in season_all:
-            p = m.get('ploeg')
-            if p and p not in ploeg_reeks:
-                ploeg_reeks[p] = m.get('reeks', '')
+        # federation_reeks uniquely identifies a set of matches, but a combined-age
+        # competition can have 2+ club_teams rows sharing the same reeks (e.g. JU17A
+        # and JU19 fielding the exact same team/matches) — join their short_names so
+        # the picker shows one checkbox labelled "JU17A / JU19" instead of silently
+        # dropping one of them.
+        reeks_short_names = {}
+        for r in season_reeks_rows:
+            if r['federation_reeks']:
+                reeks_short_names.setdefault(r['federation_reeks'], []).append(r['short_name'])
         team_labels = {
-            p: (name_reeks_to_label.get((_normalize_ploeg(p), reeks)) or _strip_prefix(p))
-            for p, reeks in ploeg_reeks.items()
+            reeks: " / ".join(dict.fromkeys(names))
+            for reeks, names in reeks_short_names.items()
         }
 
         merged = _merge_matches_with_people(future, db, selected_season_id)
@@ -4099,6 +4099,7 @@ def _render_conflicts(conflict_view):
         "conflicts.html",
         conflict_view=conflict_view,
         sporthal_conflicts=sporthal_conflicts,
+        sporthal_warnings=sporthal_warnings,
         team_overlaps=team_overlaps,
         available_teams=available_teams,
         team_labels=team_labels,
@@ -4207,6 +4208,89 @@ def _overlap_duration(s1, e1, s2, e2):
     return None
 
 
+_PROMO_REEKS_RE = re.compile(r'^(OHP|ODP|OBP)', re.IGNORECASE)
+
+
+def _match_segments(m):
+    """Return a list of (seg_type, start_dt, end_dt) tuples for a match dict.
+
+    Mirrors the timing model in buildRow() (static/js inline in conflicts.html):
+      - Non-promo: warmup (kickoff-60 -> kickoff), game (kickoff -> kickoff+120)
+      - Promo (OHP/ODP/OBP reeks): warmup (kickoff-150 -> kickoff-90),
+        reserve (kickoff-90 -> kickoff-30), warmup (kickoff-30 -> kickoff),
+        game (kickoff -> kickoff+120)
+    Returns [] if the match's datum/aanvangsuur can't be parsed.
+    """
+    try:
+        kickoff = datetime.strptime(f"{m['datum']} {m['aanvangsuur']}", "%d/%m/%Y %H:%M")
+    except Exception:
+        return []
+    is_promo = bool(_PROMO_REEKS_RE.match(m.get('reeks', '') or ''))
+    if is_promo:
+        return [
+            ('warmup',  kickoff - timedelta(minutes=150), kickoff - timedelta(minutes=90)),
+            ('reserve', kickoff - timedelta(minutes=90),  kickoff - timedelta(minutes=30)),
+            ('warmup',  kickoff - timedelta(minutes=30),  kickoff),
+            ('game',    kickoff,                          kickoff + timedelta(minutes=120)),
+        ]
+    return [
+        ('warmup', kickoff - timedelta(minutes=60), kickoff),
+        ('game',   kickoff,                          kickoff + timedelta(minutes=120)),
+    ]
+
+
+_ACTUAL_PLAY_SEG_TYPES = ('game', 'reserve')
+
+
+def _day_concurrency_groups(day_ms):
+    """Time-sweep over a single day's matches (with '_segs' already attached) to find
+    true concurrency at the sporthal — how many matches physically occupy the hall at
+    the same instant. BELVOC_SPORTHAL has two courts, so what matters is how many
+    matches are actually PLAYING ('game' or 'reserve' segment) at the same instant, not
+    merely present (a team quietly warming up alongside an ongoing game/another warm-up
+    doesn't contend for a court):
+      - 'conflict' (red): some instant has 3+ matches with an actual-play segment
+        active simultaneously — a genuine over-booked court (exceeds both courts).
+      - 'warning' (yellow): some instant has exactly 2 matches actively playing AND a
+        3rd (or more) match concurrently active there too (any segment type) — both
+        courts are already in real use and another team needs the hall at the same
+        time, cutting it close even though no court is technically double-booked.
+      - Neither (dropped entirely): every instant has at most 1 match actually playing,
+        however many others are merely warming up alongside it — with a free court
+        available, this is normal and not flagged.
+
+    Returns (involved_indices, severity) — involved_indices is the set of day_ms
+    indices that participate in some instant meeting the 'conflict' or 'warning'
+    condition above; severity is 'conflict', 'warning', or None if neither condition is
+    ever met (in which case involved_indices is empty and the day is not shown at all).
+    """
+    boundaries = sorted({t for m in day_ms for _, s, e in m['_segs'] for t in (s, e)})
+
+    involved = set()
+    severity = None
+    for i in range(len(boundaries) - 1):
+        t0, t1 = boundaries[i], boundaries[i + 1]
+        if t0 >= t1:
+            continue
+        mid = t0 + (t1 - t0) / 2
+        active = []
+        for idx, m in enumerate(day_ms):
+            for seg_type, s, e in m['_segs']:
+                if s <= mid < e:
+                    active.append((idx, seg_type))
+                    break
+        actual_play = sum(1 for _, t in active if t in _ACTUAL_PLAY_SEG_TYPES)
+        if actual_play >= 3:
+            involved.update(idx for idx, _ in active)
+            severity = 'conflict'
+        elif actual_play >= 2 and len(active) >= 3:
+            involved.update(idx for idx, _ in active)
+            if severity != 'conflict':
+                severity = 'warning'
+
+    return involved, severity
+
+
 def _fetch_federation_xml():
     """Fetch the Volleyadmin2 XML for BELVOC_STAMNUMMER; returns (bytes, None) or (None, str_error)."""
     url = f"http://www.volleyadmin2.be/services/wedstrijden_xml.php?stamnummer={BELVOC_STAMNUMMER}"
@@ -4310,11 +4394,18 @@ def _known_reeks_from_cache(db):
 
 
 def _detect_sporthal_conflicts(matches):
-    """Return list of conflict groups (each group = list of match dicts with overlap_duration).
-    A group contains 3+ overlapping matches at BELVOC_SPORTHAL on the same day."""
+    """Return list of {'matches': [...], 'severity': 'conflict'|'warning'} dicts.
+
+    BELVOC_SPORTHAL has two courts. See _day_concurrency_groups() for the exact
+    severity rule: 'conflict' (red) when 3+ matches are actually playing at the same
+    instant, 'warning' (yellow) when 2 matches are playing and a 3rd is concurrently
+    active (any segment type), and no flag at all when at most 1 match is playing
+    however many others are merely warming up alongside it. Each match dict gets an
+    'overlap_duration' field (best pairwise whole-block overlap string among the other
+    matches in its group)."""
     sporthal_matches = [m for m in matches if m.get('sporthal') == BELVOC_SPORTHAL]
 
-    # Attach datetime objects temporarily
+    # Attach datetime objects + segment breakdown temporarily
     for m in sporthal_matches:
         try:
             m['_s'] = datetime.strptime(m['start'], "%d/%m/%Y %H:%M")
@@ -4322,8 +4413,9 @@ def _detect_sporthal_conflicts(matches):
         except Exception:
             m['_s'] = None
             m['_e'] = None
+        m['_segs'] = _match_segments(m)
 
-    sporthal_matches = [m for m in sporthal_matches if m['_s'] and m['_e']]
+    sporthal_matches = [m for m in sporthal_matches if m['_s'] and m['_e'] and m['_segs']]
 
     per_day = {}
     for m in sporthal_matches:
@@ -4332,52 +4424,35 @@ def _detect_sporthal_conflicts(matches):
     groups = []
     for _, day_ms in per_day.items():
         day_ms = sorted(day_ms, key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))
-        n = len(day_ms)
-        if n < 3:
+        if len(day_ms) < 3:
             continue
-        adj = [set() for _ in range(n)]
-        for i in range(n):
-            for j in range(i + 1, n):
-                a, b = day_ms[i], day_ms[j]
-                if a['_s'] <= b['_e'] and a['_e'] >= b['_s']:
-                    adj[i].add(j)
-                    adj[j].add(i)
-        visited = [False] * n
-        for i in range(n):
-            if visited[i]:
-                continue
-            stack, comp = [i], []
-            visited[i] = True
-            while stack:
-                cur = stack.pop()
-                comp.append(cur)
-                for nb in adj[cur]:
-                    if not visited[nb]:
-                        visited[nb] = True
-                        stack.append(nb)
-            if len(comp) <= 2:
-                continue
-            group = sorted([day_ms[idx] for idx in comp],
-                           key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))
-            for m in group:
-                best, best_min = None, -1
-                for other in group:
-                    if other is m:
-                        continue
-                    od = _overlap_duration(other['_s'], other['_e'], m['_s'], m['_e'])
-                    if od:
-                        mins = int(od.split(' ', 1)[0])
-                        if mins > best_min:
-                            best_min, best = mins, od
-                m['overlap_duration'] = best
-            groups.append(group)
 
-    groups.sort(key=lambda g: g[0]['_s'])
+        involved, severity = _day_concurrency_groups(day_ms)
+        if not involved:
+            continue
+
+        group = sorted([day_ms[idx] for idx in involved],
+                       key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))
+        for m in group:
+            best, best_min = None, -1
+            for other in group:
+                if other is m:
+                    continue
+                od = _overlap_duration(other['_s'], other['_e'], m['_s'], m['_e'])
+                if od:
+                    mins = int(od.split(' ', 1)[0])
+                    if mins > best_min:
+                        best_min, best = mins, od
+            m['overlap_duration'] = best
+        groups.append({'matches': group, 'severity': severity})
+
+    groups.sort(key=lambda g: g['matches'][0]['_s'])
 
     # Clean up temporary fields
     for m in sporthal_matches:
         m.pop('_s', None)
         m.pop('_e', None)
+        m.pop('_segs', None)
 
     return groups
 
@@ -4433,8 +4508,10 @@ def _detect_team_overlaps(matches):
                         stack.append(nb)
             if len(comp) < 2:
                 continue
-            # Require matches from at least 2 different teams
-            if len(set(day_ms[idx]['ploeg'] for idx in comp)) < 2:
+            # Require matches from at least 2 different teams. 'reeks' (not 'ploeg') is the
+            # reliable per-team identity here: multiple club teams can share the same XML
+            # 'ploeg' string (e.g. a shared "B" squad name across several age categories).
+            if len(set(day_ms[idx].get('reeks') for idx in comp)) < 2:
                 continue
             group = sorted([day_ms[idx] for idx in comp],
                            key=lambda x: (x['_s'], x.get('reeks', ''), x.get('bezoekersploeg', '')))

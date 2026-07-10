@@ -89,12 +89,12 @@
     <div class="card conflict-card">
       <div class="conflict-date-header">
         <span class="conflict-date-icon">📅</span>
-        {{ group[0].datum }}
-        <span class="conflict-group-count">{{ group | length }} wedstrijd{{ 'en' if group | length != 1 else '' }}</span>
+        {{ group.matches[0].datum }}
+        <span class="conflict-group-count">{{ group.matches | length }} wedstrijd{{ 'en' if group.matches | length != 1 else '' }}</span>
       </div>
       {% set ns = namespace(tl=[]) %}
-      {% for m in group %}{% set ns.tl = ns.tl + [{'aanvangsuur': m.aanvangsuur, 'reeks': m.reeks, 'ploeg': (m.ploeg or m.thuisploeg)}] %}{% endfor %}
-      <div class="conflict-timeline" data-matches='{{ ns.tl | tojson }}'></div>
+      {% for m in group.matches %}{% set ns.tl = ns.tl + [{'aanvangsuur': m.aanvangsuur, 'reeks': m.reeks, 'ploeg': (m.ploeg or m.thuisploeg)}] %}{% endfor %}
+      <div class="conflict-timeline" data-min-overlap="3" data-matches='{{ ns.tl | tojson }}'></div>
       <div class="conflict-table-toggle">
         <button type="button" class="btn btn-sm btn-outline conflict-toggle-btn" aria-expanded="false">Tabel tonen</button>
       </div>
@@ -111,7 +111,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for m in group %}
+            {% for m in group.matches %}
             {% set overlap_pct = m.overlap_duration.split('(')[1].split('%')[0] | int if m.overlap_duration and '(' in m.overlap_duration else 0 %}
             <tr>
               <td><span class="reeks-badge">{{ m.reeks }}</span></td>
@@ -131,6 +131,62 @@
     {% endfor %}
   {% else %}
   <p class="empty-state">Geen sporthalconflicten gevonden.</p>
+  {% endif %}
+
+  <h2 class="chart-title" style="display:flex;align-items:center;gap:.5rem;margin-top:2rem">
+    Waarschuwingen
+    <span class="count-badge {% if sporthal_warnings %}badge-yellow{% else %}badge-green{% endif %}">
+      {{ sporthal_warnings | length }}
+    </span>
+  </h2>
+
+  {% if sporthal_warnings %}
+    {% for group in sporthal_warnings %}
+    <div class="card conflict-card conflict-card-warning">
+      <div class="conflict-date-header">
+        <span class="conflict-date-icon">⚠️</span>
+        {{ group.matches[0].datum }}
+        <span class="conflict-group-count">{{ group.matches | length }} wedstrijd{{ 'en' if group.matches | length != 1 else '' }}</span>
+      </div>
+      {% set ns = namespace(tl=[]) %}
+      {% for m in group.matches %}{% set ns.tl = ns.tl + [{'aanvangsuur': m.aanvangsuur, 'reeks': m.reeks, 'ploeg': (m.ploeg or m.thuisploeg)}] %}{% endfor %}
+      <div class="conflict-timeline" data-min-overlap="3" data-matches='{{ ns.tl | tojson }}'></div>
+      <div class="conflict-table-toggle">
+        <button type="button" class="btn btn-sm btn-outline conflict-toggle-btn" aria-expanded="false">Tabel tonen</button>
+      </div>
+      <div class="conflict-table-wrap" hidden>
+        <table class="table conflict-table">
+          <thead>
+            <tr>
+              <th>Reeks</th>
+              <th>Thuisploeg</th>
+              <th>Bezoekersploeg</th>
+              <th class="col-time">Aanvang</th>
+              <th class="col-time">Einde</th>
+              <th class="col-overlap">Overlap</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in group.matches %}
+            {% set overlap_pct = m.overlap_duration.split('(')[1].split('%')[0] | int if m.overlap_duration and '(' in m.overlap_duration else 0 %}
+            <tr>
+              <td><span class="reeks-badge">{{ m.reeks }}</span></td>
+              <td>{{ m.thuisploeg }}</td>
+              <td>{{ m.bezoekersploeg }}</td>
+              <td class="col-time">{{ m.aanvangsuur }}</td>
+              <td class="col-time">{{ m.einde.split(' ')[1] if ' ' in m.einde else m.einde }}</td>
+              <td class="col-overlap {% if overlap_pct >= 80 %}overlap-critical{% elif overlap_pct >= 50 %}overlap-high{% else %}overlap-low{% endif %}">
+                {{ m.overlap_duration or '—' }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="empty-state">Geen waarschuwingen gevonden.</p>
   {% endif %}
 </section>
 {% endif %}{# end sporthal view #}
@@ -354,6 +410,7 @@
 }
 .badge-red   { background: var(--red);   color: #fff; }
 .badge-green { background: var(--green); color: #fff; }
+.badge-yellow { background: var(--yellow); color: #0f1117; }
 .flash { padding: .6rem 1rem; border-radius: var(--radius); margin-bottom: .75rem; font-size: 0.9rem; }
 .flash-error { background: color-mix(in srgb, var(--red) 15%, var(--surface)); border: 1px solid var(--red); color: var(--fg); }
 .flash-success { background: color-mix(in srgb, var(--green) 15%, var(--surface)); border: 1px solid var(--green); color: var(--fg); }
@@ -364,6 +421,9 @@
   margin-bottom: 1rem;
   padding: 0;
   overflow: hidden;
+}
+.conflict-card-warning {
+  border-left: 3px solid var(--yellow);
 }
 .conflict-date-header {
   display: flex;
@@ -601,26 +661,27 @@
     };
   }
 
-  /* ── Merge pairwise overlap intervals into non-overlapping bands ────────── */
-  function mergeOverlaps(rows) {
-    var raw = [];
-    for (var i = 0; i < rows.length; i++) {
-      for (var j = i + 1; j < rows.length; j++) {
-        var os = Math.max(rows[i].totalStart, rows[j].totalStart);
-        var oe = Math.min(rows[i].totalEnd,   rows[j].totalEnd);
-        if (os < oe) raw.push({ start: os, end: oe });
-      }
-    }
-    raw.sort(function (a, b) { return a.start - b.start; });
-    var merged = [];
-    raw.forEach(function (b) {
-      if (!merged.length || b.start > merged[merged.length - 1].end) {
-        merged.push({ start: b.start, end: b.end });
-      } else {
-        merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, b.end);
+  /* ── Sweep-line: bands where at least `minOverlap` rows are concurrently active ── */
+  function mergeOverlaps(rows, minOverlap) {
+    minOverlap = minOverlap || 2;
+    var delta = {};
+    rows.forEach(function (r) {
+      delta[r.totalStart] = (delta[r.totalStart] || 0) + 1;
+      delta[r.totalEnd]   = (delta[r.totalEnd]   || 0) - 1;
+    });
+    var times = Object.keys(delta).map(Number).sort(function (a, b) { return a - b; });
+    var bands = [];
+    var count = 0, bandStart = null;
+    times.forEach(function (t) {
+      count += delta[t];
+      if (count >= minOverlap && bandStart === null) {
+        bandStart = t;
+      } else if (count < minOverlap && bandStart !== null) {
+        bands.push({ start: bandStart, end: t });
+        bandStart = null;
       }
     });
-    return merged;
+    return bands;
   }
 
   function segFill(type) {
@@ -631,7 +692,7 @@
   function segTextColor(type) { return type === 'reserve' ? C.textDark : C.text; }
 
   /* ── SVG renderer ─────────────────────────────────────────────────────── */
-  function render(container, matches) {
+  function render(container, matches, minOverlap) {
     var rows = matches.map(buildRow);
     if (!rows.length) return;
 
@@ -652,7 +713,7 @@
     function xOf(m)   { return labelW + (m - tMin) / range * chartW; }
     function wOf(s,e) { return (e - s) / range * chartW; }
 
-    var bands = mergeOverlaps(rows);
+    var bands = mergeOverlaps(rows, minOverlap);
     var els = [];
 
     /* Chart background */
@@ -765,7 +826,8 @@
   /* ── Bootstrap ────────────────────────────────────────────────────────── */
   function initAll() {
     document.querySelectorAll('.conflict-timeline[data-matches]').forEach(function (el) {
-      try { render(el, JSON.parse(el.dataset.matches)); }
+      var minOverlap = parseInt(el.dataset.minOverlap, 10) || 2;
+      try { render(el, JSON.parse(el.dataset.matches), minOverlap); }
       catch (e) { console.error('Timeline render error:', e); }
     });
   }

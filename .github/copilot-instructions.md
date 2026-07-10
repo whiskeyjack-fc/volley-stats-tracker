@@ -26,6 +26,23 @@
 - Report pages group results into per-group `.card` sections (team/number/etc. as the heading) each containing a `.table`, following the card-per-group pattern in `conflicts.html`.
 - Nav: reports get their own `nav-group-label` ("Rapporten"), gated by the access rule matching their data source.
 
+## Sporthal Conflict Detection (`/conflicts/sporthal`)
+- Each match is modelled as timed segments — `warmup`/`game` (non-promo), or
+  `warmup`/`reserve`/`warmup`/`game` (promo reeksen matching `^(OHP|ODP|OBP)`). This model is
+  duplicated intentionally in two places and both must be kept in sync whenever the timing
+  offsets change: `_match_segments()` in `app.py` (detection) and `buildRow()` in
+  `conflicts.html` (timeline visualization).
+- Whole-block overlap tests (grouping candidate conflict days) must use strict `<`/`>` —
+  never `<=`/`>=`. Inclusive comparisons wrongly count boundary-touching (zero-duration)
+  matches as overlapping.
+- A candidate group (3+ matches with overlapping blocks at `BELVOC_SPORTHAL` on the same day)
+  is only a red **conflict** if some pair has an actual overlapping actual-play segment
+  (`game` or `reserve` on both sides). If all overlaps only touch a `warmup` segment, downgrade
+  the whole group to a yellow **warning** instead — see `_group_has_actual_play_overlap()`.
+- Conflicts and warnings render on the same `conflicts_sporthal` view (no separate nav tab):
+  warnings are a second sub-list below the red conflicts, reusing the same per-day
+  card/timeline/table markup with `.conflict-card-warning`/`.badge-yellow` styling.
+
 ## UI & Styling
 - Preserve the dark theme; do not introduce light-mode colors or `#fff` backgrounds.
 - Follow the existing typography scale: section headers uppercase via `.chart-title`, body text `0.9–1rem`, labels `0.72rem`.
