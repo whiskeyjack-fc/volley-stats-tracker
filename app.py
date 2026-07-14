@@ -3190,6 +3190,14 @@ def team_remove_trainer(team_id, user_id):
 def kit_list():
     require_kit_access()
     db  = get_db()
+
+    if request.args.get("reset"):
+        resp = redirect(url_for("kit_list"))
+        resp.delete_cookie("kit_filters")
+        return resp
+    if not request.query_string and request.cookies.get("kit_filters"):
+        return redirect(request.path + "?" + request.cookies.get("kit_filters"))
+
     q          = request.args.get("q", "").strip()
     f_status   = request.args.getlist("status")
     f_model    = request.args.getlist("model")
@@ -3206,11 +3214,11 @@ def kit_list():
     params = []
     if q:
         where += (
-            " AND (ki.name_printed LIKE ? OR ki.model LIKE ? OR ki.type LIKE ? OR ki.number LIKE ?"
+            " AND (ki.name_printed LIKE ? OR ki.model LIKE ? OR ki.type LIKE ? OR ki.number = ?"
             " OR (pp.first_name || ' ' || pp.last_name) LIKE ?)"
         )
         like = "%" + q + "%"
-        params += [like, like, like, like, like]
+        params += [like, like, like, q, like]
     if f_status:
         where += " AND ki.status IN (%s)" % ",".join("?" * len(f_status))
         params += f_status
@@ -3290,7 +3298,7 @@ def kit_list():
         "SELECT DISTINCT number FROM kit_items WHERE is_deleted=0 AND number IS NOT NULL ORDER BY number"
     ).fetchall()]
 
-    return render_template(
+    resp = make_response(render_template(
         "kit_list.html",
         items=items,
         all_teams=all_teams,
@@ -3313,7 +3321,13 @@ def kit_list():
         KIT_STATUSES=KIT_STATUSES,
         KIT_SIZES=KIT_SIZES,
         KIT_STATES=KIT_STATES,
-    )
+    ))
+    if request.query_string:
+        resp.set_cookie(
+            "kit_filters", request.query_string.decode("utf-8"),
+            max_age=60 * 60 * 24 * 180, samesite="Lax",
+        )
+    return resp
 
 
 @app.route("/kit/new", methods=["GET", "POST"])

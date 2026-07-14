@@ -53,6 +53,22 @@
   }
 
   function applyGroup(panel) {
+    // If a search term narrowed the list, options hidden by the search are
+    // no longer an intentional choice — uncheck them so Apply only keeps
+    // the values the user actually searched for/left checked. Without this,
+    // a group that started "fully checked" (no filter) stays fully checked
+    // after typing a search term (since hidden boxes are still checked),
+    // so Apply would submit no filter at all instead of the narrowed set.
+    const search = panel.querySelector('.ms-search');
+    if (search && search.value.trim()) {
+      panel.querySelectorAll('.ms-options .ms-option').forEach((label) => {
+        if (label.style.display === 'none') {
+          const box = label.querySelector('input[type=checkbox]');
+          if (box) box.checked = false;
+        }
+      });
+      syncSelectAll(panel);
+    }
     closePanel(panel);
     const form = panel.closest('form');
     if (form) form.requestSubmit ? form.requestSubmit() : form.submit();
@@ -114,6 +130,17 @@
 
       if (search) {
         search.addEventListener('input', function () { filterOptions(panel, search.value); });
+        search.addEventListener('keydown', function (e) {
+          // Enter inside the search box would otherwise submit the whole
+          // .filter-bar form directly (default browser behavior), bypassing
+          // applyGroup()'s "uncheck options hidden by the search" step —
+          // that made Enter look like it reset the filter instead of
+          // applying the narrowed search. Route it through Apply instead.
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            applyGroup(panel);
+          }
+        });
       }
 
       if (cancel) {
