@@ -2008,3 +2008,28 @@ body.modal-open { overflow: hidden; }
   .team-totals-bar { gap: 0.3rem 0.65rem; padding: 0.3rem 0.5rem; }
 }
 
+/* ── Position rankings (team_positions.html) ──────────────────────────── */
+.position-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+@media (max-width: 600px) {
+  .position-rank-grid { grid-template-columns: 1fr; }
+}
+.rank-row {
+  display: flex; justify-content: space-between; align-items: center; gap: .5rem;
+  padding: .4rem .1rem; border-bottom: 1px solid var(--border); font-size: 0.88rem;
+}
+.rank-row:last-child { border-bottom: none; }
+.rank-num { color: var(--muted); font-size: 0.78rem; width: 1.4rem; flex-shrink: 0; }
+.rank-score {
+  background: var(--surface2); border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 999px; padding: .1em .55em; font-size: 0.75rem; font-weight: 600;
+}
+.captain-drag-item {
+  cursor: grab; user-select: none;
+}
+.captain-drag-item.dragging { opacity: 0.4; }
+
+

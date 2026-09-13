@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Posities — {{ team.name }} — VolleyStats{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Posities &mdash; {{ team.short_name or team.name }}</h1>
+  {% if can_view_all() %}
+  <a href="{{ url_for('position_weights_settings') }}" class="btn btn-outline btn-sm">Positiewegingen bewerken</a>
+  {% endif %}
+</div>
+
+<div class="position-rank-grid">
+  {% for pos in POSITIONS %}
+  <div class="card">
+    <h3 style="margin-top:0">{{ POSITION_NL.get(pos, pos) }}</h3>
+    {% if rankings[pos] %}
+    {% for p in rankings[pos] %}
+    <div class="rank-row">
+      <span class="rank-num">{{ loop.index }}</span>
+      <span style="flex:1"><a href="{{ url_for('roster_detail', profile_id=p.profile_id) }}">{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}</a></span>
+      {% if p.score is not none %}
+      <span class="rank-score">{{ p.score }}</span>
+      {% else %}
+      <span style="color:var(--muted);font-size:0.75rem">&ndash;</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--muted);font-size:0.85rem">Geen spelers.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# ── Kapitein: manual drag order ─────────────────────────────────────── #}
+  <div class="card">
+    <h3 style="margin-top:0">Kapitein</h3>
+    <p style="color:var(--muted);font-size:0.78rem;margin-top:0">Sleep om de volgorde aan te passen.</p>
+    <form id="captain-order-form" method="POST" action="{{ url_for('team_captain_order', team_id=team.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div id="captain-drag-list">
+        {% for p in captain_list %}
+        <div class="rank-row captain-drag-item" draggable="true" data-profile-id="{{ p.profile_id }}">
+          <span class="rank-num">☰</span>
+          <span style="flex:1">{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}</span>
+          <input type="hidden" name="profile_id" value="{{ p.profile_id }}">
+        </div>
+        {% endfor %}
+      </div>
+      {% if not captain_list %}
+      <p style="color:var(--muted);font-size:0.85rem">Geen spelers.</p>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var list = document.getElementById('captain-drag-list');
+  var form = document.getElementById('captain-order-form');
+  if (!list || !form) return;
+  var dragged = null;
+
+  list.querySelectorAll('.captain-drag-item').forEach(function (item) {
+    item.addEventListener('dragstart', function () {
+      dragged = item;
+      item.classList.add('dragging');
+    });
+    item.addEventListener('dragend', function () {
+      item.classList.remove('dragging');
+      dragged = null;
+      form.submit();
+    });
+    item.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      if (!dragged || dragged === item) return;
+      var rect = item.getBoundingClientRect();
+      var before = (e.clientY - rect.top) < rect.height / 2;
+      list.insertBefore(dragged, before ? item : item.nextSibling);
+    });
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Positiewegingen — VolleyStats{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Positiewegingen</h1>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+<div class="card">
+  <p style="color:var(--muted);font-size:0.85rem;margin-top:0">
+    Bepaalt hoe zwaar elke vaardigheid meetelt voor de spelersranking per positie op de teampagina&#39;s.
+    Een gewicht van 0 sluit die vaardigheid volledig uit voor die positie. Gewichten hoeven niet op te tellen
+    tot een vast totaal &mdash; enkel de onderlinge verhouding per positie telt.
+  </p>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="table-scroll-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Vaardigheid</th>
+            {% for pos in POSITIONS %}
+            <th>{{ POSITION_NL.get(pos, pos) }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for cap in CAPABILITIES %}
+          <tr>
+            <td>{{ CAPABILITY_NL.get(cap, cap) }}</td>
+            {% for pos in POSITIONS %}
+            <td>
+              <input type="number" min="0" step="any" name="w_{{ pos }}_{{ cap }}"
+                     value="{{ weights.get((pos, cap), 0) }}"
+                     style="width:5rem;background:var(--surface2);border:1px solid var(--border);
+                            border-radius:var(--radius);color:var(--fg);padding:.3rem .4rem;font-size:0.88rem">
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:1rem">
+      <button type="submit" class="btn btn-primary btn-sm">Opslaan</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

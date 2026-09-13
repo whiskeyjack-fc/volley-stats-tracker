@@ -191,6 +191,70 @@
 </div>
 {% endif %}{# end not is_kit_manager() #}
 
+{# ── Capability scores ───────────────────────────────────────────────────── #}
+{% if not is_kit_manager() and not profile.is_staff %}
+<div class="card" style="margin-top:1rem">
+  <h2>Vaardigheden</h2>
+  <form method="POST" action="{{ url_for('roster_add_capabilities', profile_id=profile.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="table-scroll-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Vaardigheid</th>
+            <th>Score</th>
+            <th>Laatst bijgewerkt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cap in CAPABILITIES %}
+          {% set cur = capability_scores.get(cap) %}
+          <tr>
+            <td>{{ CAPABILITY_NL.get(cap, cap) }}</td>
+            <td>
+              {% if can_edit_capabilities %}
+              <select name="cap_{{ cap }}"
+                      style="background:var(--surface2);border:1px solid var(--border);
+                             border-radius:var(--radius);color:var(--fg);padding:.3rem .5rem;font-size:0.9rem">
+                <option value="">—</option>
+                {% for n in range(0, 6) %}
+                <option value="{{ n }}" {% if cur and cur.score == n %}selected{% endif %}>{{ n }} · {{ CAPABILITY_SCORE_NL[n] }}</option>
+                {% endfor %}
+              </select>
+              {% else %}
+              {% if cur %}{{ cur.score }} · {{ CAPABILITY_SCORE_NL[cur.score] }}{% else %}<span style="color:var(--muted)">nog niet gescoord</span>{% endif %}
+              {% endif %}
+            </td>
+            <td style="color:var(--muted);font-size:0.82rem">
+              {% if cur %}{{ cur.created_at | fmt_date }} · {{ cur.author_email or 'unknown' }}{% else %}—{% endif %}
+              {% if capability_history.get(cap) and capability_history[cap]|length > 1 %}
+              <details style="display:inline-block;margin-left:.4rem">
+                <summary style="cursor:pointer;color:var(--accent);display:inline">geschiedenis</summary>
+                <ul style="margin:.3rem 0 0;padding-left:1rem">
+                  {% for h in capability_history[cap] %}
+                  <li>{{ h.score }} · {{ h.created_at | fmt_date }} · {{ h.author_email or 'unknown' }}</li>
+                  {% endfor %}
+                </ul>
+              </details>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if can_edit_capabilities %}
+    <div style="margin-top:.75rem">
+      <button type="submit" class="btn btn-primary btn-sm">Vaardigheden opslaan</button>
+    </div>
+    {% endif %}
+    <p style="color:var(--muted);font-size:0.75rem;margin-top:.6rem">
+      Schaal: {% for n in range(0, 6) %}{{ n }}={{ CAPABILITY_SCORE_NL[n] }}{% if not loop.last %} · {% endif %}{% endfor %}
+    </p>
+  </form>
+</div>
+{% endif %}
+
 {# ── Kit subsection ───────────────────────────────────────────────────────── #}
 {% if can_manage_kit() or is_kit_manager() %}
 <div class="card" style="margin-top:1rem">

@@ -40,6 +40,7 @@
       edit_url=url_for('edit_team', team_id=t.id),
       delete_url=url_for('delete_team', team_id=t.id),
       show_actions=can_view_all(),
+      positions_url=url_for('team_positions', team_id=t.id),
       gap='.65rem',
       player_count=team_player_counts[t.id],
       short_name=t.season_short_name or t.short_name,

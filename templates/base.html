@@ -43,6 +43,7 @@
       <a href="{{ url_for('roster_list') }}">Leden</a>
       <a href="{{ url_for('team_list') }}">Teams</a>
       {% if can_view_all() %}<a href="{{ url_for('training_group_list') }}">Trainingsgroepen</a>{% endif %}
+      {% if can_view_all() %}<a href="{{ url_for('position_weights_settings') }}">Positiewegingen</a>{% endif %}
       <span class="nav-sep"></span>
       <span class="nav-group-label">Statistieken</span>
       <a href="{{ url_for('games_list') }}">Wedstrijden</a>
