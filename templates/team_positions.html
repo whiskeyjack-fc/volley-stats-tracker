@@ -30,36 +30,56 @@
   </div>
   {% endfor %}
 
-  {# ── Kapitein: manual drag order ─────────────────────────────────────── #}
+  {# ── Kapitein: manual drag order, capped to a top-5 shortlist ────────── #}
   <div class="card">
     <h3 style="margin-top:0">Kapitein</h3>
-    <p style="color:var(--muted);font-size:0.78rem;margin-top:0">Sleep om de volgorde aan te passen.</p>
+    <p style="color:var(--muted);font-size:0.78rem;margin-top:0">Sleep om de volgorde aan te passen. Maximaal 5 kandidaten &mdash; gebruik ✕ en de keuzelijst om te wisselen.</p>
     <form id="captain-order-form" method="POST" action="{{ url_for('team_captain_order', team_id=team.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div id="captain-drag-list">
-        {% for p in captain_list %}
+        {% for p in captain_shortlist %}
         <div class="rank-row captain-drag-item" draggable="true" data-profile-id="{{ p.profile_id }}">
           <span class="rank-num">☰</span>
-          <span style="flex:1">{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}</span>
+          <span class="captain-label" style="flex:1">{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}</span>
+          <button type="button" class="captain-remove-btn" title="Verwijderen">✕</button>
           <input type="hidden" name="profile_id" value="{{ p.profile_id }}">
         </div>
         {% endfor %}
       </div>
-      {% if not captain_list %}
+      {% if not captain_shortlist %}
       <p style="color:var(--muted);font-size:0.85rem">Geen spelers.</p>
       {% endif %}
+      <div id="captain-add-row" style="display:flex;gap:.4rem;margin-top:.6rem" {% if captain_shortlist|length >= 5 %}hidden{% endif %}>
+        <select id="captain-add-select"
+                style="flex:1;background:var(--surface2);border:1px solid var(--border);
+                       border-radius:var(--radius);color:var(--fg);padding:.3rem .5rem;font-size:0.85rem">
+          <option value="">Speler toevoegen…</option>
+          {% for p in captain_available %}
+          <option value="{{ p.profile_id }}" data-label="{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}">{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}</option>
+          {% endfor %}
+        </select>
+        <button type="button" id="captain-add-btn" class="btn btn-sm btn-outline">＋ Toevoegen</button>
+      </div>
     </form>
   </div>
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-  var list = document.getElementById('captain-drag-list');
-  var form = document.getElementById('captain-order-form');
+  var list      = document.getElementById('captain-drag-list');
+  var form      = document.getElementById('captain-order-form');
+  var addRow    = document.getElementById('captain-add-row');
+  var addSelect = document.getElementById('captain-add-select');
+  var addBtn    = document.getElementById('captain-add-btn');
   if (!list || !form) return;
   var dragged = null;
 
-  list.querySelectorAll('.captain-drag-item').forEach(function (item) {
+  function updateAddVisibility() {
+    var count = list.querySelectorAll('.captain-drag-item').length;
+    addRow.hidden = count >= 5;
+  }
+
+  function wireRow(item) {
     item.addEventListener('dragstart', function () {
       dragged = item;
       item.classList.add('dragging');
@@ -76,7 +96,45 @@ document.addEventListener('DOMContentLoaded', function () {
       var before = (e.clientY - rect.top) < rect.height / 2;
       list.insertBefore(dragged, before ? item : item.nextSibling);
     });
+    item.querySelector('.captain-remove-btn').addEventListener('click', function () {
+      var profileId = item.dataset.profileId;
+      var label     = item.querySelector('.captain-label').textContent;
+      item.remove();
+      var opt = document.createElement('option');
+      opt.value = profileId;
+      opt.dataset.label = label;
+      opt.textContent = label;
+      addSelect.appendChild(opt);
+      updateAddVisibility();
+      form.submit();
+    });
+  }
+
+  list.querySelectorAll('.captain-drag-item').forEach(wireRow);
+
+  addBtn.addEventListener('click', function () {
+    var val = addSelect.value;
+    if (!val) return;
+    var opt   = addSelect.querySelector('option[value="' + val + '"]');
+    var label = opt.dataset.label || opt.textContent;
+
+    var row = document.createElement('div');
+    row.className = 'rank-row captain-drag-item';
+    row.draggable = true;
+    row.dataset.profileId = val;
+    row.innerHTML =
+      '<span class="rank-num">☰</span>' +
+      '<span class="captain-label" style="flex:1">' + label + '</span>' +
+      '<button type="button" class="captain-remove-btn" title="Verwijderen">✕</button>' +
+      '<input type="hidden" name="profile_id" value="' + val + '">';
+    wireRow(row);
+    list.appendChild(row);
+
+    opt.remove();
+    updateAddVisibility();
+    form.submit();
   });
 });
 </script>
 {% endblock %}
+

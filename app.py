@@ -2450,7 +2450,8 @@ def team_positions(team_id):
         ranked.sort(key=lambda p: (p["score"] is None, -(p["score"] or 0)))
         rankings[position] = ranked[:5]
 
-    # Kapitein: manual drag order, unordered players appended at the end
+    # Kapitein: manual drag order, capped to a top-5 shortlist; the rest are
+    # offered in an "add" dropdown so the coach can swap someone in/out
     captain_order_ids = [r["profile_id"] for r in db.execute(
         "SELECT profile_id FROM club_team_captain_order WHERE team_id=? ORDER BY sort_order",
         (team_id,)
@@ -2459,11 +2460,14 @@ def team_positions(team_id):
     captain_list = [roster_by_id[pid] for pid in captain_order_ids if pid in roster_by_id]
     ordered_ids = set(captain_order_ids)
     captain_list += [r for r in roster if r["profile_id"] not in ordered_ids]
+    captain_shortlist = captain_list[:5]
+    captain_available = sorted(captain_list[5:], key=lambda r: r["name"])
 
     return render_template("team_positions.html",
         team=team,
         rankings=rankings,
-        captain_list=captain_list,
+        captain_shortlist=captain_shortlist,
+        captain_available=captain_available,
         POSITIONS=POSITIONS,
         POSITION_NL=POSITION_NL,
     )
