@@ -2448,7 +2448,7 @@ def team_positions(team_id):
                 "score":      round(num / den, 2) if den > 0 else None,
             })
         ranked.sort(key=lambda p: (p["score"] is None, -(p["score"] or 0)))
-        rankings[position] = ranked
+        rankings[position] = ranked[:5]
 
     # Kapitein: manual drag order, unordered players appended at the end
     captain_order_ids = [r["profile_id"] for r in db.execute(
