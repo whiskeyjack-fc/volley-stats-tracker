@@ -14,8 +14,16 @@
 <div class="card">
   <p style="color:var(--muted);font-size:0.85rem;margin-top:0">
     Bepaalt hoe zwaar elke vaardigheid meetelt voor de spelersranking per positie op de teampagina&#39;s.
-    Een gewicht van 0 sluit die vaardigheid volledig uit voor die positie. Gewichten hoeven niet op te tellen
+    Gewichten liggen tussen 20 en 80 &mdash; net als de scoutingschaal bij Vaardigheden. Gebruik 0 als speciale
+    waarde om een vaardigheid volledig uit te sluiten voor die positie. Gewichten hoeven niet op te tellen
     tot een vast totaal &mdash; enkel de onderlinge verhouding per positie telt.
+  </p>
+  <p style="color:var(--muted);font-size:0.8rem;margin-top:0;line-height:1.5">
+    Het <strong>aandeel</strong> tussen haakjes bij elk gewicht toont hoeveel procent dat cijfer uitmaakt van het
+    totaal van de kolom (positie) &mdash; dus hoe zwaar die vaardigheid effectief doorweegt in de eindscore voor die
+    positie. Dit is een andere schaal dan de 20-80 scoutingschaal bij Vaardigheden: daar drukt het cijfer uit
+    <em>hoe goed</em> een speler een vaardigheid beheerst, hier drukt het aandeel uit <em>hoe belangrijk</em> die
+    vaardigheid is voor de positie. Een hoger aandeel = meer invloed op de ranking; 0% = telt niet mee.
   </p>
   <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -30,15 +38,24 @@
           </tr>
         </thead>
         <tbody>
-          {% for cap in CAPABILITIES %}
+          {% for cap in capabilities %}
+          {% if loop.first or cap.category != loop.previtem.category %}
+          <tr><td colspan="{{ POSITIONS|length + 1 }}" style="background:var(--surface2);font-weight:600;
+                  font-size:0.72rem;text-transform:uppercase;color:var(--muted)">
+            {{ 'Technisch' if cap.category == 'technical' else 'Persoonlijkheid' }}
+          </td></tr>
+          {% endif %}
           <tr>
-            <td>{{ CAPABILITY_NL.get(cap, cap) }}</td>
+            <td>{{ cap.label_nl }}</td>
             {% for pos in POSITIONS %}
-            <td>
-              <input type="number" min="0" step="any" name="w_{{ pos }}_{{ cap }}"
-                     value="{{ weights.get((pos, cap), 0) }}"
+            <td style="white-space:nowrap">
+              <input type="number" min="0" max="80" step="5" name="w_{{ pos }}_{{ cap.key }}"
+                     data-weight-input data-position="{{ pos }}"
+                     value="{{ weights.get((pos, cap.key), 0) | round | int }}"
                      style="width:5rem;background:var(--surface2);border:1px solid var(--border);
                             border-radius:var(--radius);color:var(--fg);padding:.3rem .4rem;font-size:0.88rem">
+              <span class="weight-share" data-share-for="w_{{ pos }}_{{ cap.key }}"
+                    style="display:inline-block;min-width:2.6rem;margin-left:.35rem;color:var(--muted);font-size:0.78rem">&ndash;</span>
             </td>
             {% endfor %}
           </tr>
@@ -51,4 +68,105 @@
     </div>
   </form>
 </div>
+
+<div class="card" style="margin-top:1rem">
+  <h2>Vaardigheden beheren</h2>
+  <p style="color:var(--muted);font-size:0.85rem;margin-top:0">
+    Voeg nieuwe technische of persoonlijkheidsvaardigheden toe, of pas de naam/categorie van een bestaande aan.
+    Deactiveren verwijdert geen bestaande scores of gewichten &mdash; het verbergt de vaardigheid enkel voor
+    nieuwe invoer op de spelerspagina en in de tabel hierboven.
+  </p>
+  <div class="table-scroll-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Naam</th><th>Categorie</th><th>Status</th><th>Acties</th></tr>
+      </thead>
+      <tbody>
+        {% for cap in all_capabilities %}
+        <tr>
+          <td>{{ cap.label_nl }}</td>
+          <td>{{ 'Technisch' if cap.category == 'technical' else 'Persoonlijkheid' }}</td>
+          <td>
+            {% if cap.is_active %}<span style="color:var(--green)">Actief</span>
+            {% else %}<span style="color:var(--muted)">Inactief</span>{% endif %}
+          </td>
+          <td style="white-space:nowrap">
+            <details style="display:inline-block">
+              <summary style="cursor:pointer;color:var(--accent);display:inline">bewerken</summary>
+              <form method="POST" action="{{ url_for('capability_edit', cap_id=cap.id) }}"
+                    style="margin-top:.5rem;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="text" name="label_nl" value="{{ cap.label_nl }}" required
+                       style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                              color:var(--fg);padding:.3rem .5rem;font-size:0.85rem">
+                <select name="category"
+                        style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                               color:var(--fg);padding:.3rem .5rem;font-size:0.85rem">
+                  <option value="technical" {% if cap.category == 'technical' %}selected{% endif %}>Technisch</option>
+                  <option value="personality" {% if cap.category == 'personality' %}selected{% endif %}>Persoonlijkheid</option>
+                </select>
+                <button type="submit" class="btn btn-primary btn-sm">Opslaan</button>
+              </form>
+            </details>
+            <form method="POST"
+                  action="{{ url_for('capability_activate' if not cap.is_active else 'capability_deactivate', cap_id=cap.id) }}"
+                  style="display:inline-block;margin-left:.5rem">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm">{{ 'Activeren' if not cap.is_active else 'Deactiveren' }}</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <form method="POST" action="{{ url_for('capability_new') }}"
+        style="margin-top:1rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="label_nl" placeholder="Naam (bv. Leiderschap)" required
+           style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                  color:var(--fg);padding:.35rem .5rem;font-size:0.9rem">
+    <select name="category" required
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                   color:var(--fg);padding:.35rem .5rem;font-size:0.9rem">
+      <option value="technical">Technisch</option>
+      <option value="personality">Persoonlijkheid</option>
+    </select>
+    <button type="submit" class="btn btn-primary btn-sm">Nieuwe vaardigheid toevoegen</button>
+  </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var positions = {{ POSITIONS | tojson }};
+
+  function clamp(inp) {
+    var val = parseFloat(inp.value) || 0;
+    if (val < 0) val = 0;
+    else if (val > 80) val = 80;
+    else if (val > 0 && val < 20) val = 20; // 0 = exclude; otherwise stay within the 20-80 scale
+    inp.value = val;
+  }
+
+  function recompute(pos) {
+    var inputs = document.querySelectorAll('input[data-weight-input][data-position="' + pos + '"]');
+    var total = 0;
+    inputs.forEach(function (inp) { total += parseFloat(inp.value) || 0; });
+    inputs.forEach(function (inp) {
+      var share = document.querySelector('.weight-share[data-share-for="' + inp.name + '"]');
+      if (!share) return;
+      var val = parseFloat(inp.value) || 0;
+      share.textContent = total > 0 ? '(' + Math.round(val / total * 100) + '%)' : '\u2013';
+    });
+  }
+
+  positions.forEach(function (pos) {
+    recompute(pos);
+    document.querySelectorAll('input[data-weight-input][data-position="' + pos + '"]').forEach(function (inp) {
+      inp.addEventListener('input', function () { recompute(pos); });
+      inp.addEventListener('change', function () { clamp(inp); recompute(pos); });
+    });
+  });
+});
+</script>
 {% endblock %}

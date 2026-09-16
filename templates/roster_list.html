@@ -68,9 +68,7 @@
   {% endcall %}
 
   <button type="submit" class="btn btn-outline btn-sm">Filteren</button>
-  {% if status_filter or position_filter or tag_filter or team_filter or group_filter or season_filter or role_filter or request.args.get('q') %}
-  <a href="{{ url_for('roster_list') }}" class="btn btn-sm" style="opacity:0.7">✕ Wissen</a>
-  {% endif %}
+  <a href="{{ url_for('roster_list', reset=1) }}" class="btn btn-sm btn-outline">Alles tonen</a>
 </form>
 </div>{# /.sticky-page-header #}
 

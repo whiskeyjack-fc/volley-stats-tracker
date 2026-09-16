@@ -5,6 +5,7 @@ import csv
 import io
 import re
 import json
+import unicodedata
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, UTC
@@ -379,7 +380,7 @@ def init_db():
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             player_id  INTEGER NOT NULL REFERENCES player_profiles(id),
             capability TEXT NOT NULL,
-            score      INTEGER NOT NULL CHECK(score BETWEEN 0 AND 5),
+            score      INTEGER NOT NULL CHECK(score BETWEEN 20 AND 80 AND score % 5 = 0),
             created_by INTEGER REFERENCES users(id),
             created_at TEXT NOT NULL
         );
@@ -401,6 +402,18 @@ def init_db():
             updated_at TEXT NOT NULL,
             updated_by INTEGER REFERENCES users(id),
             UNIQUE(team_id, profile_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS capabilities (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            key        TEXT NOT NULL UNIQUE,
+            label_nl   TEXT NOT NULL,
+            category   TEXT NOT NULL CHECK(category IN ('technical','personality')),
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_active  INTEGER NOT NULL DEFAULT 1,
+            created_by INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL,
+            updated_at TEXT
         );
     """)
     db.commit()
@@ -547,7 +560,7 @@ def migrate_db():
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             player_id  INTEGER NOT NULL REFERENCES player_profiles(id),
             capability TEXT NOT NULL,
-            score      INTEGER NOT NULL CHECK(score BETWEEN 0 AND 5),
+            score      INTEGER NOT NULL CHECK(score BETWEEN 20 AND 80 AND score % 5 = 0),
             created_by INTEGER REFERENCES users(id),
             created_at TEXT NOT NULL
         )""",
@@ -568,6 +581,17 @@ def migrate_db():
             updated_by INTEGER REFERENCES users(id),
             UNIQUE(team_id, profile_id)
         )""",
+        """CREATE TABLE IF NOT EXISTS capabilities (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            key        TEXT NOT NULL UNIQUE,
+            label_nl   TEXT NOT NULL,
+            category   TEXT NOT NULL CHECK(category IN ('technical','personality')),
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_active  INTEGER NOT NULL DEFAULT 1,
+            created_by INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )""",
     ]:
         try:
             db.execute(sql)
@@ -576,6 +600,26 @@ def migrate_db():
             msg = str(exc).lower()
             if "duplicate column" not in msg and "already exists" not in msg:
                 print(f"migrate_db warning: {exc}", file=sys.stderr)
+
+    # 20-80 scouting scale migration: old 0-5 CHECK detected -> table (and its
+    # history) is wiped intentionally, this scale is not backwards-compatible
+    pcs_sql_row = db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='player_capability_scores'"
+    ).fetchone()
+    if pcs_sql_row and "BETWEEN 0 AND 5" in (pcs_sql_row[0] or ""):
+        try:
+            db.execute("DROP TABLE player_capability_scores")
+            db.execute("""CREATE TABLE player_capability_scores (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_id  INTEGER NOT NULL REFERENCES player_profiles(id),
+                capability TEXT NOT NULL,
+                score      INTEGER NOT NULL CHECK(score BETWEEN 20 AND 80 AND score % 5 = 0),
+                created_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL
+            )""")
+            db.commit()
+        except Exception as exc:
+            print(f"migrate_db player_capability_scores 20-80 scale migration: {exc}", file=sys.stderr)
 
     # Ensure whiskeyjack.fc@gmail.com is admin
     try:
@@ -708,6 +752,29 @@ def migrate_db():
     except Exception as exc:
         print(f"migrate_db position_capability_weights seed: {exc}", file=sys.stderr)
 
+    # Seed the capabilities table with the original hardcoded technical capabilities (idempotent, keys unchanged)
+    try:
+        now = datetime.now(UTC).isoformat()
+        seed_capabilities = [
+            ('serve',            'Opslag'),
+            ('reception',        'Receptie'),
+            ('pass',             'Pas'),
+            ('attack',           'Aanval'),
+            ('block',            'Blok'),
+            ('defense',          'Verdediging'),
+            ('freeball_receive', 'Free ball ontvangen'),
+            ('freeball_serve',   'Free ball geven'),
+        ]
+        for i, (key, label_nl) in enumerate(seed_capabilities):
+            db.execute(
+                "INSERT OR IGNORE INTO capabilities (key, label_nl, category, sort_order, is_active, created_at) "
+                "VALUES (?,?,'technical',?,1,?)",
+                (key, label_nl, i * 10, now)
+            )
+        db.commit()
+    except Exception as exc:
+        print(f"migrate_db capabilities seed: {exc}", file=sys.stderr)
+
 
 KIT_MODELS   = ['dames', 'heren', 'kinder']
 KIT_TYPES    = ['wedstrijd', 'opwarm', 'training', 'short', 'libero', 'polo', 'vest', 'hoodie', 'overig']
@@ -728,25 +795,22 @@ TEAM_MEMBER_ROLES = [
 ]
 
 # ── Player capability scoring & position weighting ──────────────────────────
-CAPABILITIES = ['serve', 'reception', 'pass', 'attack', 'block', 'defense',
-                'freeball_receive', 'freeball_serve']
-CAPABILITY_NL = {
-    'serve':             'Opslag',
-    'reception':         'Receptie',
-    'pass':              'Pas',
-    'attack':            'Aanval',
-    'block':             'Blok',
-    'defense':           'Verdediging',
-    'freeball_receive':  'Free ball ontvangen',
-    'freeball_serve':    'Free ball geven',
-}
+# MLB-style 20-80 scouting scale: 50 = average, ±10 ≈ one standard deviation
+CAPABILITY_GRADES = list(range(20, 81, 5))
 CAPABILITY_SCORE_NL = {
-    0: 'Niet van toepassing',
-    1: 'nog veel werk',
-    2: 'nog werk',
-    3: 'OK',
-    4: 'Goed',
-    5: 'Heel Goed',
+    20: 'Zeer zwak',
+    25: 'Zwak',
+    30: 'Vrij zwak',
+    35: 'Onder gemiddeld',
+    40: 'Licht onder gemiddeld',
+    45: 'Net onder gemiddeld',
+    50: 'Gemiddeld',
+    55: 'Net boven gemiddeld',
+    60: 'Licht boven gemiddeld',
+    65: 'Boven gemiddeld',
+    70: 'Sterk',
+    75: 'Zeer sterk',
+    80: 'Uitzonderlijk',
 }
 # Kapitein is intentionally excluded — it's a manual drag-ordered list, not a weighted position
 POSITIONS = ['pas', 'libero', 'mid', 'receptie_hoek', 'opposite']
@@ -766,6 +830,58 @@ POSITION_CAPABILITY_WEIGHTS_SEED = {
     'receptie_hoek': {'serve': 10, 'reception': 30, 'pass': 5,  'attack': 25, 'block': 10, 'defense': 15, 'freeball_receive': 10, 'freeball_serve': 5},
     'opposite':      {'serve': 20, 'reception': 0,  'pass': 0,  'attack': 40, 'block': 20, 'defense': 5,  'freeball_receive': 0,  'freeball_serve': 10},
 }
+
+def _get_capabilities(db, include_inactive=False):
+    """Admin-managed capability list (technical + personality), technical first, then by sort_order/label."""
+    q = "SELECT id, key, label_nl, category, sort_order, is_active FROM capabilities"
+    if not include_inactive:
+        q += " WHERE is_active=1"
+    q += " ORDER BY CASE category WHEN 'technical' THEN 0 ELSE 1 END, sort_order, label_nl COLLATE NOCASE"
+    return db.execute(q).fetchall()
+
+def _slugify_capability_key(label, db):
+    normalized = unicodedata.normalize('NFKD', label).encode('ascii', 'ignore').decode('ascii')
+    key = re.sub(r'[^a-z0-9]+', '_', normalized.lower()).strip('_') or 'capability'
+    existing = {row["key"] for row in db.execute("SELECT key FROM capabilities").fetchall()}
+    if key not in existing:
+        return key
+    n = 2
+    while f"{key}_{n}" in existing:
+        n += 1
+    return f"{key}_{n}"
+
+def _capability_averages(db, player_ids):
+    """Per (player, capability): mean of each distinct rater's latest submission, plus the per-rater breakdown."""
+    if not player_ids:
+        return {}
+    placeholders = ",".join("?" * len(player_ids))
+    rows = db.execute(
+        f"SELECT pcs.player_id, pcs.capability, pcs.score, pcs.created_at, pcs.created_by, "
+        f"COALESCE(pp.first_name || ' ' || pp.last_name, u.email) AS author_name "
+        f"FROM player_capability_scores pcs "
+        f"LEFT JOIN users u ON u.id = pcs.created_by "
+        f"LEFT JOIN player_profiles pp ON pp.id = u.profile_id "
+        f"WHERE pcs.player_id IN ({placeholders}) AND pcs.id IN ("
+        f"  SELECT MAX(id) FROM player_capability_scores "
+        f"  WHERE player_id IN ({placeholders}) GROUP BY player_id, capability, created_by"
+        f")",
+        player_ids + player_ids
+    ).fetchall()
+    result = {}
+    for r in rows:
+        cap_bucket = result.setdefault(r["player_id"], {}).setdefault(r["capability"], {"raters": []})
+        cap_bucket["raters"].append({
+            "created_by":  r["created_by"],
+            "author_name": r["author_name"],
+            "score":       r["score"],
+            "created_at":  r["created_at"],
+        })
+    for player_bucket in result.values():
+        for cap_bucket in player_bucket.values():
+            scores = [r["score"] for r in cap_bucket["raters"]]
+            cap_bucket["raw"] = sum(scores) / len(scores)
+            cap_bucket["rounded"] = int(round(cap_bucket["raw"] / 5) * 5)
+    return result
 
 STAT_RESULTS = {
     "serve":    ["error", "1-serve", "2-serve", "3-serve", "ace"],
@@ -2409,23 +2525,18 @@ def team_positions(team_id):
     ).fetchall()
     profile_ids = [r["profile_id"] for r in roster]
 
-    # Latest score per (player, capability)
-    scores_by_player = {pid: {} for pid in profile_ids}
-    if profile_ids:
-        placeholders = ",".join("?" * len(profile_ids))
-        rows = db.execute(
-            f"SELECT player_id, capability, score FROM player_capability_scores "
-            f"WHERE player_id IN ({placeholders}) AND id IN ("
-            f"  SELECT MAX(id) FROM player_capability_scores "
-            f"  WHERE player_id IN ({placeholders}) GROUP BY player_id, capability"
-            f")",
-            profile_ids + profile_ids
-        ).fetchall()
-        for r in rows:
-            scores_by_player[r["player_id"]][r["capability"]] = r["score"]
+    # Per-capability score = mean of each rater's latest submission (see _capability_averages)
+    averages = _capability_averages(db, profile_ids)
+    scores_by_player = {
+        pid: {cap: bucket["raw"] for cap, bucket in averages.get(pid, {}).items()}
+        for pid in profile_ids
+    }
 
     weights = {}
-    for row in db.execute("SELECT position, capability, weight FROM position_capability_weights").fetchall():
+    for row in db.execute(
+        "SELECT pcw.position, pcw.capability, pcw.weight FROM position_capability_weights pcw "
+        "JOIN capabilities c ON c.key = pcw.capability WHERE c.is_active=1"
+    ).fetchall():
         weights.setdefault(row["position"], {})[row["capability"]] = row["weight"]
 
     rankings = {}
@@ -2437,17 +2548,19 @@ def team_positions(team_id):
             num = 0.0
             den = 0.0
             for cap, w in pos_weights.items():
-                score = player_scores.get(cap, 0)
-                if w > 0 and score > 0:
+                score = player_scores.get(cap)
+                if w > 0 and score is not None:
                     num += w * score
                     den += w
+            raw = (num / den) if den > 0 else None
             ranked.append({
                 "profile_id": r["profile_id"],
                 "name":       r["name"],
                 "number":     r["number"],
-                "score":      round(num / den, 2) if den > 0 else None,
+                "score":      int(round(raw / 5) * 5) if raw is not None else None,
+                "raw_score":  raw,
             })
-        ranked.sort(key=lambda p: (p["score"] is None, -(p["score"] or 0)))
+        ranked.sort(key=lambda p: (p["raw_score"] is None, -(p["raw_score"] or 0)))
         rankings[position] = ranked[:5]
 
     # Kapitein: manual drag order, capped to a top-5 shortlist; the rest are
@@ -2680,6 +2793,14 @@ def admin_backup_download():
 @login_required
 def roster_list():
     db = get_db()
+
+    if request.args.get("reset"):
+        resp = redirect(url_for("roster_list"))
+        resp.delete_cookie("roster_filters")
+        return resp
+    if not request.query_string and request.cookies.get("roster_filters"):
+        return redirect(request.path + "?" + request.cookies.get("roster_filters"))
+
     q         = request.args.get("q", "").strip()
     status    = request.args.get("status", "")
     position  = request.args.get("position", "")
@@ -2771,7 +2892,7 @@ def roster_list():
             pass
     all_tags = sorted(all_tags_set)
 
-    return render_template("roster_list.html",
+    resp = make_response(render_template("roster_list.html",
         profiles=profiles,
         teams_by_pid=teams_by_pid,
         teams=all_teams,
@@ -2786,7 +2907,13 @@ def roster_list():
         group_filter=group,
         season_filter=season_id,
         role_filter=role,
-    )
+    ))
+    if request.query_string:
+        resp.set_cookie(
+            "roster_filters", request.query_string.decode("utf-8"),
+            max_age=60 * 60 * 24 * 180, samesite="Lax",
+        )
+    return resp
 
 
 @app.route("/roster/new", methods=["GET", "POST"])
@@ -3002,15 +3129,19 @@ def roster_detail(profile_id):
     # Private remarks: trainers cannot see them
     if can_view_all():
         remarks_rows = db.execute(
-            "SELECT pr.*, u.email AS author_email FROM player_remarks pr "
+            "SELECT pr.*, COALESCE(pp.first_name || ' ' || pp.last_name, u.email) AS author_name "
+            "FROM player_remarks pr "
             "LEFT JOIN users u ON u.id = pr.created_by "
+            "LEFT JOIN player_profiles pp ON pp.id = u.profile_id "
             "WHERE pr.player_id=? ORDER BY pr.created_at DESC",
             (profile_id,)
         ).fetchall()
     else:
         remarks_rows = db.execute(
-            "SELECT pr.*, u.email AS author_email FROM player_remarks pr "
+            "SELECT pr.*, COALESCE(pp.first_name || ' ' || pp.last_name, u.email) AS author_name "
+            "FROM player_remarks pr "
             "LEFT JOIN users u ON u.id = pr.created_by "
+            "LEFT JOIN player_profiles pp ON pp.id = u.profile_id "
             "WHERE pr.player_id=? AND pr.is_private=0 "
             "  AND pr.remark_type IN ('general','training') "
             "ORDER BY pr.created_at DESC",
@@ -3046,17 +3177,30 @@ def roster_detail(profile_id):
         (profile_id,)
     ).fetchall()
 
-    # Capability scores: full history (newest first) + current = latest row per capability
+    # Capability scores: full history (newest first) + current = mean of each rater's latest submission
+    # Deactivated capabilities are hidden here entirely (mirrors the position-weights grid); their
+    # historical rows stay in the DB untouched, just not surfaced on this page.
+    capabilities = _get_capabilities(db)
     capability_history_rows = db.execute(
-        "SELECT pcs.*, u.email AS author_email FROM player_capability_scores pcs "
+        "SELECT pcs.*, COALESCE(pp.first_name || ' ' || pp.last_name, u.email) AS author_name "
+        "FROM player_capability_scores pcs "
         "LEFT JOIN users u ON u.id = pcs.created_by "
+        "LEFT JOIN player_profiles pp ON pp.id = u.profile_id "
         "WHERE pcs.player_id=? ORDER BY pcs.created_at DESC",
         (profile_id,)
     ).fetchall()
-    capability_history = {cap: [] for cap in CAPABILITIES}
+    capability_history = {cap["key"]: [] for cap in capabilities}
     for row in capability_history_rows:
         capability_history.setdefault(row["capability"], []).append(row)
-    capability_scores = {cap: (rows[0] if rows else None) for cap, rows in capability_history.items()}
+    capability_averages = _capability_averages(db, [profile_id]).get(profile_id, {})
+    own_capability_scores = {
+        row["capability"]: row["score"]
+        for row in db.execute(
+            "SELECT capability, score FROM player_capability_scores WHERE player_id=? AND created_by=? "
+            "AND id IN (SELECT MAX(id) FROM player_capability_scores WHERE player_id=? AND created_by=? GROUP BY capability)",
+            (profile_id, current_user.id, profile_id, current_user.id)
+        ).fetchall()
+    }
 
     # Coaching badge: users whose profile_id = this player, with their teams
     coaching_users = db.execute(
@@ -3100,12 +3244,13 @@ def roster_detail(profile_id):
         coaching_teams=coaching_teams,
         kit_items_profile=kit_items_profile,
         kit_log_profile=kit_log_profile,
-        capability_scores=capability_scores,
+        capabilities=capabilities,
+        capability_averages=capability_averages,
+        own_capability_scores=own_capability_scores,
         capability_history=capability_history,
         can_edit_capabilities=can_add,
-        CAPABILITIES=CAPABILITIES,
-        CAPABILITY_NL=CAPABILITY_NL,
         CAPABILITY_SCORE_NL=CAPABILITY_SCORE_NL,
+        CAPABILITY_GRADES=CAPABILITY_GRADES,
     )
 
 
@@ -3207,16 +3352,18 @@ def roster_add_capabilities(profile_id):
         ).fetchone()
         if not assigned:
             return "Forbidden", 403
-    latest = {
+    # Compare against this rater's own last submission — other raters keep their own independent scores
+    own_latest = {
         row["capability"]: row["score"]
         for row in db.execute(
-            "SELECT capability, score FROM player_capability_scores WHERE player_id=? "
-            "AND id IN (SELECT MAX(id) FROM player_capability_scores WHERE player_id=? GROUP BY capability)",
-            (profile_id, profile_id)
+            "SELECT capability, score FROM player_capability_scores WHERE player_id=? AND created_by=? "
+            "AND id IN (SELECT MAX(id) FROM player_capability_scores WHERE player_id=? AND created_by=? GROUP BY capability)",
+            (profile_id, current_user.id, profile_id, current_user.id)
         ).fetchall()
     }
     now = datetime.now(UTC).isoformat()
-    for capability in CAPABILITIES:
+    for cap in _get_capabilities(db):
+        capability = cap["key"]
         raw = request.form.get(f"cap_{capability}", "").strip()
         if raw == "":
             continue
@@ -3224,9 +3371,9 @@ def roster_add_capabilities(profile_id):
             score = int(raw)
         except ValueError:
             continue
-        if score < 0 or score > 5:
+        if score not in CAPABILITY_GRADES:
             continue
-        if latest.get(capability) == score:
+        if own_latest.get(capability) == score:
             continue
         db.execute(
             "INSERT INTO player_capability_scores (player_id, capability, score, created_by, created_at) "
@@ -3288,6 +3435,94 @@ def api_roster_search():
     return jsonify(result)
 
 
+# ── Capability admin (add / edit / deactivate / reactivate) ──────────────────
+
+@app.route("/settings/capabilities/new", methods=["POST"])
+@login_required
+def capability_new():
+    if not can_view_all():
+        return "Forbidden", 403
+    label = request.form.get("label_nl", "").strip()
+    category = request.form.get("category", "").strip()
+    if not label or category not in ("technical", "personality"):
+        flash("Vul een naam en categorie in.", "error")
+        return redirect(url_for("position_weights_settings"))
+    db = get_db()
+    key = _slugify_capability_key(label, db)
+    now = datetime.now(UTC).isoformat()
+    max_sort = db.execute(
+        "SELECT COALESCE(MAX(sort_order), 0) FROM capabilities WHERE category=?", (category,)
+    ).fetchone()[0]
+    db.execute(
+        "INSERT INTO capabilities (key, label_nl, category, sort_order, is_active, created_by, created_at) "
+        "VALUES (?,?,?,?,1,?,?)",
+        (key, label, category, max_sort + 10, current_user.id, now)
+    )
+    for position in POSITIONS:
+        db.execute(
+            "INSERT OR IGNORE INTO position_capability_weights (position, capability, weight, updated_at) "
+            "VALUES (?,?,0,?)",
+            (position, key, now)
+        )
+    db.commit()
+    flash(f"Vaardigheid '{label}' toegevoegd.", "success")
+    return redirect(url_for("position_weights_settings"))
+
+
+@app.route("/settings/capabilities/<int:cap_id>/edit", methods=["POST"])
+@login_required
+def capability_edit(cap_id):
+    if not can_view_all():
+        return "Forbidden", 403
+    label = request.form.get("label_nl", "").strip()
+    category = request.form.get("category", "").strip()
+    if not label or category not in ("technical", "personality"):
+        flash("Vul een naam en categorie in.", "error")
+        return redirect(url_for("position_weights_settings"))
+    db = get_db()
+    cur = db.execute(
+        "UPDATE capabilities SET label_nl=?, category=?, updated_at=? WHERE id=?",
+        (label, category, datetime.now(UTC).isoformat(), cap_id)
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        return "Capability not found", 404
+    flash("Vaardigheid bijgewerkt.", "success")
+    return redirect(url_for("position_weights_settings"))
+
+
+@app.route("/settings/capabilities/<int:cap_id>/deactivate", methods=["POST"])
+@login_required
+def capability_deactivate(cap_id):
+    if not can_view_all():
+        return "Forbidden", 403
+    db = get_db()
+    cur = db.execute(
+        "UPDATE capabilities SET is_active=0, updated_at=? WHERE id=?",
+        (datetime.now(UTC).isoformat(), cap_id)
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        return "Capability not found", 404
+    return redirect(url_for("position_weights_settings"))
+
+
+@app.route("/settings/capabilities/<int:cap_id>/activate", methods=["POST"])
+@login_required
+def capability_activate(cap_id):
+    if not can_view_all():
+        return "Forbidden", 403
+    db = get_db()
+    cur = db.execute(
+        "UPDATE capabilities SET is_active=1, updated_at=? WHERE id=?",
+        (datetime.now(UTC).isoformat(), cap_id)
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        return "Capability not found", 404
+    return redirect(url_for("position_weights_settings"))
+
+
 # ── Position capability weight settings ──────────────────────────────────────
 
 @app.route("/settings/position-weights", methods=["GET", "POST"])
@@ -3300,14 +3535,19 @@ def position_weights_settings():
         try:
             now = datetime.now(UTC).isoformat()
             for position in POSITIONS:
-                for capability in CAPABILITIES:
+                for cap in _get_capabilities(db):
+                    capability = cap["key"]
                     raw = request.form.get(f"w_{position}_{capability}", "").strip()
                     try:
                         weight = float(raw) if raw != "" else 0
                     except ValueError:
                         weight = 0
-                    if weight < 0:
+                    if weight <= 0:
                         weight = 0
+                    elif weight > 80:
+                        weight = 80
+                    elif weight < 20:
+                        weight = 20
                     db.execute(
                         "INSERT INTO position_capability_weights (position, capability, weight, updated_at, updated_by) "
                         "VALUES (?,?,?,?,?) "
@@ -3329,8 +3569,8 @@ def position_weights_settings():
         weights=weights,
         POSITIONS=POSITIONS,
         POSITION_NL=POSITION_NL,
-        CAPABILITIES=CAPABILITIES,
-        CAPABILITY_NL=CAPABILITY_NL,
+        capabilities=_get_capabilities(db),
+        all_capabilities=_get_capabilities(db, include_inactive=True),
     )
 
 

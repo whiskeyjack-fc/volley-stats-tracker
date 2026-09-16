@@ -127,7 +127,7 @@
           {% if r.is_private %}<span style="font-size:0.68rem;color:var(--red);margin-left:.3rem">🔒 privé</span>{% endif %}
           {% if r.due_date %}<span style="color:var(--muted);font-size:0.72rem;margin-left:.4rem">vervaldatum {{ r.due_date | fmt_date }}</span>{% endif %}
         </span>
-        <span style="font-size:0.75rem;color:var(--muted)">{{ r.author_email or 'unknown' }} · {{ r.created_at | fmt_date }}</span>
+        <span style="font-size:0.75rem;color:var(--muted)">{{ r.author_name or 'unknown' }} · {{ r.created_at | fmt_date }}</span>
       </div>
       <p style="margin:0;font-size:0.9rem;white-space:pre-wrap">{{ r.content }}</p>
       {% if can_view_all() %}
@@ -202,37 +202,66 @@
         <thead>
           <tr>
             <th>Vaardigheid</th>
-            <th>Score</th>
+            <th>Gemiddelde</th>
+            <th>Jouw score</th>
             <th>Laatst bijgewerkt</th>
           </tr>
         </thead>
         <tbody>
-          {% for cap in CAPABILITIES %}
-          {% set cur = capability_scores.get(cap) %}
+          {% for cap in capabilities %}
+          {% if loop.first or cap.category != loop.previtem.category %}
+          <tr><td colspan="4" style="background:var(--surface2);font-weight:600;font-size:0.72rem;
+                  text-transform:uppercase;color:var(--muted)">
+            {{ 'Technisch' if cap.category == 'technical' else 'Persoonlijkheid' }}
+          </td></tr>
+          {% endif %}
+          {% set avg = capability_averages.get(cap.key) %}
+          {% set own_score = own_capability_scores.get(cap.key) %}
+          {% set hist = capability_history.get(cap.key) %}
           <tr>
-            <td>{{ CAPABILITY_NL.get(cap, cap) }}</td>
+            <td>{{ cap.label_nl }}</td>
+            <td style="min-width:7rem">
+              {% if avg %}
+              <div style="font-size:1.25rem;font-weight:700">
+                {{ avg.rounded }} <span style="font-weight:400;color:var(--muted);font-size:0.85rem">· {{ CAPABILITY_SCORE_NL[avg.rounded] }}</span>
+              </div>
+              {% if avg.raters|length > 1 %}<div style="color:var(--muted);font-size:0.72rem">{{ avg.raters|length }} beoordelaars</div>{% endif %}
+              {% else %}
+              <span style="color:var(--muted)">—</span>
+              {% endif %}
+            </td>
             <td>
               {% if can_edit_capabilities %}
-              <select name="cap_{{ cap }}"
-                      style="background:var(--surface2);border:1px solid var(--border);
-                             border-radius:var(--radius);color:var(--fg);padding:.3rem .5rem;font-size:0.9rem">
+              <select name="cap_{{ cap.key }}" title="Jouw score"
+                      style="width:4rem;background:var(--surface2);border:1px solid var(--border);
+                             border-radius:var(--radius);color:var(--fg);padding:.2rem .3rem;font-size:0.82rem">
                 <option value="">—</option>
-                {% for n in range(0, 6) %}
-                <option value="{{ n }}" {% if cur and cur.score == n %}selected{% endif %}>{{ n }} · {{ CAPABILITY_SCORE_NL[n] }}</option>
+                {% for n in CAPABILITY_GRADES %}
+                <option value="{{ n }}" {% if own_score == n %}selected{% endif %}>{{ n }}</option>
                 {% endfor %}
               </select>
               {% else %}
-              {% if cur %}{{ cur.score }} · {{ CAPABILITY_SCORE_NL[cur.score] }}{% else %}<span style="color:var(--muted)">nog niet gescoord</span>{% endif %}
+              <span style="color:var(--muted)">—</span>
               {% endif %}
             </td>
             <td style="color:var(--muted);font-size:0.82rem">
-              {% if cur %}{{ cur.created_at | fmt_date }} · {{ cur.author_email or 'unknown' }}{% else %}—{% endif %}
-              {% if capability_history.get(cap) and capability_history[cap]|length > 1 %}
-              <details style="display:inline-block;margin-left:.4rem">
-                <summary style="cursor:pointer;color:var(--accent);display:inline">geschiedenis</summary>
-                <ul style="margin:.3rem 0 0;padding-left:1rem">
-                  {% for h in capability_history[cap] %}
-                  <li>{{ h.score }} · {{ h.created_at | fmt_date }} · {{ h.author_email or 'unknown' }}</li>
+              {% if hist %}{{ hist[0].created_at | fmt_date }} · {{ hist[0].author_name or 'unknown' }}{% else %}—{% endif %}
+              {% if avg and avg.raters|length > 1 %}
+              <details style="margin-top:.3rem">
+                <summary style="cursor:pointer;color:var(--accent)">per beoordelaar</summary>
+                <ul style="margin:.3rem 0 0;padding-left:1rem;max-height:6.5rem;overflow-y:auto">
+                  {% for r in avg.raters %}
+                  <li>{{ r.score }} · {{ r.created_at | fmt_date }} · {{ r.author_name or 'unknown' }}</li>
+                  {% endfor %}
+                </ul>
+              </details>
+              {% endif %}
+              {% if hist and hist|length > 1 %}
+              <details style="margin-top:.3rem">
+                <summary style="cursor:pointer;color:var(--accent)">geschiedenis</summary>
+                <ul style="margin:.3rem 0 0;padding-left:1rem;max-height:6.5rem;overflow-y:auto">
+                  {% for h in hist %}
+                  <li>{{ h.score }} · {{ h.created_at | fmt_date }} · {{ h.author_name or 'unknown' }}</li>
                   {% endfor %}
                 </ul>
               </details>
@@ -248,9 +277,24 @@
       <button type="submit" class="btn btn-primary btn-sm">Vaardigheden opslaan</button>
     </div>
     {% endif %}
-    <p style="color:var(--muted);font-size:0.75rem;margin-top:.6rem">
-      Schaal: {% for n in range(0, 6) %}{{ n }}={{ CAPABILITY_SCORE_NL[n] }}{% if not loop.last %} · {% endif %}{% endfor %}
-    </p>
+    <div style="color:var(--muted);font-size:0.75rem;margin-top:.6rem;line-height:1.5">
+      <p style="margin:0 0 .4rem">
+        Deze 20-80 schaal (zoals gebruikt in scouting) drukt uit hoe een speler scoort
+        <strong>ten opzichte van het gemiddelde niveau van zijn/haar team of reeks</strong> — niet in absolute zin.
+        50 is dus gemiddeld voor dit niveau, en elke stap van 5 punten komt ongeveer overeen met een halve
+        standaarddeviatie. Gebruik de score om de ontwikkeling van een speler op te volgen doorheen het seizoen en
+        om spelers <em>binnen dezelfde ploeg</em> onderling te vergelijken; vermijd scores te vergelijken tussen
+        ploegen van een ander niveau, want "gemiddeld" betekent daar iets anders.
+      </p>
+      <p style="margin:0 0 .4rem">
+        De getoonde score is het gemiddelde van elke beoordelaar's laatste invoer, afgerond op 5; het
+        "jouw score" veld ernaast is enkel jouw eigen laatst ingevoerde waarde. Klap "per beoordelaar" open
+        om te zien wie welke score gaf.
+      </p>
+      <p style="margin:0">
+        Schaal: {% for n in CAPABILITY_GRADES %}{{ n }}={{ CAPABILITY_SCORE_NL[n] }}{% if not loop.last %} · {% endif %}{% endfor %}
+      </p>
+    </div>
   </form>
 </div>
 {% endif %}
