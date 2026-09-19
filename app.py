@@ -2560,6 +2560,8 @@ def team_positions(team_id):
     ).fetchall():
         weights.setdefault(row["position"], {})[row["capability"]] = row["weight"]
 
+    cap_labels = {cap["key"]: cap["label_nl"] for cap in _get_capabilities(db)}
+
     rankings = {}
     for position in POSITIONS:
         pos_weights = weights.get(position, {})
@@ -2571,18 +2573,25 @@ def team_positions(team_id):
             player_scores = scores_by_player.get(r["profile_id"], {})
             num = 0.0
             den = 0.0
+            breakdown = []
             for cap, w in pos_weights.items():
                 score = player_scores.get(cap)
                 if w > 0 and score is not None:
                     num += w * score
                     den += w
+                    breakdown.append((w, cap_labels.get(cap, cap), score))
             raw = (num / den) if den > 0 else None
+            breakdown.sort(key=lambda b: -b[0])
+            tooltip_lines = [f"{label}: gewicht {w}, score {score}" for w, label, score in breakdown]
+            if raw is not None:
+                tooltip_lines.append(f"Gewogen gemiddelde: {raw:.1f}")
             ranked.append({
                 "profile_id": r["profile_id"],
                 "name":       r["name"],
                 "number":     r["number"],
                 "score":      int(round(raw / 5) * 5) if raw is not None else None,
                 "raw_score":  raw,
+                "tooltip":    "\n".join(tooltip_lines),
             })
         ranked.sort(key=lambda p: (p["raw_score"] is None, -(p["raw_score"] or 0)))
         rankings[position] = ranked[:5]

@@ -18,7 +18,7 @@
       <span class="rank-num">{{ loop.index }}</span>
       <span style="flex:1"><a href="{{ url_for('roster_detail', profile_id=p.profile_id) }}">{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}</a></span>
       {% if p.score is not none %}
-      <span class="rank-score">{{ p.score }}</span>
+      <span class="rank-score" title="{{ p.tooltip }}">{{ p.score }}</span>
       {% else %}
       <span style="color:var(--muted);font-size:0.75rem">&ndash;</span>
       {% endif %}

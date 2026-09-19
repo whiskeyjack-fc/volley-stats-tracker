@@ -2026,6 +2026,7 @@ body.modal-open { overflow: hidden; }
 .rank-score {
   background: var(--surface2); border: 1px solid var(--accent); color: var(--accent);
   border-radius: 999px; padding: .1em .55em; font-size: 0.75rem; font-weight: 600;
+  cursor: help;
 }
 .captain-drag-item {
   cursor: grab; user-select: none;
