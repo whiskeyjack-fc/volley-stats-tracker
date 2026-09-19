@@ -404,6 +404,10 @@ def init_db():
             UNIQUE(team_id, profile_id)
         );
 
+        CREATE TABLE IF NOT EXISTS club_team_captain_configured (
+            team_id INTEGER PRIMARY KEY REFERENCES club_teams(id)
+        );
+
         CREATE TABLE IF NOT EXISTS capabilities (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             key        TEXT NOT NULL UNIQUE,
@@ -580,6 +584,9 @@ def migrate_db():
             updated_at TEXT NOT NULL,
             updated_by INTEGER REFERENCES users(id),
             UNIQUE(team_id, profile_id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS club_team_captain_configured (
+            team_id INTEGER PRIMARY KEY REFERENCES club_teams(id)
         )""",
         """CREATE TABLE IF NOT EXISTS capabilities (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2587,11 +2594,23 @@ def team_positions(team_id):
         (team_id,)
     ).fetchall()]
     roster_by_id = {r["profile_id"]: r for r in roster}
-    captain_list = [roster_by_id[pid] for pid in captain_order_ids if pid in roster_by_id]
-    ordered_ids = set(captain_order_ids)
-    captain_list += [r for r in roster if r["profile_id"] not in ordered_ids]
-    captain_shortlist = captain_list[:5]
-    captain_available = sorted(captain_list[5:], key=lambda r: r["name"])
+    captain_ordered = [roster_by_id[pid] for pid in captain_order_ids if pid in roster_by_id]
+    captain_configured = db.execute(
+        "SELECT 1 FROM club_team_captain_configured WHERE team_id=?", (team_id,)
+    ).fetchone()
+    if captain_configured:
+        # an explicit order was saved before (even an emptied-out one) — never
+        # auto-fill missing slots with other roster players, or removing
+        # everyone would just bring players back in
+        captain_shortlist = captain_ordered[:5]
+    else:
+        # nothing saved yet — default the shortlist to the first 5 players
+        captain_shortlist = roster[:5]
+    shortlist_ids = {p["profile_id"] for p in captain_shortlist}
+    captain_available = sorted(
+        (r for r in roster if r["profile_id"] not in shortlist_ids),
+        key=lambda r: r["name"]
+    )
 
     return render_template("team_positions.html",
         team=team,
@@ -2620,6 +2639,9 @@ def team_captain_order(team_id):
                 "VALUES (?,?,?,?,?)",
                 (team_id, profile_id, sort_order, now, current_user.id)
             )
+        db.execute(
+            "INSERT OR IGNORE INTO club_team_captain_configured (team_id) VALUES (?)", (team_id,)
+        )
         db.commit()
     except Exception:
         db.rollback()
