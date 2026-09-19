@@ -821,6 +821,15 @@ POSITION_NL = {
     'receptie_hoek':  'Receptie hoek',
     'opposite':       'Opposite',
 }
+# Maps a ranking position (POSITIONS, above) to the matching key in player_profiles.positions
+# (the vocabulary used by the roster/profile position picker: setter/libero/outside/opposite/middle)
+POSITION_TO_PROFILE_POS = {
+    'pas':           'setter',
+    'libero':        'libero',
+    'mid':           'middle',
+    'receptie_hoek': 'outside',
+    'opposite':      'opposite',
+}
 # First-draft seed weights for position_capability_weights; freely editable afterwards
 # via the /settings/position-weights page. Not required to sum to anything in particular.
 POSITION_CAPABILITY_WEIGHTS_SEED = {
@@ -2517,13 +2526,18 @@ def team_positions(team_id):
     season_id = season_row["season_id"] if season_row else None
 
     roster = db.execute(
-        "SELECT ctp.profile_id, ctp.name, ctp.number FROM club_team_players ctp "
+        "SELECT ctp.profile_id, ctp.name, ctp.number, pp.positions FROM club_team_players ctp "
+        "LEFT JOIN player_profiles pp ON pp.id = ctp.profile_id "
         "WHERE ctp.team_id=? AND ctp.season_id IS ? AND ctp.profile_id IS NOT NULL "
         "AND (ctp.roles IS NULL OR ctp.roles = '' OR ctp.roles LIKE '%player%') "
         "ORDER BY ctp.name COLLATE NOCASE",
         (team_id, season_id)
     ).fetchall()
     profile_ids = [r["profile_id"] for r in roster]
+    positions_by_player = {
+        r["profile_id"]: {p.strip() for p in (r["positions"] or "").split(",") if p.strip()}
+        for r in roster
+    }
 
     # Per-capability score = mean of each rater's latest submission (see _capability_averages)
     averages = _capability_averages(db, profile_ids)
@@ -2543,7 +2557,10 @@ def team_positions(team_id):
     for position in POSITIONS:
         pos_weights = weights.get(position, {})
         ranked = []
+        profile_pos = POSITION_TO_PROFILE_POS.get(position, position)
         for r in roster:
+            if profile_pos not in positions_by_player.get(r["profile_id"], set()):
+                continue
             player_scores = scores_by_player.get(r["profile_id"], {})
             num = 0.0
             den = 0.0
