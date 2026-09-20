@@ -2017,11 +2017,30 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 600px) {
   .position-rank-grid { grid-template-columns: 1fr; }
 }
+.card-wide { grid-column: span 2; }
+@media (max-width: 600px) {
+  .card-wide { grid-column: span 1; }
+}
+.captain-compare-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.captain-compare-row-solo { grid-template-columns: 1fr; }
+@media (max-width: 600px) {
+  .captain-compare-row { grid-template-columns: 1fr; }
+}
 .rank-row {
   display: flex; justify-content: space-between; align-items: center; gap: .5rem;
   padding: .4rem .1rem; border-bottom: 1px solid var(--border); font-size: 0.88rem;
 }
 .rank-row:last-child { border-bottom: none; }
+.rank-list-compact {
+  column-count: 2;
+  column-gap: 1rem;
+}
+.rank-list-compact .rank-row { break-inside: avoid; }
 .rank-num { color: var(--muted); font-size: 0.78rem; width: 1.4rem; flex-shrink: 0; }
 .rank-score {
   background: var(--surface2); border: 1px solid var(--accent); color: var(--accent);
@@ -2032,5 +2051,20 @@ body.modal-open { overflow: hidden; }
   cursor: grab; user-select: none;
 }
 .captain-drag-item.dragging { opacity: 0.4; }
+
+/* ── Capability heatmap (team_positions.html) ──────────────────────────── */
+:root {
+  --heat-very-low:  rgba(232, 81, 74, .38);
+  --heat-low:       rgba(232, 81, 74, .16);
+  --heat-mid:       rgba(255, 255, 255, .04);
+  --heat-high:      rgba(62, 207, 111, .16);
+  --heat-very-high: rgba(62, 207, 111, .38);
+}
+.heat-very-low  { background: var(--heat-very-low); }
+.heat-low       { background: var(--heat-low); }
+.heat-mid       { background: var(--heat-mid); }
+.heat-high      { background: var(--heat-high); }
+.heat-very-high { background: var(--heat-very-high); }
+.compare-checkbox { margin-right: .4rem; flex-shrink: 0; }
 
 
