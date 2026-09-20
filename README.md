@@ -1,20 +1,52 @@
-# PlayerStats — Volleyball Stat Tracker
+# PlayerStats — Volleyball Club Management Suite
 
-A web-based volleyball statistics tracking application built with Flask and SQLite. Track player performance during matches, review per-set and per-match reports, and analyse season-level trends with interactive charts.
+A web-based Flask/SQLite application for volleyball clubs. Beyond live match tracking and statistics, it covers player roster management, team & lineup planning, equipment (kit) tracking, and scheduling-conflict detection.
 
 ## Features
 
+### Game Tracking & Reporting
 - **Live tracking grid** — players as rows, stat categories as columns; click to increment, long-press to decrement
 - **Stat categories** — Serve (error, 1–3, ace), Attack (kill, error), Receive (error, 1–3, overpass), Block (kill, error), Freeball (error, 1–3), Fault
 - **Per-set tracking** — track sets independently, mark sets as Main or Reserve, finish and reopen sets
 - **Derived stats** — total attempts, raw result, fault %, and quality score (Serve / Receive / Freeball)
 - **Match reports** — filterable by set type (Main / Reserve) or individual set; interactive Chart.js charts
-- **Season reports** — aggregate stats across all matches in a season
-- **Game management** — create, edit, and delete matches
+- **Game management** — create, edit, delete, and export (CSV) matches at `/games`
+- **Player report** — cross-game career stats per player with trend charts and capability-based position recommendations at `/players`
+- **Season reports** — aggregate stats across all matches in a season, browsable from a season list at `/seasons`
+
+### Player Roster & Profiles
+- **Player roster** (`/roster`) — searchable, filterable list of player profiles (name, DOB, number, status, positions, tags, notes)
+- **Create / edit / delete** player profiles, with CSV import (`/roster/import`) and federation card-text import (`/roster/import-federation`)
+- **Player remarks** — dated, optionally-private notes on a player's profile
+- **Capability scoring** — rate players on technical and personality traits (20–80 scale); scores feed development-gap and position-fit recommendations
+
+### Club Teams & Lineups
+- **Team list** (`/teams`) — create, edit, and delete club teams; season-aware roster assignment
+- **Trainer assignment** — assign or remove specific trainer accounts per team
+- **Team positions** (`/teams/<id>/positions`) — heatmap of player-to-position fit based on capability scores vs. position weights, plus a captain/co-captain order editor
+- **Capabilities & position-weight settings** (`/settings/capabilities`, `/settings/position-weights`) — coordinator/admin-only configuration of rateable traits and their importance per position
+
+### Training Groups
+- **Training groups** (`/training-groups`) — create, edit, and delete named cohorts of players for training purposes
+
+### Kit / Equipment Tracking
+- **Kit inventory** (`/kit`) — browse, filter, and sort equipment (model, type, size, number, status, condition)
+- **Kit detail & log** — per-item assignment/removal/maintenance history, plus a global log view at `/kit/log`
+- **CSV import/export**, and bulk soft-delete of equipment items
+
+### Reports & Conflict Detection
+- **Duplicate shirt-number report** (`/reports/duplicate-numbers`) — flags teams where the same jersey number is assigned to 2+ different players, with CSV export
+- **Sporthal conflicts** (`/conflicts/sporthal`) — detects double-booked venues, downgrading warmup-only overlaps to warnings
+- **Team overlap** (`/conflicts/teamoverlap`) — overlapping schedules across selected teams
+- **Person conflicts** (`/conflicts/persons`) — players double-booked across teams/matches on the same day
+- Match schedules are sourced from a federation (Volleyadmin2) XML feed, refreshable on demand or via manual XML upload
+
+### Accounts & Administration
 - **Multi-trainer support** — each trainer has their own account; data is fully isolated per user
-- **Role-based access** — three roles: `trainer` (own data only), `coordinator` (read all data), `admin` (read all data + manage user roles)
-- **Admin panel** — admins can view all registered users and assign or change roles at `/admin/users`
-- **Duplicate shirt-number report** — flags 'wedstrijd' kit items where the same team + number is assigned to 2+ different players, with CSV export, at `/reports/duplicate-numbers`
+- **Role-based access** — four roles: `trainer` (own data only), `coordinator` (read all data), `admin` (read all data + manage users), `kit_manager` (kit module only)
+- **Admin panel** (`/admin/users`) — view all registered users, change roles, delete accounts, and link a user to a player profile
+- **Database backup download** — admins can download a consistent SQLite snapshot from `/admin/backup/download`
+- **CSRF protection** (Flask-WTF) on all forms, and rate limiting (Flask-Limiter) on `/login`
 
 ## Project Structure
 
@@ -22,30 +54,46 @@ A web-based volleyball statistics tracking application built with Flask and SQLi
 PlayerStats/
 ├── app.py               # Flask application — routes, DB logic, stat computation
 ├── stats.db             # SQLite database (auto-created on first run)
+├── backup.py            # Daily local backup rotation script (7 copies)
 ├── import_data.py       # One-off script used to bulk-import historical match data
 ├── deploy.sh            # Server-side deploy script (git pull + conditional pip install)
 ├── .env.example         # Template for PythonAnywhere API credentials
-├── Procfile             # Gunicorn entry point for PythonAnywhere / Render
+├── Procfile              # Gunicorn entry point for PythonAnywhere / Render
+├── backups/              # Local rotating DB backups (created by backup.py)
+├── tests/                # Pytest test suite
 ├── .github/
 │   ├── copilot-instructions.md
+│   ├── workflows/
+│   │   └── weekly-backup.yml  # Off-site DB backup to the `backups` branch
 │   └── prompts/
 │       └── deploy.prompt.md  # Copilot agent prompt — automated deploy to PythonAnywhere
 ├── templates/
-│   ├── base.html
-│   ├── index.html       # Game list / home page
-│   ├── game_setup.html  # Create / edit a game
-│   ├── track.html       # Live tracking grid
-│   ├── report.html      # Per-match report with charts
-│   ├── season_report.html
-│   ├── login.html       # Login page
-│   ├── register.html    # Registration page
-│   ├── admin_users.html # Admin panel — user list and role management
-│   └── report_duplicate_numbers.html  # Duplicate shirt-number report
+│   ├── base.html                       # Layout wrapper (nav, sidebar, shared scripts)
+│   ├── _macros.html                    # Shared Jinja2 macros (filters, player picker section, etc.)
+│   ├── index.html                      # Home / dashboard
+│   ├── login.html / register.html      # Auth pages
+│   ├── game_setup.html / edit_game.html  # Create / edit a game
+│   ├── track.html                      # Live tracking grid
+│   ├── report.html                     # Per-match report with charts
+│   ├── season_report.html / season_list.html
+│   ├── player_report.html              # Cross-game player stats & position recommendations
+│   ├── roster_list.html / roster_detail.html / roster_form.html
+│   ├── roster_import.html / roster_import_federation.html
+│   ├── team_list.html / team_form.html / team_positions.html
+│   ├── position_weights_form.html      # Position-to-capability weight grid
+│   ├── training_groups.html / training_group_form.html / training_group_detail.html
+│   ├── kit_list.html / kit_detail.html / kit_form.html / kit_import.html / kit_log.html
+│   ├── report_duplicate_numbers.html   # Duplicate shirt-number report
+│   ├── conflicts.html                  # Sporthal / team-overlap / person conflict tabs
+│   └── admin_users.html                # Admin panel — user list and role management
 ├── static/
 │   ├── css/style.css
-│   ├── js/tracker.js    # Tracking grid interactions (click, long-press, set bar)
-│   ├── js/charts-common.js  # Shared chart constants: CAT_COLORS, RESULT_LABELS, axis defaults
-│   └── js/charts-report.js  # Shared chart infrastructure (registry, plugins, modal, mkChart)
+│   └── js/
+│       ├── tracker.js             # Tracking grid interactions (click, long-press, set bar, offline queue)
+│       ├── charts-common.js       # Shared chart constants: CAT_COLORS, RESULT_LABELS, axis defaults
+│       ├── charts-report.js       # Shared chart infrastructure (registry, plugins, modal, mkChart)
+│       ├── player-picker.js       # Reusable player-profile selector with duplicate guard
+│       └── filter-multiselect.js  # Excel-style include/exclude multi-checkbox filters
 └── README.md
 ```
 
@@ -56,6 +104,7 @@ PlayerStats/
 - Flask-Login 0.6+
 - Flask-Limiter 3.5+ (login rate limiting)
 - Flask-WTF 1.2+ (CSRF protection)
+- Requests 2.31+ (federation schedule XML fetching)
 - Gunicorn 21+ (production only)
 
 Install dependencies:
@@ -150,6 +199,8 @@ chmod +x deploy.sh
 6. Click **Report** to view the match report with stat tables and charts.
 7. Use the filter bar at the top of the report to switch between All, Main, Reserve, or individual sets.
 8. Navigate to **Seasons** from the home page for an aggregated season view.
+9. Use **Roster** to manage player profiles, remarks, and capability scores; **Teams** to manage club teams, trainers, and lineup positions; **Training Groups** to organise training cohorts.
+10. Use **Kit** to track equipment assignment and condition, and **Conflicts** to check for venue/schedule/roster double-bookings against the federation's match schedule.
 
 ## Database
 
@@ -194,18 +245,30 @@ git checkout main
 
 You can also trigger the Action manually from the **Actions** tab using **Run workflow**.
 
-
-
-| Table               | Description                                      |
-|---------------------|--------------------------------------------------|
-| `users`             | Trainer accounts (email, hashed password, role)  |
-| `games`             | One row per match (scoped to a user)             |
-| `players`           | Players registered per match                     |
-| `sets`              | Sets within a match (type, finished flag)        |
-| `events`            | Individual stat events (stat + result)           |
-| `seasons`           | Named seasons (scoped to a user)                 |
-| `club_teams`        | Club roster definitions (scoped to a user)       |
-| `club_team_players` | Players belonging to a club team                 |
+| Table | Description |
+|---|---|
+| `users` | Trainer/coordinator/admin/kit_manager accounts (email, hashed password, role, optional link to a player profile) |
+| `games` | One row per match (scoped to a user) |
+| `players` | Players registered per match, optionally linked to a `player_profiles` row |
+| `sets` | Sets within a match (type, finished flag) |
+| `events` | Individual stat events (stat + result) |
+| `seasons` | Named seasons |
+| `club_teams` | Club team definitions (name, division, short name, federation reeks code) |
+| `club_team_players` | Players belonging to a club team, season-aware |
+| `club_team_season_info` | Season-specific team metadata (short name, division) |
+| `club_team_trainers` | Trainer-to-team assignments |
+| `club_team_captain_order` | Captain/co-captain lineup order per team |
+| `club_team_captain_configured` | Flags whether a team's captain order has been manually set |
+| `player_profiles` | Central player database (name, DOB, number, status, positions, tags, notes, federation ID) |
+| `player_remarks` | Dated notes/observations on a player profile |
+| `player_capability_scores` | Player ratings on technical/personality traits (20–80 scale) |
+| `position_capability_weights` | Importance of each capability per position, used for position-fit and development-gap calculations |
+| `capabilities` | Master list of rateable traits (label, category, sort order, active flag) |
+| `training_groups` | Named training cohorts |
+| `training_group_players` | Player membership within a training group |
+| `kit_items` | Equipment inventory (model, type, size, number, status, condition, assignment) |
+| `kit_log` | Equipment action history (assigned/removed/maintenance) |
+| `federation_match_cache` | Cached federation (Volleyadmin2) match-schedule XML, used by conflict detection |
 
 ## Dependencies
 
@@ -214,3 +277,5 @@ You can also trigger the Action manually from the **Actions** tab using **Run wo
 | Chart.js | 4.4.2 | https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js |
 | chartjs-plugin-datalabels | 2.2.0 | https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js |
 | Flask-Limiter | 3.5+ | pip (`flask-limiter`) — in-memory rate limiter for `/login` |
+| Flask-WTF | 1.2+ | pip (`flask-wtf`) — CSRF protection on all forms |
+| Requests | 2.31+ | pip (`requests`) — fetches the federation match-schedule XML for conflict detection |
