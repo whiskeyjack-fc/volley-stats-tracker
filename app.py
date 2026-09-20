@@ -837,6 +837,10 @@ POSITION_TO_PROFILE_POS = {
     'receptie_hoek': 'outside',
     'opposite':      'opposite',
 }
+# Reverse of POSITION_TO_PROFILE_POS: a profile position key can map to more than one ranking position
+PROFILE_POS_TO_POSITIONS = {}
+for _pos, _profile_pos in POSITION_TO_PROFILE_POS.items():
+    PROFILE_POS_TO_POSITIONS.setdefault(_profile_pos, []).append(_pos)
 # First-draft seed weights for position_capability_weights; freely editable afterwards
 # via the /settings/position-weights page. Not required to sum to anything in particular.
 POSITION_CAPABILITY_WEIGHTS_SEED = {
@@ -898,6 +902,57 @@ def _capability_averages(db, player_ids):
             cap_bucket["raw"] = sum(scores) / len(scores)
             cap_bucket["rounded"] = int(round(cap_bucket["raw"] / 5) * 5)
     return result
+
+def _get_position_weights(db):
+    """{position: {capability: weight}} for currently-active capabilities."""
+    weights = {}
+    for row in db.execute(
+        "SELECT pcw.position, pcw.capability, pcw.weight FROM position_capability_weights pcw "
+        "JOIN capabilities c ON c.key = pcw.capability WHERE c.is_active=1"
+    ).fetchall():
+        weights.setdefault(row["position"], {})[row["capability"]] = row["weight"]
+    return weights
+
+def _weighted_gaps(scores, ranking_positions, weights, cap_labels, target=50, top_n=3):
+    """Top weighted below-target capabilities for a player, e.g. `{capability: raw_score}` in `scores`.
+
+    `gap = weight * max(0, target - score)`; capabilities with no score yet are skipped (no
+    baseline to judge), as are capabilities already at/above target. Deduplicated by capability,
+    keeping the position/weight pairing with the largest gap.
+    """
+    best = {}
+    for position in ranking_positions:
+        for capability, weight in weights.get(position, {}).items():
+            score = scores.get(capability)
+            if weight <= 0 or score is None or score >= target:
+                continue
+            gap = weight * (target - score)
+            if capability not in best or gap > best[capability]["gap"]:
+                best[capability] = {
+                    "capability": capability,
+                    "label":      cap_labels.get(capability, capability),
+                    "position":   position,
+                    "weight":     weight,
+                    "score":      score,
+                    "target":     target,
+                    "gap":        gap,
+                }
+    ranked = sorted(best.values(), key=lambda b: -b["gap"])
+    return ranked[:top_n]
+
+def _heat_class(avg):
+    """CSS bucket class for a roster-average score, used by the team_positions heatmap."""
+    if avg is None:
+        return ""
+    if avg < 35:
+        return "heat-very-low"
+    if avg < 45:
+        return "heat-low"
+    if avg < 55:
+        return "heat-mid"
+    if avg < 65:
+        return "heat-high"
+    return "heat-very-high"
 
 STAT_RESULTS = {
     "serve":    ["error", "1-serve", "2-serve", "3-serve", "ace"],
@@ -2306,7 +2361,7 @@ def team_list():
         ).fetchall()
         team_non_players[t["id"]] = [dict(r) for r in non_players]
         players = db.execute(
-            "SELECT ctp.name, ctp.number, ctp.roles, pp.positions FROM club_team_players ctp "
+            "SELECT ctp.name, COALESCE(pp.number, ctp.number) AS number, ctp.roles, pp.positions FROM club_team_players ctp "
             "LEFT JOIN player_profiles pp ON pp.id = ctp.profile_id "
             "WHERE ctp.team_id=? AND ctp.season_id=? "
             "AND (ctp.roles IS NULL OR ctp.roles = '' OR ctp.roles LIKE '%player%') "
@@ -2533,7 +2588,7 @@ def team_positions(team_id):
     season_id = season_row["season_id"] if season_row else None
 
     roster = db.execute(
-        "SELECT ctp.profile_id, ctp.name, ctp.number, pp.positions FROM club_team_players ctp "
+        "SELECT ctp.profile_id, ctp.name, pp.number, pp.positions FROM club_team_players ctp "
         "LEFT JOIN player_profiles pp ON pp.id = ctp.profile_id "
         "WHERE ctp.team_id=? AND ctp.season_id IS ? AND ctp.profile_id IS NOT NULL "
         "AND (ctp.roles IS NULL OR ctp.roles = '' OR ctp.roles LIKE '%player%') "
@@ -2553,19 +2608,25 @@ def team_positions(team_id):
         for pid in profile_ids
     }
 
-    weights = {}
-    for row in db.execute(
-        "SELECT pcw.position, pcw.capability, pcw.weight FROM position_capability_weights pcw "
-        "JOIN capabilities c ON c.key = pcw.capability WHERE c.is_active=1"
-    ).fetchall():
-        weights.setdefault(row["position"], {})[row["capability"]] = row["weight"]
+    weights = _get_position_weights(db)
 
-    cap_labels = {cap["key"]: cap["label_nl"] for cap in _get_capabilities(db)}
+    capabilities = _get_capabilities(db)
+    cap_labels = {cap["key"]: cap["label_nl"] for cap in capabilities}
+    technical_caps = [cap for cap in capabilities if cap["category"] == "technical"]
+    technical_cap_labels = [cap["label_nl"] for cap in technical_caps]
+    # Compare-players radar: technical scores only, in a stable order matching technical_cap_labels
+    compare_scores = {
+        pid: [scores_by_player.get(pid, {}).get(cap["key"]) for cap in technical_caps]
+        for pid in profile_ids
+    }
 
     rankings = {}
+    heatmap = {}
+    heatmap_caps_seen = set()
     for position in POSITIONS:
         pos_weights = weights.get(position, {})
         ranked = []
+        eligible_scores = {}
         profile_pos = POSITION_TO_PROFILE_POS.get(position, position)
         for r in roster:
             if profile_pos not in positions_by_player.get(r["profile_id"], set()):
@@ -2580,6 +2641,7 @@ def team_positions(team_id):
                     num += w * score
                     den += w
                     breakdown.append((w, cap_labels.get(cap, cap), score))
+                    eligible_scores.setdefault(cap, []).append(score)
             raw = (num / den) if den > 0 else None
             breakdown.sort(key=lambda b: -b[0])
             tooltip_lines = [f"{label}: gewicht {w}, score {score}" for w, label, score in breakdown]
@@ -2594,10 +2656,27 @@ def team_positions(team_id):
                 "tooltip":    "\n".join(tooltip_lines),
             })
         ranked.sort(key=lambda p: (p["raw_score"] is None, -(p["raw_score"] or 0)))
-        rankings[position] = ranked[:5]
+        rankings[position] = ranked
 
-    # Kapitein: manual drag order, capped to a top-5 shortlist; the rest are
-    # offered in an "add" dropdown so the coach can swap someone in/out
+        # Weak-spot heatmap: roster-average score per capability, among players who play this position
+        pos_heat = {}
+        for cap, w in pos_weights.items():
+            if w <= 0:
+                continue
+            heatmap_caps_seen.add(cap)
+            scores_list = eligible_scores.get(cap, [])
+            avg = sum(scores_list) / len(scores_list) if scores_list else None
+            pos_heat[cap] = {
+                "avg":     avg,
+                "rounded": int(round(avg / 5) * 5) if avg is not None else None,
+                "weight":  w,
+                "heat_class": _heat_class(avg),
+            }
+        heatmap[position] = pos_heat
+    heatmap_caps = [cap["key"] for cap in capabilities if cap["key"] in heatmap_caps_seen]
+
+    # Kapitein: manual drag order shortlist; the rest are offered in an
+    # "add" dropdown so the coach can swap someone in/out
     captain_order_ids = [r["profile_id"] for r in db.execute(
         "SELECT profile_id FROM club_team_captain_order WHERE team_id=? ORDER BY sort_order",
         (team_id,)
@@ -2611,10 +2690,10 @@ def team_positions(team_id):
         # an explicit order was saved before (even an emptied-out one) — never
         # auto-fill missing slots with other roster players, or removing
         # everyone would just bring players back in
-        captain_shortlist = captain_ordered[:5]
+        captain_shortlist = captain_ordered
     else:
-        # nothing saved yet — default the shortlist to the first 5 players
-        captain_shortlist = roster[:5]
+        # nothing saved yet — default the shortlist to the full roster
+        captain_shortlist = list(roster)
     shortlist_ids = {p["profile_id"] for p in captain_shortlist}
     captain_available = sorted(
         (r for r in roster if r["profile_id"] not in shortlist_ids),
@@ -2624,6 +2703,11 @@ def team_positions(team_id):
     return render_template("team_positions.html",
         team=team,
         rankings=rankings,
+        heatmap=heatmap,
+        heatmap_caps=heatmap_caps,
+        cap_labels=cap_labels,
+        technical_cap_labels=technical_cap_labels,
+        compare_scores=compare_scores,
         captain_shortlist=captain_shortlist,
         captain_available=captain_available,
         POSITIONS=POSITIONS,
@@ -2668,12 +2752,16 @@ def api_team_players(team_id):
     season_id = request.args.get("season_id", type=int)
     if season_id is not None:
         players = db.execute(
-            "SELECT name, number, profile_id FROM club_team_players WHERE team_id=? AND season_id=? ORDER BY name COLLATE NOCASE",
+            "SELECT ctp.name, COALESCE(pp.number, ctp.number) AS number, ctp.profile_id FROM club_team_players ctp "
+            "LEFT JOIN player_profiles pp ON pp.id = ctp.profile_id "
+            "WHERE ctp.team_id=? AND ctp.season_id=? ORDER BY ctp.name COLLATE NOCASE",
             (team_id, season_id)
         ).fetchall()
     else:
         players = db.execute(
-            "SELECT name, number, profile_id FROM club_team_players WHERE team_id=? AND season_id IS NULL ORDER BY name COLLATE NOCASE",
+            "SELECT ctp.name, COALESCE(pp.number, ctp.number) AS number, ctp.profile_id FROM club_team_players ctp "
+            "LEFT JOIN player_profiles pp ON pp.id = ctp.profile_id "
+            "WHERE ctp.team_id=? AND ctp.season_id IS NULL ORDER BY ctp.name COLLATE NOCASE",
             (team_id,)
         ).fetchall()
     return jsonify([dict(p) for p in players])
@@ -3249,6 +3337,37 @@ def roster_detail(profile_id):
             (profile_id, current_user.id, profile_id, current_user.id)
         ).fetchall()
     }
+    cap_labels = {cap["key"]: cap["label_nl"] for cap in capabilities}
+
+    # Radar snapshot: technical capabilities only, kept to a legible number of axes
+    technical_caps = [cap for cap in capabilities if cap["category"] == "technical"]
+    capability_radar_labels = [cap["label_nl"] for cap in technical_caps]
+    capability_radar_scores = [capability_averages.get(cap["key"], {}).get("raw") for cap in technical_caps]
+    _rated_radar_scores = [s for s in capability_radar_scores if s is not None]
+    capability_radar_avg = sum(_rated_radar_scores) / len(_rated_radar_scores) if _rated_radar_scores else None
+    capability_radar_avg_rounded = (
+        int(round(capability_radar_avg / 5) * 5) if capability_radar_avg is not None else None
+    )
+
+    # Overall trend: per calendar day, mean of every rater's score across all capabilities that day
+    daily_scores = {}
+    for row in capability_history_rows:
+        daily_scores.setdefault(row["created_at"][:10], []).append(row["score"])
+    overall_trend = [
+        {"date": day, "avg": sum(scores) / len(scores)}
+        for day, scores in sorted(daily_scores.items())
+    ]
+
+    # Training focus: weighted below-target capabilities for the position(s) this player plays
+    profile_positions = set()
+    for p in (profile["positions"] or "").split(","):
+        p = p.strip()
+        if p in PROFILE_POS_TO_POSITIONS:
+            profile_positions.update(PROFILE_POS_TO_POSITIONS[p])
+    training_priorities = _weighted_gaps(
+        {cap: bucket["raw"] for cap, bucket in capability_averages.items()},
+        profile_positions, _get_position_weights(db), cap_labels
+    )
 
     # Coaching badge: users whose profile_id = this player, with their teams
     coaching_users = db.execute(
@@ -3296,6 +3415,13 @@ def roster_detail(profile_id):
         capability_averages=capability_averages,
         own_capability_scores=own_capability_scores,
         capability_history=capability_history,
+        capability_radar_labels=capability_radar_labels,
+        capability_radar_scores=capability_radar_scores,
+        capability_radar_avg=capability_radar_avg,
+        capability_radar_avg_rounded=capability_radar_avg_rounded,
+        overall_trend=overall_trend,
+        training_priorities=training_priorities,
+        POSITION_NL=POSITION_NL,
         can_edit_capabilities=can_add,
         CAPABILITY_SCORE_NL=CAPABILITY_SCORE_NL,
         CAPABILITY_GRADES=CAPABILITY_GRADES,
@@ -4166,6 +4292,88 @@ def kit_add_log(item_id):
     return redirect(url_for("kit_detail", item_id=item_id))
 
 
+_KIT_STATUS_CHANGE_RE = re.compile(r"Status changed from '(.+?)' to '(.+?)'")
+
+
+def _kit_status_history_chart_data():
+    """Daily/weekly/monthly item counts per status, reconstructed from kit_log."""
+    db = get_db()
+    items = db.execute(
+        "SELECT id, status, created_at FROM kit_items"
+    ).fetchall()
+    if not items:
+        return {"labels": [], "datasets": {}}
+
+    logs = db.execute(
+        "SELECT item_id, action, note, created_at FROM kit_log "
+        "WHERE action IN ('remark', 'deleted') ORDER BY item_id, created_at"
+    ).fetchall()
+
+    changes_by_item = {}
+    removed_at = {}
+    for row in logs:
+        if row["action"] == "deleted":
+            removed_at[row["item_id"]] = row["created_at"][:10]
+            continue
+        m = row["note"] and _KIT_STATUS_CHANGE_RE.match(row["note"])
+        if m:
+            changes_by_item.setdefault(row["item_id"], []).append(
+                (row["created_at"][:10], m.group(1), m.group(2))
+            )
+
+    timelines = []  # (created_date, [(change_date, to_status), ...], initial_status, removed_date)
+    for item in items:
+        changes = sorted(changes_by_item.get(item["id"], []), key=lambda c: c[0])
+        initial_status = changes[0][1] if changes else item["status"]
+        transitions = [(c[0], c[2]) for c in changes]
+        timelines.append((
+            item["created_at"][:10], transitions, initial_status,
+            removed_at.get(item["id"])
+        ))
+
+    start_date = min(t[0] for t in timelines)
+    today = datetime.now(UTC).date().isoformat()
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(today, "%Y-%m-%d").date()
+    span_days = (end - start).days
+
+    if span_days <= 90:
+        step, fmt = timedelta(days=1), "%d/%m/%Y"
+    elif span_days <= 400:
+        step, fmt = timedelta(days=7), "%d/%m/%Y"
+    else:
+        step, fmt = timedelta(days=30), "%m/%Y"
+
+    buckets = []
+    d = start
+    while d <= end:
+        buckets.append(d)
+        d += step
+    if buckets[-1] != end:
+        buckets.append(end)
+
+    labels = [b.strftime(fmt) for b in buckets]
+    counts = {status: [0] * len(buckets) for status in KIT_STATUSES}
+
+    for created_date, transitions, initial_status, removed_date in timelines:
+        for bi, b in enumerate(buckets):
+            b_iso = b.isoformat()
+            if b_iso < created_date:
+                continue
+            if removed_date and b_iso >= removed_date:
+                continue
+            status = initial_status
+            for change_date, to_status in transitions:
+                if change_date <= b_iso:
+                    status = to_status
+                else:
+                    break
+            if status in counts:
+                counts[status][bi] += 1
+
+    return {"labels": labels, "datasets": counts}
+
+
 @app.route("/kit/log")
 @login_required
 def kit_log_page():
@@ -4221,6 +4429,7 @@ def kit_log_page():
         "SELECT id, name FROM club_teams ORDER BY name COLLATE NOCASE"
     ).fetchall()
     KIT_ACTIONS = ['created', 'assigned', 'unassigned', 'remark', 'deleted']
+    status_history = _kit_status_history_chart_data()
 
     return render_template(
         "kit_log.html",
@@ -4229,6 +4438,7 @@ def kit_log_page():
         all_teams=all_teams,
         KIT_ACTIONS=KIT_ACTIONS,
         KIT_TYPES=KIT_TYPES,
+        status_history=status_history,
         f_kit_type=f_kit_type,
         f_team=f_team,
         f_profile=f_profile,

@@ -94,6 +94,10 @@
   {% endif %}
 </div>
 
+<div style="margin:0.75rem 0">
+  <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Terug naar ledenlijst</a>
+</div>
+
 {# ── Remarks ─────────────────────────────────────────────────────────────── #}
 {% if not is_kit_manager() %}
 <div class="card">
@@ -195,6 +199,39 @@
 {% if not is_kit_manager() and not profile.is_staff %}
 <div class="card" style="margin-top:1rem">
   <h2>Vaardigheden</h2>
+
+  {% if training_priorities %}
+  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+              padding:.75rem .9rem;margin-bottom:1rem">
+    <h3 style="margin:0 0 .4rem;font-size:0.9rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)">Trainingsfocus</h3>
+    <ul style="margin:0;padding-left:1.1rem;font-size:0.88rem">
+      {% for tp in training_priorities %}
+      <li>{{ tp.label }} — score {{ tp.score | round | int }} (doel {{ tp.target }}) voor {{ POSITION_NL.get(tp.position, tp.position) }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if capability_averages %}
+  <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:1rem">
+    <div class="chart-card" style="flex:1;min-width:260px;max-width:480px">
+      <div class="chart-title" style="display:flex;justify-content:space-between;align-items:center;text-transform:none">
+        <span style="text-transform:uppercase;letter-spacing:.05em">Profiel</span>
+        {% if capability_radar_avg_rounded is not none %}
+        <span style="font-size:0.95rem;font-weight:700;color:var(--accent)">
+          {{ capability_radar_avg_rounded }} <span style="font-weight:400;color:var(--muted);font-size:0.78rem">· {{ CAPABILITY_SCORE_NL[capability_radar_avg_rounded] }}</span>
+        </span>
+        {% endif %}
+      </div>
+      <div class="chart-body" style="height:260px"><canvas id="cap-radar-{{ profile.id }}"></canvas></div>
+    </div>
+    <div class="chart-card" style="flex:1;min-width:260px;max-width:480px">
+      <div class="chart-title">Trend</div>
+      <div class="chart-body" style="height:260px"><canvas id="cap-trend-{{ profile.id }}"></canvas></div>
+    </div>
+  </div>
+  {% endif %}
+
   <form method="POST" action="{{ url_for('roster_add_capabilities', profile_id=profile.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="table-scroll-wrap">
@@ -389,10 +426,6 @@
 </div>
 {% endif %}{# end can_manage_kit() or is_kit_manager() #}
 
-<div style="margin-top:0.75rem">
-  <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Terug naar ledenlijst</a>
-</div>
-
 <script>
 (function () {
   const tabs = document.querySelectorAll('.tab-btn');
@@ -422,4 +455,68 @@
   }
 })();
 </script>
+
+{% if capability_averages %}
+<!-- ── Full-screen chart focus modal ──────────────── -->
+<div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title" hidden>
+  <div class="chart-modal-card">
+    <div class="chart-modal-header">
+      <span id="chart-modal-title" class="chart-modal-title-text"></span>
+      <button id="chart-modal-close" class="chart-modal-close" title="Sluiten">✕</button>
+    </div>
+    <div id="chart-modal-body" class="chart-modal-body"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/charts-common.js') }}"></script>
+<script>
+(function () {
+  const cssAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  const radarLabels = {{ capability_radar_labels | tojson }};
+  const radarScores = {{ capability_radar_scores | tojson }};
+  const trend = {{ overall_trend | tojson }};
+
+  if (radarScores.some(v => v !== null)) {
+    mkChart('cap-radar-{{ profile.id }}', {
+      type: 'radar',
+      data: {
+        labels: radarLabels,
+        datasets: [{
+          label: 'Gemiddelde score', data: radarScores,
+          backgroundColor: cssAccent + '33', borderColor: cssAccent, pointBackgroundColor: cssAccent,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { r: {
+          min: 0, max: 100, ticks: { stepSize: 20, color: '#8891b2', backdropColor: 'transparent' },
+          grid: { color: 'rgba(255,255,255,.08)' }, angleLines: { color: 'rgba(255,255,255,.08)' },
+          pointLabels: { color: '#8891b2', font: { size: 10 } },
+        } },
+      },
+    });
+  }
+
+  if (trend.length >= 2) {
+    mkChart('cap-trend-{{ profile.id }}', {
+      type: 'line',
+      data: {
+        labels: trend.map(t => t.date),
+        datasets: [{
+          label: 'Gemiddelde score', data: trend.map(t => t.avg),
+          borderColor: cssAccent, backgroundColor: cssAccent + '33', tension: .25, fill: true,
+        }],
+      },
+      options: { ...base, plugins: { legend: { display: false } }, scales: { x: xAxis, y: { ...yAxis, min: 20, max: 80 } } },
+    });
+  } else {
+    const card = document.getElementById('cap-trend-{{ profile.id }}').closest('.chart-card');
+    card.innerHTML = '<div class="chart-title">Trend</div><p style="color:var(--muted);font-size:0.85rem">Onvoldoende data voor een trendlijn.</p>';
+  }
+
+  initChartModalListeners();
+})();
+</script>
+{% endif %}
 {% endblock %}

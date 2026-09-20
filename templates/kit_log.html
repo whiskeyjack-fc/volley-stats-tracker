@@ -3,6 +3,7 @@
 {% block title %}Materiaallog — VolleyStats{% endblock %}
 {% block content %}
 {% set KIT_ACTION_NL = {'created': 'Aangemaakt', 'assigned': 'Toegewezen', 'unassigned': 'Niet toegewezen', 'deleted': 'Verwijderd', 'edited': 'Bewerkt', 'remark': 'Opmerking'} %}
+{% set KIT_STATUS_NL = {'in stock': 'Op voorraad', 'assigned': 'Toegewezen', 'lost': 'Verloren', 'retired': 'Afgeschreven'} %}
 
 <div class="sticky-page-header">
 <div class="page-header">
@@ -43,6 +44,13 @@
   <button type="submit" class="btn btn-sm">Filteren</button>
 </form>
 </div>{# /.sticky-page-header #}
+
+<div class="charts-row charts-row-wide">
+  <div class="chart-card" style="flex:1">
+    <div class="chart-title">Materiaal in tijd, per status</div>
+    <div class="chart-body"><canvas id="kit-status-chart"></canvas></div>
+  </div>
+</div>
 
 <div class="table-scroll-wrap">
   <table class="sticky-col-head" style="width:100%;border-collapse:collapse;font-size:0.9rem">
@@ -89,4 +97,52 @@
     </tbody>
   </table>
 </div>
+
+<div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title" hidden>
+  <div class="chart-modal-card">
+    <div class="chart-modal-header">
+      <span id="chart-modal-title" class="chart-modal-title-text"></span>
+      <button id="chart-modal-close" class="chart-modal-close" title="Sluiten">✕</button>
+    </div>
+    <div id="chart-modal-body" class="chart-modal-body"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/charts-common.js') }}"></script>
+<script>
+(function () {
+  const KIT_STATUS_NL = {'in stock': 'Op voorraad', 'assigned': 'Toegewezen', 'lost': 'Verloren', 'retired': 'Afgeschreven'};
+  const STATUS_ORDER = ['in stock', 'assigned', 'lost', 'retired'];
+  const rootStyle = getComputedStyle(document.documentElement);
+  const STATUS_COLOR = {
+    'in stock': rootStyle.getPropertyValue('--green').trim(),
+    'assigned': rootStyle.getPropertyValue('--accent').trim(),
+    'lost':     rootStyle.getPropertyValue('--red').trim(),
+    'retired':  rootStyle.getPropertyValue('--muted').trim(),
+  };
+  const history = {{ status_history | tojson }};
+  const datasets = STATUS_ORDER.filter(status => status in history.datasets).map((status, i) => {
+    const color = STATUS_COLOR[status] || rootStyle.getPropertyValue('--gray').trim();
+    return {
+      label: KIT_STATUS_NL[status] || status,
+      data: history.datasets[status], stack: "status",
+      fill: i === 0 ? "origin" : "-1", tension: 0.15, pointRadius: 0,
+      borderColor: color, backgroundColor: color + "33", borderWidth: 2,
+    };
+  });
+  mkChart("kit-status-chart", {
+    type: "line",
+    data: { labels: history.labels, datasets },
+    options: {
+      ...base,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: { ...xAxis, stacked: true },
+        y: { ...yAxis, stacked: true, beginAtZero: true, ticks: { ...yAxis.ticks, precision: 0 } },
+      },
+    },
+  });
+  initChartModalListeners();
+})();
+</script>
 {% endblock %}

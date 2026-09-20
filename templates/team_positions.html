@@ -10,11 +10,14 @@
 
 <div class="position-rank-grid">
   {% for pos in POSITIONS %}
-  <div class="card">
+  <div class="card{{ ' card-wide' if rankings[pos]|length > 8 else '' }}">
     <h3 style="margin-top:0">{{ POSITION_NL.get(pos, pos) }}</h3>
     {% if rankings[pos] %}
+    <div class="rank-list{{ ' rank-list-compact' if rankings[pos]|length > 8 else '' }}">
     {% for p in rankings[pos] %}
     <div class="rank-row">
+      <input type="checkbox" class="compare-checkbox" data-profile-id="{{ p.profile_id }}"
+             data-label="{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}">
       <span class="rank-num">{{ loop.index }}</span>
       <span style="flex:1"><a href="{{ url_for('roster_detail', profile_id=p.profile_id) }}">{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}</a></span>
       {% if p.score is not none %}
@@ -24,16 +27,19 @@
       {% endif %}
     </div>
     {% endfor %}
+    </div>
     {% else %}
     <p style="color:var(--muted);font-size:0.85rem">Geen spelers.</p>
     {% endif %}
   </div>
   {% endfor %}
+</div>
 
-  {# ── Kapitein: manual drag order, capped to a top-5 shortlist ────────── #}
+<div class="captain-compare-row{{ '' if technical_cap_labels else ' captain-compare-row-solo' }}">
+  {# ── Kapitein: manual drag order shortlist ────────── #}
   <div class="card">
     <h3 style="margin-top:0">Kapitein</h3>
-    <p style="color:var(--muted);font-size:0.78rem;margin-top:0">Sleep om de volgorde aan te passen. Maximaal 5 kandidaten &mdash; gebruik ✕ en de keuzelijst om te wisselen.</p>
+    <p style="color:var(--muted);font-size:0.78rem;margin-top:0">Sleep om de volgorde aan te passen &mdash; gebruik ✕ en de keuzelijst om te wisselen.</p>
     <form id="captain-order-form" method="POST" action="{{ url_for('team_captain_order', team_id=team.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div id="captain-drag-list">
@@ -49,7 +55,7 @@
       {% if not captain_shortlist %}
       <p style="color:var(--muted);font-size:0.85rem">Geen spelers.</p>
       {% endif %}
-      <div id="captain-add-row" style="display:flex;gap:.4rem;margin-top:.6rem" {% if captain_shortlist|length >= 5 %}hidden{% endif %}>
+      <div id="captain-add-row" style="display:flex;gap:.4rem;margin-top:.6rem" {% if not captain_available %}hidden{% endif %}>
         <select id="captain-add-select"
                 style="flex:1;background:var(--surface2);border:1px solid var(--border);
                        border-radius:var(--radius);color:var(--fg);padding:.3rem .5rem;font-size:0.85rem">
@@ -62,7 +68,59 @@
       </div>
     </form>
   </div>
+
+  {# ── Vergelijk spelers: overlay full capability profiles for lineup decisions ── #}
+  {# Placed next to Kapitein since the checkboxes it reads live on the position rank rows above ── #}
+  {% if technical_cap_labels %}
+  <div class="card">
+    <h3 style="margin-top:0">Vergelijk spelers</h3>
+    <p style="color:var(--muted);font-size:0.8rem;margin-top:0">
+      Vink hierboven spelers aan (max. 4) om hun volledige vaardigheidsprofiel te vergelijken &mdash; handig bij opstellingskeuzes.
+    </p>
+    <div class="chart-card" style="max-width:480px;margin:0 auto">
+      <div class="chart-title">Profielvergelijking</div>
+      <div class="chart-body" style="height:320px"><canvas id="compare-radar"></canvas></div>
+    </div>
+  </div>
+  {% endif %}
 </div>
+
+{# ── Zwakke plekken: roster-average score per capability, per position ── #}
+{% if heatmap_caps %}
+<div class="card" style="margin-top:1rem">
+  <h3 style="margin-top:0">Zwakke plekken</h3>
+  <p style="color:var(--muted);font-size:0.8rem;margin-top:0">
+    Gemiddelde score van de spelers die deze positie spelen, per vaardigheid. Rood = onder het
+    gemiddelde (50), groen = erboven &mdash; gebruik dit om een trainingsthema te kiezen.
+  </p>
+  <div class="table-scroll-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Vaardigheid</th>
+          {% for pos in POSITIONS %}
+          <th>{{ POSITION_NL.get(pos, pos) }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for cap in heatmap_caps %}
+        <tr>
+          <td>{{ cap_labels.get(cap, cap) }}</td>
+          {% for pos in POSITIONS %}
+          {% set cell = heatmap.get(pos, {}).get(cap) %}
+          <td class="{{ cell.heat_class if cell else '' }}" style="text-align:center">
+            {% if cell and cell.rounded is not none %}{{ cell.rounded }}{% else %}&ndash;{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -75,8 +133,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var dragged = null;
 
   function updateAddVisibility() {
-    var count = list.querySelectorAll('.captain-drag-item').length;
-    addRow.hidden = count >= 5;
+    addRow.hidden = addSelect.options.length <= 1;
   }
 
   function wireRow(item) {
@@ -136,5 +193,74 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 </script>
+
+{% if technical_cap_labels %}
+<!-- ── Full-screen chart focus modal ──────────────── -->
+<div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title" hidden>
+  <div class="chart-modal-card">
+    <div class="chart-modal-header">
+      <span id="chart-modal-title" class="chart-modal-title-text"></span>
+      <button id="chart-modal-close" class="chart-modal-close" title="Sluiten">✕</button>
+    </div>
+    <div id="chart-modal-body" class="chart-modal-body"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/charts-common.js') }}"></script>
+<script>
+(function () {
+  var capLabels     = {{ technical_cap_labels | tojson }};
+  var compareScores = {{ compare_scores | tojson }};
+  var palette = ['--accent', '--green', '--attack-accent', '--block-accent'].map(function (v) {
+    return getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  });
+  var MAX_COMPARE  = 4;
+  var checkboxes   = document.querySelectorAll('.compare-checkbox');
+  var compareChart = null;
+
+  function selected() {
+    return Array.from(checkboxes).filter(function (cb) { return cb.checked; });
+  }
+
+  function renderCompare() {
+    var datasets = selected().map(function (cb, i) {
+      var color = palette[i % palette.length];
+      return {
+        label: cb.dataset.label,
+        data: compareScores[cb.dataset.profileId] || [],
+        borderColor: color, backgroundColor: color + '33', pointBackgroundColor: color,
+      };
+    });
+    if (compareChart) compareChart.destroy();
+    compareChart = mkChart('compare-radar', {
+      type: 'radar',
+      data: { labels: capLabels, datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#8891b2', font: { size: 10 } } } },
+        scales: { r: {
+          min: 0, max: 100, ticks: { stepSize: 20, color: '#8891b2', backdropColor: 'transparent' },
+          grid: { color: 'rgba(255,255,255,.08)' }, angleLines: { color: 'rgba(255,255,255,.08)' },
+          pointLabels: { color: '#8891b2', font: { size: 10 } },
+        } },
+      },
+    });
+  }
+
+  checkboxes.forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      if (selected().length > MAX_COMPARE) {
+        cb.checked = false;
+        return;
+      }
+      renderCompare();
+    });
+  });
+
+  renderCompare();
+  initChartModalListeners();
+})();
+</script>
+{% endif %}
 {% endblock %}
 

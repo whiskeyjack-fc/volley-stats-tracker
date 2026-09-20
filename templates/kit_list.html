@@ -110,7 +110,7 @@
          class="filter-search" style="max-width:14rem" />
 
   <button type="submit" class="btn btn-sm">Filteren</button>
-  <a href="{{ url_for('kit_list', reset=1) }}" class="btn btn-sm btn-outline">Alles tonen</a>
+  <a href="{{ url_for('kit_list', reset=1) }}" class="btn btn-sm btn-outline" onclick="try{localStorage.removeItem('kit-sort-v1')}catch(_){}">Alles tonen</a>
 </form>
 </div>{# /.sticky-page-header #}
 
@@ -330,50 +330,73 @@ select.ec-input { cursor:pointer; }
 document.addEventListener('DOMContentLoaded', function () {
   var table = document.querySelector('.table-scroll-wrap table.sticky-col-head');
   if (!table) return;
-  table.querySelectorAll('th[data-sort-type]').forEach(function (th) {
+  var STORAGE_KEY = 'kit-sort-v1';
+  var headers = table.querySelectorAll('th[data-sort-type]');
+
+  function colIndexOf(th) {
+    return Array.prototype.indexOf.call(th.parentElement.children, th);
+  }
+
+  function applySort(th, dir) {
+    var colIndex = colIndexOf(th);
+    var type = th.getAttribute('data-sort-type');
+    var asc = dir === 'asc';
+    headers.forEach(function (h) {
+      h.removeAttribute('data-sort-dir');
+      var a = h.querySelector('.sort-arrow');
+      if (a) a.textContent = '';
+    });
+    th.setAttribute('data-sort-dir', dir);
+    var arrow = th.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = asc ? '\u25B2' : '\u25BC';
+    var tbody = table.querySelector('tbody');
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+    rows.sort(function (r1, r2) {
+      var c1 = r1.children[colIndex], c2 = r2.children[colIndex];
+      if (!c1 || !c2) return 0;
+      if (type === 'number') {
+        var n1 = parseFloat(c1.textContent);
+        var n2 = parseFloat(c2.textContent);
+        var v1 = isNaN(n1) ? -Infinity : n1;
+        var v2 = isNaN(n2) ? -Infinity : n2;
+        return asc ? v1 - v2 : v2 - v1;
+      }
+      if (type === 'date') {
+        var d1 = c1.dataset.sortValue || '';
+        var d2 = c2.dataset.sortValue || '';
+        if (d1 < d2) return asc ? -1 : 1;
+        if (d1 > d2) return asc ? 1 : -1;
+        return 0;
+      }
+      var t1 = c1.textContent.trim().toLowerCase();
+      var t2 = c2.textContent.trim().toLowerCase();
+      if (t1 < t2) return asc ? -1 : 1;
+      if (t1 > t2) return asc ? 1 : -1;
+      return 0;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+  }
+
+  headers.forEach(function (th) {
     th.classList.add('sortable');
     var arrow = document.createElement('span');
     arrow.className = 'sort-arrow';
     th.appendChild(arrow);
     th.addEventListener('click', function () {
-      var colIndex = Array.prototype.indexOf.call(th.parentElement.children, th);
-      var type = th.getAttribute('data-sort-type');
-      var asc = th.getAttribute('data-sort-dir') !== 'asc';
-      table.querySelectorAll('th[data-sort-type]').forEach(function (h) {
-        h.removeAttribute('data-sort-dir');
-        var a = h.querySelector('.sort-arrow');
-        if (a) a.textContent = '';
-      });
-      th.setAttribute('data-sort-dir', asc ? 'asc' : 'desc');
-      arrow.textContent = asc ? '\u25B2' : '\u25BC';
-      var tbody = table.querySelector('tbody');
-      var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
-      rows.sort(function (r1, r2) {
-        var c1 = r1.children[colIndex], c2 = r2.children[colIndex];
-        if (!c1 || !c2) return 0;
-        if (type === 'number') {
-          var n1 = parseFloat(c1.textContent);
-          var n2 = parseFloat(c2.textContent);
-          var v1 = isNaN(n1) ? -Infinity : n1;
-          var v2 = isNaN(n2) ? -Infinity : n2;
-          return asc ? v1 - v2 : v2 - v1;
-        }
-        if (type === 'date') {
-          var d1 = c1.dataset.sortValue || '';
-          var d2 = c2.dataset.sortValue || '';
-          if (d1 < d2) return asc ? -1 : 1;
-          if (d1 > d2) return asc ? 1 : -1;
-          return 0;
-        }
-        var t1 = c1.textContent.trim().toLowerCase();
-        var t2 = c2.textContent.trim().toLowerCase();
-        if (t1 < t2) return asc ? -1 : 1;
-        if (t1 > t2) return asc ? 1 : -1;
-        return 0;
-      });
-      rows.forEach(function (r) { tbody.appendChild(r); });
+      var dir = th.getAttribute('data-sort-dir') !== 'asc' ? 'asc' : 'desc';
+      applySort(th, dir);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({colIndex: colIndexOf(th), dir: dir})); } catch (_) {}
     });
   });
+
+  try {
+    var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (saved) {
+      var savedTh = null;
+      headers.forEach(function (h) { if (colIndexOf(h) === saved.colIndex) savedTh = h; });
+      if (savedTh) applySort(savedTh, saved.dir);
+    }
+  } catch (_) {}
 });
 </script>
 <script src="{{ url_for('static', filename='js/filter-multiselect.js') }}"></script>
