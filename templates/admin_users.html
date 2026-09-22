@@ -132,6 +132,7 @@
       searchInput.value = '';
       rebuildOptions(select, '', currentVal);
       select.size = Math.min(8, select.options.length);
+      positionSelect(searchInput, select);
       select.style.display = 'block';
     });
 
@@ -146,6 +147,7 @@
     searchInput.addEventListener('blur', function () {
       setTimeout(function () {
         select.size = 1;
+        select.style.display = 'none';
         if (!select.value) { searchInput.value = ''; }
         else { searchInput.value = PROFILE_LABELS[select.value] || ''; }
       }, 200);
@@ -172,6 +174,14 @@
       }
     });
     select.size = Math.min(8, select.options.length);
+  }
+
+  // Reposition the fixed-position listbox under the search box it belongs to
+  function positionSelect(searchInput, select) {
+    var rect = searchInput.getBoundingClientRect();
+    select.style.left = rect.left + 'px';
+    select.style.top = (rect.bottom + 2) + 'px';
+    select.style.width = rect.width + 'px';
   }
 })();
 </script>

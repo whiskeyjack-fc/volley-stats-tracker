@@ -495,6 +495,15 @@ button.set-chip { font: inherit; line-height: 1; }
 }
 .filter-select:focus { outline: none; border-color: var(--accent); }
 
+/* ── Admin users: profile search-combobox (search input overlays a real <select>) ── */
+/* position:fixed (not absolute) so the expanded listbox escapes the table's
+   overflow-x:auto wrapper instead of being clipped and adding a scrollbar. */
+.profile-select-wrap .profile-select {
+  position: fixed;
+  z-index: 1000;
+  display: none;
+}
+
 /* ── Excel-style multi-select filter dropdown ───────────────── */
 .ms-select {
   position: relative;
