@@ -82,6 +82,7 @@
   });
 
   // ── Club team selector ───────────────────────────────────────
+  const seasonSelect    = document.getElementById('season-select');
   const teamSelect      = document.getElementById('team-select');
   const teamValue       = document.getElementById('team-value');
   const newTeamInline   = document.getElementById('new-team-inline');
@@ -95,7 +96,25 @@
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  teamSelect.addEventListener('change', async () => {
+  async function loadTeamPlayers() {
+    const teamId = document.getElementById('club-team-id-value').value;
+    if (!teamId) return;
+    try {
+      const sid = seasonIdMap[seasonSelect.value];
+      const apiUrl = sid ? `/api/teams/${teamId}/players?season_id=${sid}` : `/api/teams/${teamId}/players`;
+      const res = await fetch(apiUrl);
+      const players = await res.json();
+      playersBody.innerHTML = '';
+      players.forEach(p => {
+        playersBody.appendChild(_makePlayerRow(p.profile_id || null));
+      });
+      refreshSelects();
+    } catch (err) {
+      console.error('Failed to fetch team players', err);
+    }
+  }
+
+  teamSelect.addEventListener('change', () => {
     const selectedOpt = teamSelect.options[teamSelect.selectedIndex];
     const teamId = selectedOpt.dataset.id;
     if (teamSelect.value === '__new__') {
@@ -109,23 +128,10 @@
     teamError.style.display = 'none';
     teamValue.value = teamSelect.value;
     document.getElementById('club-team-id-value').value = teamId || '';
-    if (!teamId) return;
-    try {
-      const seasonName = seasonValue.value;
-      const sid = seasonIdMap[seasonName];
-      const apiUrl = sid ? `/api/teams/${teamId}/players?season_id=${sid}` : `/api/teams/${teamId}/players`;
-      const res = await fetch(apiUrl);
-      const players = await res.json();
-      if (!players.length) return;
-      playersBody.innerHTML = '';
-      players.forEach(p => {
-        playersBody.appendChild(_makePlayerRow(p.profile_id || null));
-      });
-      refreshSelects();
-    } catch (err) {
-      console.error('Failed to fetch team players', err);
-    }
+    loadTeamPlayers();
   });
+
+  seasonSelect.addEventListener('change', loadTeamPlayers);
 
   addTeamBtn.addEventListener('click', () => {
     const name = newTeamInput.value.trim();
