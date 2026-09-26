@@ -2773,18 +2773,19 @@ def api_team_players(team_id):
     if not db.execute(f"SELECT id FROM club_teams WHERE id=?{tcond}", [team_id] + tparams).fetchone():
         return jsonify({"error": "forbidden"}), 403
     season_id = request.args.get("season_id", type=int)
+    role_filter = "AND (ctp.roles IS NULL OR ctp.roles = '' OR (',' || ctp.roles || ',') LIKE '%,player,%')"
     if season_id is not None:
         players = db.execute(
             "SELECT ctp.name, COALESCE(pp.number, ctp.number) AS number, ctp.profile_id FROM club_team_players ctp "
             "LEFT JOIN player_profiles pp ON pp.id = ctp.profile_id "
-            "WHERE ctp.team_id=? AND ctp.season_id=? ORDER BY ctp.name COLLATE NOCASE",
+            f"WHERE ctp.team_id=? AND ctp.season_id=? {role_filter} ORDER BY ctp.name COLLATE NOCASE",
             (team_id, season_id)
         ).fetchall()
     else:
         players = db.execute(
             "SELECT ctp.name, COALESCE(pp.number, ctp.number) AS number, ctp.profile_id FROM club_team_players ctp "
             "LEFT JOIN player_profiles pp ON pp.id = ctp.profile_id "
-            "WHERE ctp.team_id=? AND ctp.season_id IS NULL ORDER BY ctp.name COLLATE NOCASE",
+            f"WHERE ctp.team_id=? AND ctp.season_id IS NULL {role_filter} ORDER BY ctp.name COLLATE NOCASE",
             (team_id,)
         ).fetchall()
     return jsonify([dict(p) for p in players])

@@ -96,7 +96,7 @@
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  async function loadTeamPlayers() {
+  async function loadTeamPlayers(replace) {
     const teamId = document.getElementById('club-team-id-value').value;
     if (!teamId) return;
     try {
@@ -104,8 +104,14 @@
       const apiUrl = sid ? `/api/teams/${teamId}/players?season_id=${sid}` : `/api/teams/${teamId}/players`;
       const res = await fetch(apiUrl);
       const players = await res.json();
-      playersBody.innerHTML = '';
+      if (replace) playersBody.innerHTML = '';
+      const existingIds = new Set(
+        [...playersBody.querySelectorAll('select[name="player_profile_id"]')]
+          .map(sel => sel.value)
+          .filter(Boolean)
+      );
       players.forEach(p => {
+        if (p.profile_id && existingIds.has(String(p.profile_id))) return;
         playersBody.appendChild(_makePlayerRow(p.profile_id || null));
       });
       refreshSelects();
@@ -128,10 +134,10 @@
     teamError.style.display = 'none';
     teamValue.value = teamSelect.value;
     document.getElementById('club-team-id-value').value = teamId || '';
-    loadTeamPlayers();
+    loadTeamPlayers(true);
   });
 
-  seasonSelect.addEventListener('change', loadTeamPlayers);
+  seasonSelect.addEventListener('change', () => loadTeamPlayers(false));
 
   addTeamBtn.addEventListener('click', () => {
     const name = newTeamInput.value.trim();
