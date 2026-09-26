@@ -52,6 +52,8 @@
 
 {% if player_stats %}
 
+{% set stat_nl = {'serve': 'Opslag', 'attack': 'Aanval', 'receive': 'Receptie', 'block': 'Blok', 'freeball': 'Vrije bal', 'fault': 'Fout'} %}
+
 <!-- ── Charts ─────────────────────────────────────── -->
 
 <!-- Row 1: Points Made / Lost -->
@@ -112,7 +114,6 @@
   'kill':'Kill','1-receive':'R1','2-receive':'R2','3-receive':'R3','overpass':'OvP',
   '1-freeball':'F1','2-freeball':'F2','3-freeball':'F3','fault':'Flt'
 } %}
-{% set stat_nl = {'serve': 'Opslag', 'attack': 'Aanval', 'receive': 'Receptie', 'block': 'Blok', 'freeball': 'Vrije bal', 'fault': 'Fout'} %}
 <h2>{{ game.team_name }} — Spelersstatistieken</h2>
 <div class="stat-sections-grid">
 {% for stat, results in stat_results.items() %}

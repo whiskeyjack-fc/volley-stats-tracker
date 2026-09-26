@@ -568,6 +568,8 @@ def migrate_db():
             created_by INTEGER REFERENCES users(id),
             created_at TEXT NOT NULL
         )""",
+        # 'coach' = rater-averaged staff assessment; 'self' = player's own perception (single latest value)
+        "ALTER TABLE player_capability_scores ADD COLUMN source TEXT NOT NULL DEFAULT 'coach'",
         """CREATE TABLE IF NOT EXISTS position_capability_weights (
             position   TEXT NOT NULL,
             capability TEXT NOT NULL,
@@ -622,7 +624,8 @@ def migrate_db():
                 capability TEXT NOT NULL,
                 score      INTEGER NOT NULL CHECK(score BETWEEN 20 AND 80 AND score % 5 = 0),
                 created_by INTEGER REFERENCES users(id),
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                source     TEXT NOT NULL DEFAULT 'coach'
             )""")
             db.commit()
         except Exception as exc:
@@ -871,7 +874,11 @@ def _slugify_capability_key(label, db):
     return f"{key}_{n}"
 
 def _capability_averages(db, player_ids):
-    """Per (player, capability): mean of each distinct rater's latest submission, plus the per-rater breakdown."""
+    """Per (player, capability): mean of each distinct coach rater's latest submission, plus the per-rater breakdown.
+
+    Only 'coach' scores are considered here — this is the single choke point that keeps
+    rankings/training-focus/team_positions coach-only even when self-assessment rows exist.
+    """
     if not player_ids:
         return {}
     placeholders = ",".join("?" * len(player_ids))
@@ -881,9 +888,9 @@ def _capability_averages(db, player_ids):
         f"FROM player_capability_scores pcs "
         f"LEFT JOIN users u ON u.id = pcs.created_by "
         f"LEFT JOIN player_profiles pp ON pp.id = u.profile_id "
-        f"WHERE pcs.player_id IN ({placeholders}) AND pcs.id IN ("
+        f"WHERE pcs.player_id IN ({placeholders}) AND pcs.source='coach' AND pcs.id IN ("
         f"  SELECT MAX(id) FROM player_capability_scores "
-        f"  WHERE player_id IN ({placeholders}) GROUP BY player_id, capability, created_by"
+        f"  WHERE player_id IN ({placeholders}) AND source='coach' GROUP BY player_id, capability, created_by"
         f")",
         player_ids + player_ids
     ).fetchall()
@@ -902,6 +909,22 @@ def _capability_averages(db, player_ids):
             cap_bucket["raw"] = sum(scores) / len(scores)
             cap_bucket["rounded"] = int(round(cap_bucket["raw"] / 5) * 5)
     return result
+
+def _self_capability_latest(db, player_id):
+    """Per capability: the single latest player self-assessment entry (any author), newest-first history included."""
+    rows = db.execute(
+        "SELECT pcs.*, COALESCE(pp.first_name || ' ' || pp.last_name, u.email) AS author_name "
+        "FROM player_capability_scores pcs "
+        "LEFT JOIN users u ON u.id = pcs.created_by "
+        "LEFT JOIN player_profiles pp ON pp.id = u.profile_id "
+        "WHERE pcs.player_id=? AND pcs.source='self' ORDER BY pcs.created_at DESC",
+        (player_id,)
+    ).fetchall()
+    history = {}
+    for row in rows:
+        history.setdefault(row["capability"], []).append(row)
+    latest = {capability: entries[0]["score"] for capability, entries in history.items()}
+    return latest, history
 
 def _get_position_weights(db):
     """{position: {capability: weight}} for currently-active capabilities."""
@@ -3316,13 +3339,14 @@ def roster_detail(profile_id):
     # Capability scores: full history (newest first) + current = mean of each rater's latest submission
     # Deactivated capabilities are hidden here entirely (mirrors the position-weights grid); their
     # historical rows stay in the DB untouched, just not surfaced on this page.
+    # Coach history only here — self-assessment is a separate stream (see _self_capability_latest below).
     capabilities = _get_capabilities(db)
     capability_history_rows = db.execute(
         "SELECT pcs.*, COALESCE(pp.first_name || ' ' || pp.last_name, u.email) AS author_name "
         "FROM player_capability_scores pcs "
         "LEFT JOIN users u ON u.id = pcs.created_by "
         "LEFT JOIN player_profiles pp ON pp.id = u.profile_id "
-        "WHERE pcs.player_id=? ORDER BY pcs.created_at DESC",
+        "WHERE pcs.player_id=? AND pcs.source='coach' ORDER BY pcs.created_at DESC",
         (profile_id,)
     ).fetchall()
     capability_history = {cap["key"]: [] for cap in capabilities}
@@ -3332,24 +3356,26 @@ def roster_detail(profile_id):
     own_capability_scores = {
         row["capability"]: row["score"]
         for row in db.execute(
-            "SELECT capability, score FROM player_capability_scores WHERE player_id=? AND created_by=? "
-            "AND id IN (SELECT MAX(id) FROM player_capability_scores WHERE player_id=? AND created_by=? GROUP BY capability)",
+            "SELECT capability, score FROM player_capability_scores WHERE player_id=? AND created_by=? AND source='coach' "
+            "AND id IN (SELECT MAX(id) FROM player_capability_scores WHERE player_id=? AND created_by=? AND source='coach' GROUP BY capability)",
             (profile_id, current_user.id, profile_id, current_user.id)
         ).fetchall()
     }
+    self_capability_scores, self_capability_history = _self_capability_latest(db, profile_id)
     cap_labels = {cap["key"]: cap["label_nl"] for cap in capabilities}
 
     # Radar snapshot: technical capabilities only, kept to a legible number of axes
     technical_caps = [cap for cap in capabilities if cap["category"] == "technical"]
     capability_radar_labels = [cap["label_nl"] for cap in technical_caps]
     capability_radar_scores = [capability_averages.get(cap["key"], {}).get("raw") for cap in technical_caps]
+    capability_radar_self_scores = [self_capability_scores.get(cap["key"]) for cap in technical_caps]
     _rated_radar_scores = [s for s in capability_radar_scores if s is not None]
     capability_radar_avg = sum(_rated_radar_scores) / len(_rated_radar_scores) if _rated_radar_scores else None
     capability_radar_avg_rounded = (
         int(round(capability_radar_avg / 5) * 5) if capability_radar_avg is not None else None
     )
 
-    # Overall trend: per calendar day, mean of every rater's score across all capabilities that day
+    # Overall trend: per calendar day, mean of every coach rater's score across all capabilities that day
     daily_scores = {}
     for row in capability_history_rows:
         daily_scores.setdefault(row["created_at"][:10], []).append(row["score"])
@@ -3357,6 +3383,17 @@ def roster_detail(profile_id):
         {"date": day, "avg": sum(scores) / len(scores)}
         for day, scores in sorted(daily_scores.items())
     ]
+
+    # Self-assessment trend: per calendar day, mean of the player's own scores across all capabilities that day
+    self_daily_scores = {}
+    for entries in self_capability_history.values():
+        for row in entries:
+            self_daily_scores.setdefault(row["created_at"][:10], []).append(row["score"])
+    self_trend = [
+        {"date": day, "avg": sum(scores) / len(scores)}
+        for day, scores in sorted(self_daily_scores.items())
+    ]
+
 
     # Training focus: weighted below-target capabilities for the position(s) this player plays
     profile_positions = set()
@@ -3420,6 +3457,10 @@ def roster_detail(profile_id):
         capability_radar_avg=capability_radar_avg,
         capability_radar_avg_rounded=capability_radar_avg_rounded,
         overall_trend=overall_trend,
+        self_capability_scores=self_capability_scores,
+        self_capability_history=self_capability_history,
+        capability_radar_self_scores=capability_radar_self_scores,
+        self_trend=self_trend,
         training_priorities=training_priorities,
         POSITION_NL=POSITION_NL,
         can_edit_capabilities=can_add,
@@ -3530,30 +3571,40 @@ def roster_add_capabilities(profile_id):
     own_latest = {
         row["capability"]: row["score"]
         for row in db.execute(
-            "SELECT capability, score FROM player_capability_scores WHERE player_id=? AND created_by=? "
-            "AND id IN (SELECT MAX(id) FROM player_capability_scores WHERE player_id=? AND created_by=? GROUP BY capability)",
+            "SELECT capability, score FROM player_capability_scores WHERE player_id=? AND created_by=? AND source='coach' "
+            "AND id IN (SELECT MAX(id) FROM player_capability_scores WHERE player_id=? AND created_by=? AND source='coach' GROUP BY capability)",
             (profile_id, current_user.id, profile_id, current_user.id)
         ).fetchall()
     }
+    # Self-assessment has no per-rater averaging — compare against the latest entry regardless of author
+    self_latest, _ = _self_capability_latest(db, profile_id)
     now = datetime.now(UTC).isoformat()
     for cap in _get_capabilities(db):
         capability = cap["key"]
         raw = request.form.get(f"cap_{capability}", "").strip()
-        if raw == "":
-            continue
-        try:
-            score = int(raw)
-        except ValueError:
-            continue
-        if score not in CAPABILITY_GRADES:
-            continue
-        if own_latest.get(capability) == score:
-            continue
-        db.execute(
-            "INSERT INTO player_capability_scores (player_id, capability, score, created_by, created_at) "
-            "VALUES (?,?,?,?,?)",
-            (profile_id, capability, score, current_user.id, now)
-        )
+        if raw != "":
+            try:
+                score = int(raw)
+            except ValueError:
+                score = None
+            if score in CAPABILITY_GRADES and own_latest.get(capability) != score:
+                db.execute(
+                    "INSERT INTO player_capability_scores (player_id, capability, score, created_by, created_at, source) "
+                    "VALUES (?,?,?,?,?,'coach')",
+                    (profile_id, capability, score, current_user.id, now)
+                )
+        self_raw = request.form.get(f"self_cap_{capability}", "").strip()
+        if self_raw != "":
+            try:
+                self_score = int(self_raw)
+            except ValueError:
+                self_score = None
+            if self_score in CAPABILITY_GRADES and self_latest.get(capability) != self_score:
+                db.execute(
+                    "INSERT INTO player_capability_scores (player_id, capability, score, created_by, created_at, source) "
+                    "VALUES (?,?,?,?,?,'self')",
+                    (profile_id, capability, self_score, current_user.id, now)
+                )
     db.commit()
     return redirect(url_for("roster_detail", profile_id=profile_id))
 

@@ -212,13 +212,13 @@
   </div>
   {% endif %}
 
-  {% if capability_averages %}
+  {% if capability_averages or self_capability_scores %}
   <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:1rem">
     <div class="chart-card" style="flex:1;min-width:260px;max-width:480px">
       <div class="chart-title" style="display:flex;justify-content:space-between;align-items:center;text-transform:none">
         <span style="text-transform:uppercase;letter-spacing:.05em">Profiel</span>
         {% if capability_radar_avg_rounded is not none %}
-        <span style="font-size:0.95rem;font-weight:700;color:var(--accent)">
+        <span style="font-size:0.95rem;font-weight:700;color:var(--blue)">
           {{ capability_radar_avg_rounded }} <span style="font-weight:400;color:var(--muted);font-size:0.78rem">· {{ CAPABILITY_SCORE_NL[capability_radar_avg_rounded] }}</span>
         </span>
         {% endif %}
@@ -240,6 +240,7 @@
           <tr>
             <th>Vaardigheid</th>
             <th>Gemiddelde</th>
+            <th>Speler zelf</th>
             <th>Jouw score</th>
             <th>Laatst bijgewerkt</th>
           </tr>
@@ -247,7 +248,7 @@
         <tbody>
           {% for cap in capabilities %}
           {% if loop.first or cap.category != loop.previtem.category %}
-          <tr><td colspan="4" style="background:var(--surface2);font-weight:600;font-size:0.72rem;
+          <tr><td colspan="5" style="background:var(--surface2);font-weight:600;font-size:0.72rem;
                   text-transform:uppercase;color:var(--muted)">
             {{ 'Technisch' if cap.category == 'technical' else 'Persoonlijkheid' }}
           </td></tr>
@@ -255,11 +256,13 @@
           {% set avg = capability_averages.get(cap.key) %}
           {% set own_score = own_capability_scores.get(cap.key) %}
           {% set hist = capability_history.get(cap.key) %}
+          {% set self_score = self_capability_scores.get(cap.key) %}
+          {% set self_hist = self_capability_history.get(cap.key) %}
           <tr>
             <td>{{ cap.label_nl }}</td>
             <td style="min-width:7rem">
               {% if avg %}
-              <div style="font-size:1.25rem;font-weight:700">
+              <div style="font-size:1.25rem;font-weight:700;color:var(--blue)">
                 {{ avg.rounded }} <span style="font-weight:400;color:var(--muted);font-size:0.85rem">· {{ CAPABILITY_SCORE_NL[avg.rounded] }}</span>
               </div>
               {% if avg.raters|length > 1 %}<div style="color:var(--muted);font-size:0.72rem">{{ avg.raters|length }} beoordelaars</div>{% endif %}
@@ -269,8 +272,22 @@
             </td>
             <td>
               {% if can_edit_capabilities %}
+              <select name="self_cap_{{ cap.key }}" title="Speler zelf"
+                      style="width:4rem;background:var(--surface2);border:1px solid var(--yellow);
+                             border-radius:var(--radius);color:var(--fg);padding:.2rem .3rem;font-size:0.82rem">
+                <option value="">—</option>
+                {% for n in CAPABILITY_GRADES %}
+                <option value="{{ n }}" {% if self_score == n %}selected{% endif %}>{{ n }}</option>
+                {% endfor %}
+              </select>
+              {% else %}
+              <span style="color:var(--muted)">{{ self_score if self_score is not none else '—' }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if can_edit_capabilities %}
               <select name="cap_{{ cap.key }}" title="Jouw score"
-                      style="width:4rem;background:var(--surface2);border:1px solid var(--border);
+                      style="width:4rem;background:var(--surface2);border:1px solid var(--blue);
                              border-radius:var(--radius);color:var(--fg);padding:.2rem .3rem;font-size:0.82rem">
                 <option value="">—</option>
                 {% for n in CAPABILITY_GRADES %}
@@ -285,7 +302,7 @@
               {% if hist %}{{ hist[0].created_at | fmt_date }} · {{ hist[0].author_name or 'unknown' }}{% else %}—{% endif %}
               {% if avg and avg.raters|length > 1 %}
               <details style="margin-top:.3rem">
-                <summary style="cursor:pointer;color:var(--accent)">per beoordelaar</summary>
+                <summary style="cursor:pointer;color:var(--blue)">per beoordelaar</summary>
                 <ul style="margin:.3rem 0 0;padding-left:1rem;max-height:6.5rem;overflow-y:auto">
                   {% for r in avg.raters %}
                   <li>{{ r.score }} · {{ r.created_at | fmt_date }} · {{ r.author_name or 'unknown' }}</li>
@@ -295,9 +312,19 @@
               {% endif %}
               {% if hist and hist|length > 1 %}
               <details style="margin-top:.3rem">
-                <summary style="cursor:pointer;color:var(--accent)">geschiedenis</summary>
+                <summary style="cursor:pointer;color:var(--blue)">coach geschiedenis</summary>
                 <ul style="margin:.3rem 0 0;padding-left:1rem;max-height:6.5rem;overflow-y:auto">
                   {% for h in hist %}
+                  <li>{{ h.score }} · {{ h.created_at | fmt_date }} · {{ h.author_name or 'unknown' }}</li>
+                  {% endfor %}
+                </ul>
+              </details>
+              {% endif %}
+              {% if self_hist %}
+              <details style="margin-top:.3rem">
+                <summary style="cursor:pointer;color:var(--yellow)">zelfperceptie geschiedenis</summary>
+                <ul style="margin:.3rem 0 0;padding-left:1rem;max-height:6.5rem;overflow-y:auto">
+                  {% for h in self_hist %}
                   <li>{{ h.score }} · {{ h.created_at | fmt_date }} · {{ h.author_name or 'unknown' }}</li>
                   {% endfor %}
                 </ul>
@@ -326,7 +353,8 @@
       <p style="margin:0 0 .4rem">
         De getoonde score is het gemiddelde van elke beoordelaar's laatste invoer, afgerond op 5; het
         "jouw score" veld ernaast is enkel jouw eigen laatst ingevoerde waarde. Klap "per beoordelaar" open
-        om te zien wie welke score gaf.
+        om te zien wie welke score gaf. "Speler zelf" is de zelfperceptie van de speler, opgehaald via een apart
+        interview/formulier — deze telt niet mee in het "Gemiddelde" en heeft geen invloed op rangschikkingen elders.
       </p>
       <p style="margin:0">
         Schaal: {% for n in CAPABILITY_GRADES %}{{ n }}={{ CAPABILITY_SCORE_NL[n] }}{% if not loop.last %} · {% endif %}{% endfor %}
@@ -335,6 +363,7 @@
   </form>
 </div>
 {% endif %}
+
 
 {# ── Kit subsection ───────────────────────────────────────────────────────── #}
 {% if can_manage_kit() or is_kit_manager() %}
@@ -456,7 +485,7 @@
 })();
 </script>
 
-{% if capability_averages %}
+{% if capability_averages or self_capability_scores %}
 <!-- ── Full-screen chart focus modal ──────────────── -->
 <div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title" hidden>
   <div class="chart-modal-card">
@@ -471,24 +500,33 @@
 <script src="{{ url_for('static', filename='js/charts-common.js') }}"></script>
 <script>
 (function () {
-  const cssAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  const cssBlue = getComputedStyle(document.documentElement).getPropertyValue('--blue').trim();
+  const cssYellow = getComputedStyle(document.documentElement).getPropertyValue('--yellow').trim();
   const radarLabels = {{ capability_radar_labels | tojson }};
   const radarScores = {{ capability_radar_scores | tojson }};
+  const radarSelfScores = {{ capability_radar_self_scores | tojson }};
   const trend = {{ overall_trend | tojson }};
+  const selfTrend = {{ self_trend | tojson }};
+  const hasSelfRadar = radarSelfScores.some(v => v !== null);
+  const hasSelfTrend = selfTrend.length > 0;
 
-  if (radarScores.some(v => v !== null)) {
+  if (radarScores.some(v => v !== null) || hasSelfRadar) {
+    const radarDatasets = [{
+      label: 'Coach gemiddelde', data: radarScores,
+      backgroundColor: cssBlue + '33', borderColor: cssBlue, pointBackgroundColor: cssBlue,
+    }];
+    if (hasSelfRadar) {
+      radarDatasets.push({
+        label: 'Speler zelf', data: radarSelfScores,
+        backgroundColor: cssYellow + '33', borderColor: cssYellow, pointBackgroundColor: cssYellow,
+      });
+    }
     mkChart('cap-radar-{{ profile.id }}', {
       type: 'radar',
-      data: {
-        labels: radarLabels,
-        datasets: [{
-          label: 'Gemiddelde score', data: radarScores,
-          backgroundColor: cssAccent + '33', borderColor: cssAccent, pointBackgroundColor: cssAccent,
-        }],
-      },
+      data: { labels: radarLabels, datasets: radarDatasets },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        plugins: { legend: { display: hasSelfRadar, labels: { color: '#8891b2' } } },
         scales: { r: {
           min: 0, max: 100, ticks: { stepSize: 20, color: '#8891b2', backdropColor: 'transparent' },
           grid: { color: 'rgba(255,255,255,.08)' }, angleLines: { color: 'rgba(255,255,255,.08)' },
@@ -498,17 +536,25 @@
     });
   }
 
-  if (trend.length >= 2) {
+  // Merge coach + self trend dates onto one shared axis; self-assessment interviews happen on sparser, different dates
+  const trendDates = Array.from(new Set([...trend.map(t => t.date), ...selfTrend.map(t => t.date)])).sort();
+  if (trendDates.length >= 2) {
+    const trendByDate = Object.fromEntries(trend.map(t => [t.date, t.avg]));
+    const selfTrendByDate = Object.fromEntries(selfTrend.map(t => [t.date, t.avg]));
+    const trendDatasets = [{
+      label: 'Coach gemiddelde', data: trendDates.map(d => trendByDate[d] ?? null),
+      borderColor: cssBlue, backgroundColor: cssBlue + '33', tension: .25, fill: true, spanGaps: true,
+    }];
+    if (hasSelfTrend) {
+      trendDatasets.push({
+        label: 'Speler zelf', data: trendDates.map(d => selfTrendByDate[d] ?? null),
+        borderColor: cssYellow, backgroundColor: cssYellow + '33', tension: .25, fill: true, spanGaps: true,
+      });
+    }
     mkChart('cap-trend-{{ profile.id }}', {
       type: 'line',
-      data: {
-        labels: trend.map(t => t.date),
-        datasets: [{
-          label: 'Gemiddelde score', data: trend.map(t => t.avg),
-          borderColor: cssAccent, backgroundColor: cssAccent + '33', tension: .25, fill: true,
-        }],
-      },
-      options: { ...base, plugins: { legend: { display: false } }, scales: { x: xAxis, y: { ...yAxis, min: 20, max: 80 } } },
+      data: { labels: trendDates, datasets: trendDatasets },
+      options: { ...base, plugins: { legend: { display: hasSelfTrend, labels: { color: '#8891b2' } } }, scales: { x: xAxis, y: { ...yAxis, min: 20, max: 80 } } },
     });
   } else {
     const card = document.getElementById('cap-trend-{{ profile.id }}').closest('.chart-card');
