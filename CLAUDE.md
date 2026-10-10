@@ -59,6 +59,7 @@ For full chart, UI, and API rules see [.github/copilot-instructions.md](.github/
 | **DB migrations are non-destructive** | `ALTER TABLE … ADD COLUMN IF NOT EXISTS` only; never DROP columns |
 | **Tracking JS stays in `tracker.js`** | Report/chart JS lives inside each template's own `<script>` block; pages don't share runtime JS |
 | **Use `_team_cond()` for every `club_teams` query** | Trainers see only their assigned teams via `club_team_trainers`; coordinators/admins get no filter — mirrors `_uid_cond()` but for team scope |
+| **Gate capability scores with `_can_view_team_capabilities()` and attach them server-side only** | Only coordinator/admin and a team's own head/assistant coaches and assigned trainers may see them; hiding them in the template still leaks the data |
 | **Player identity = `name.strip().lower()`** | Applied at both insert time and query time; no alias matching |
 | **`sqlite3.Row` row factory on every connection** | Set in `get_db()`; forgetting it breaks downstream `dict()` calls silently |
 | **Keep line endings as LF** | CRLF in JS/HTML/Python files breaks string-matching tools (replace, grep, patch); enforce with `.gitattributes`: `* text=auto eol=lf` |

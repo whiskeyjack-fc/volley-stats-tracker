@@ -970,6 +970,61 @@ def _weighted_gaps(scores, ranking_positions, weights, cap_labels, target=50, to
     ranked = sorted(best.values(), key=lambda b: -b["gap"])
     return ranked[:top_n]
 
+def _can_view_team_capabilities(db, user, team_id, season_id):
+    """Capability scores are visible to coordinator/admin and to the team's own head/assistant coaches.
+
+    Coaching staff = assigned trainer accounts, or a linked profile with head_coach/assistant_coach
+    on that team's roster for the listed season. Other staff roles (manager, medical, ...) are excluded.
+    """
+    if user.role in ('coordinator', 'admin'):
+        return True
+    if db.execute(
+        "SELECT 1 FROM club_team_trainers WHERE team_id=? AND user_id=?", (team_id, user.id)
+    ).fetchone():
+        return True
+    profile_id = getattr(user, "profile_id", None)
+    if not profile_id:
+        return False
+    return bool(db.execute(
+        "SELECT 1 FROM club_team_players WHERE team_id=? AND season_id IS ? AND profile_id=? "
+        "AND ((',' || roles || ',') LIKE '%,head_coach,%' OR (',' || roles || ',') LIKE '%,assistant_coach,%')",
+        (team_id, season_id, profile_id)
+    ).fetchone())
+
+def _overall_capability_scores(db, profile_ids):
+    """{profile_id: {"coach": score|None, "self": score|None}}, each {"raw", "rounded"}: mean over active technical capabilities."""
+    if not profile_ids:
+        return {}
+    technical = {cap["key"] for cap in _get_capabilities(db) if cap["category"] == "technical"}
+
+    def summarise(values):
+        if not values:
+            return None
+        raw = sum(values) / len(values)
+        return {"raw": raw, "rounded": int(round(raw / 5) * 5)}
+
+    coach_scores = {}
+    for pid, caps in _capability_averages(db, profile_ids).items():
+        coach_scores[pid] = [bucket["raw"] for cap, bucket in caps.items() if cap in technical]
+
+    placeholders = ",".join("?" * len(profile_ids))
+    self_latest = {}
+    for row in db.execute(
+        f"SELECT player_id, capability, score FROM player_capability_scores "
+        f"WHERE player_id IN ({placeholders}) AND source='self' ORDER BY created_at ASC, id ASC",
+        profile_ids
+    ).fetchall():
+        if row["capability"] in technical:
+            self_latest.setdefault(row["player_id"], {})[row["capability"]] = row["score"]
+
+    return {
+        pid: {
+            "coach": summarise(coach_scores.get(pid, [])),
+            "self":  summarise(list(self_latest.get(pid, {}).values())),
+        }
+        for pid in profile_ids
+    }
+
 def _heat_class(avg):
     """CSS bucket class for a roster-average score, used by the team_positions heatmap."""
     if avg is None:
@@ -2360,6 +2415,7 @@ def team_list():
     team_trainers = {}
     team_non_players = {}
     team_players = {}
+    team_can_see_capabilities = {}
     for t in teams:
         if active_season_id:
             season_id_for_team = active_season_id
@@ -2391,7 +2447,7 @@ def team_list():
         ).fetchall()
         team_non_players[t["id"]] = [dict(r) for r in non_players]
         players = db.execute(
-            "SELECT ctp.name, COALESCE(pp.number, ctp.number) AS number, ctp.roles, pp.positions FROM club_team_players ctp "
+            "SELECT ctp.profile_id, ctp.name, COALESCE(pp.number, ctp.number) AS number, ctp.roles, pp.positions FROM club_team_players ctp "
             "LEFT JOIN player_profiles pp ON pp.id = ctp.profile_id "
             "WHERE ctp.team_id=? AND ctp.season_id=? "
             "AND (ctp.roles IS NULL OR ctp.roles = '' OR ctp.roles LIKE '%player%') "
@@ -2399,6 +2455,23 @@ def team_list():
             (t["id"], season_id_for_team)
         ).fetchall()
         team_players[t["id"]] = [dict(r) for r in players]
+        team_can_see_capabilities[t["id"]] = _can_view_team_capabilities(
+            db, current_user, t["id"], season_id_for_team
+        )
+    # Scores are only attached for permitted teams so they never reach the page otherwise
+    permitted_ids = [
+        p["profile_id"]
+        for tid, plist in team_players.items() if team_can_see_capabilities[tid]
+        for p in plist if p["profile_id"]
+    ]
+    overall_scores = _overall_capability_scores(db, list(dict.fromkeys(permitted_ids)))
+    for tid, plist in team_players.items():
+        if not team_can_see_capabilities[tid]:
+            continue
+        for p in plist:
+            scores = overall_scores.get(p["profile_id"], {})
+            p["coach_overall"] = scores.get("coach")
+            p["self_overall"] = scores.get("self")
     all_trainers = db.execute(
         "SELECT id, email FROM users WHERE role='trainer' ORDER BY email COLLATE NOCASE"
     ).fetchall()
@@ -2407,6 +2480,7 @@ def team_list():
                            team_trainers=team_trainers,
                            team_non_players=team_non_players,
                            team_players=team_players,
+                           team_can_see_capabilities=team_can_see_capabilities,
                            all_trainers=all_trainers,
                            seasons=seasons,
                            active_season_id=active_season_id,

@@ -29,6 +29,9 @@
 - Report pages group results into per-group `.card` sections (team/number/etc. as the heading) each containing a `.table`, following the card-per-group pattern in `conflicts.html`.
 - Nav: reports get their own `nav-group-label` ("Rapporten"), gated by the access rule matching their data source.
 
+## Capability Score Visibility
+- Capability scores (coach and self-assessment) may only be exposed to coordinator/admin and a team's own head/assistant coaches and assigned trainers. Gate server-side with `_can_view_team_capabilities()` and only attach the scores to the data for permitted teams — never rely on hiding them in the template alone.
+
 ## Sporthal Conflict Detection (`/conflicts/sporthal`)
 - Each match is modelled as timed segments — `warmup`/`game` (non-promo), or
   `warmup`/`reserve`/`warmup`/`game` (promo reeksen matching `^(OHP|ODP|OBP)`). This model is

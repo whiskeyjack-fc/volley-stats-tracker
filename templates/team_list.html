@@ -96,6 +96,10 @@
               <th data-sort-type="text">Naam</th>
               <th data-sort-type="text">Rol</th>
               <th data-sort-type="text">Posities</th>
+              {% if team_can_see_capabilities[t.id] %}
+              <th data-sort-type="number" class="cap-score-coach" title="Gemiddelde coachscore (technisch, 20-80)">Coach</th>
+              <th data-sort-type="number" class="cap-score-self" title="Gemiddelde zelfevaluatie (technisch, 20-80)">Zelf</th>
+              {% endif %}
             </tr>
           </thead>
           <tbody>
@@ -111,6 +115,10 @@
                 {% endfor %}
                 {% endif %}
               </td>
+              {% if team_can_see_capabilities[t.id] %}
+              <td class="cap-score-coach"{% if p.coach_overall %} title="{{ '%.1f' | format(p.coach_overall.raw) }}"{% endif %}>{{ p.coach_overall.rounded if p.coach_overall else '—' }}</td>
+              <td class="cap-score-self"{% if p.self_overall %} title="{{ '%.1f' | format(p.self_overall.raw) }}"{% endif %}>{{ p.self_overall.rounded if p.self_overall else '—' }}</td>
+              {% endif %}
             </tr>
             {% endfor %}
           </tbody>

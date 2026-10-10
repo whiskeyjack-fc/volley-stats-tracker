@@ -209,6 +209,8 @@ main { max-width: 1600px; margin: 0 auto; padding: 1rem 1.25rem; }
 .table th.sortable { cursor: pointer; user-select: none; }
 .table th.sortable:hover { color: var(--accent); }
 .table th.sortable .sort-arrow { font-size: 0.75em; margin-left: 0.3em; color: var(--accent); }
+.table .cap-score-coach { color: var(--blue); font-weight: 700; }
+.table .cap-score-self  { color: var(--yellow); font-weight: 700; }
 .num-col { width: 80px; }
 .table tbody tr:hover { background: var(--surface2); }
 .actions { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }

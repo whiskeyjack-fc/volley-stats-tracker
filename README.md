@@ -23,6 +23,7 @@ A web-based Flask/SQLite application for volleyball clubs. Beyond live match tra
 ### Club Teams & Lineups
 - **Team list** (`/teams`) — create, edit, and delete club teams; season-aware roster assignment
 - **Trainer assignment** — assign or remove specific trainer accounts per team
+- **Team capability scores** — sortable coach and self-assessment averages (technical, 20–80) in the `/teams` member table, visible only to coordinators/admins and the team's own head/assistant coaches and assigned trainers
 - **Team positions** (`/teams/<id>/positions`) — heatmap of player-to-position fit based on capability scores vs. position weights, plus a captain/co-captain order editor
 - **Capabilities & position-weight settings** (`/settings/capabilities`, `/settings/position-weights`) — coordinator/admin-only configuration of rateable traits and their importance per position
 
