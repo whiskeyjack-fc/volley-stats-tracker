@@ -116,8 +116,8 @@
                 {% endif %}
               </td>
               {% if team_can_see_capabilities[t.id] %}
-              <td class="cap-score-coach"{% if p.coach_overall %} title="{{ '%.1f' | format(p.coach_overall.raw) }}"{% endif %}>{{ p.coach_overall.rounded if p.coach_overall else '—' }}</td>
-              <td class="cap-score-self"{% if p.self_overall %} title="{{ '%.1f' | format(p.self_overall.raw) }}"{% endif %}>{{ p.self_overall.rounded if p.self_overall else '—' }}</td>
+              <td class="cap-score-coach"{% if p.coach_overall %} tabindex="0" data-breakdown='{{ p.coach_overall.breakdown | tojson }}' data-raw-score="{{ '%.1f' | format(p.coach_overall.raw) }}" data-sort-value="{{ p.coach_overall.raw }}"{% endif %}>{{ p.coach_overall.rounded if p.coach_overall else '—' }}</td>
+              <td class="cap-score-self"{% if p.self_overall %} tabindex="0" data-breakdown='{{ p.self_overall.breakdown | tojson }}' data-raw-score="{{ '%.1f' | format(p.self_overall.raw) }}" data-sort-value="{{ p.self_overall.raw }}"{% endif %}>{{ p.self_overall.rounded if p.self_overall else '—' }}</td>
               {% endif %}
             </tr>
             {% endfor %}
@@ -134,8 +134,72 @@
 </div>
 {% endif %}
 
+<div id="score-popover" class="score-popover" hidden></div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+  var popover = document.getElementById('score-popover');
+
+  function heatTier(score) {
+    if (score < 45) return 'heat-low';
+    if (score < 55) return 'heat-mid';
+    return 'heat-high';
+  }
+
+  function buildRow(entry) {
+    var row = document.createElement('div');
+    row.className = 'score-popover-row';
+    var label = document.createElement('span');
+    label.className = 'score-popover-label';
+    label.textContent = entry.label;
+    var track = document.createElement('span');
+    track.className = 'score-popover-bar-track';
+    var val = document.createElement('span');
+    val.className = 'score-popover-pct';
+    if (entry.score == null) {
+      val.textContent = '\u2013';
+    } else {
+      var fill = document.createElement('span');
+      fill.className = 'score-popover-bar-fill ' + heatTier(entry.score);
+      fill.style.width = Math.max(0, Math.min(100, entry.score)) + '%';
+      track.appendChild(fill);
+      val.textContent = Math.round(entry.score / 5) * 5;
+    }
+    row.appendChild(label);
+    row.appendChild(track);
+    row.appendChild(val);
+    return row;
+  }
+
+  function showPopover(target) {
+    popover.innerHTML = '';
+    JSON.parse(target.dataset.breakdown || '[]').forEach(function (entry) {
+      popover.appendChild(buildRow(entry));
+    });
+    var footer = document.createElement('div');
+    footer.className = 'score-popover-footer';
+    footer.textContent = 'Gemiddelde: ' + target.dataset.rawScore;
+    popover.appendChild(footer);
+
+    popover.hidden = false;
+    var rect = target.getBoundingClientRect();
+    var popRect = popover.getBoundingClientRect();
+    var left = Math.min(rect.left, window.innerWidth - popRect.width - 8);
+    var top = rect.bottom + 6;
+    if (top + popRect.height > window.innerHeight) top = rect.top - popRect.height - 6;
+    popover.style.left = Math.max(8, left) + 'px';
+    popover.style.top = Math.max(8, top) + 'px';
+  }
+
+  function hidePopover() { popover.hidden = true; }
+
+  document.querySelectorAll('td[data-breakdown]').forEach(function (el) {
+    el.addEventListener('mouseenter', function () { showPopover(el); });
+    el.addEventListener('mouseleave', hidePopover);
+    el.addEventListener('focus', function () { showPopover(el); });
+    el.addEventListener('blur', hidePopover);
+  });
+
   document.querySelectorAll('.team-toggle-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var wrap = btn.parentElement.querySelector('.team-members-wrap');
@@ -175,8 +239,8 @@ document.addEventListener('DOMContentLoaded', function () {
         rows.sort(function (r1, r2) {
           var c1 = r1.children[colIndex], c2 = r2.children[colIndex];
           if (type === 'number') {
-            var n1 = parseFloat(c1.textContent);
-            var n2 = parseFloat(c2.textContent);
+            var n1 = parseFloat(c1.getAttribute('data-sort-value') || c1.textContent);
+            var n2 = parseFloat(c2.getAttribute('data-sort-value') || c2.textContent);
             var v1 = isNaN(n1) ? -Infinity : n1;
             var v2 = isNaN(n2) ? -Infinity : n2;
             return asc ? v1 - v2 : v2 - v1;

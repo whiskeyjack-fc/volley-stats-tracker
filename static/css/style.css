@@ -2073,7 +2073,7 @@ body.modal-open { overflow: hidden; }
 }
 .captain-drag-item.dragging { opacity: 0.4; }
 
-/* ── Score breakdown popover (team_positions.html) ─────────────────────── */
+/* ── Score breakdown popover (team_positions.html, team_list.html) ─────── */
 .score-popover {
   position: fixed; z-index: 60; width: 270px; max-width: calc(100vw - 16px);
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);

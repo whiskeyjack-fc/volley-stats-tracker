@@ -992,20 +992,29 @@ def _can_view_team_capabilities(db, user, team_id, season_id):
     ).fetchone())
 
 def _overall_capability_scores(db, profile_ids):
-    """{profile_id: {"coach": score|None, "self": score|None}}, each {"raw", "rounded"}: mean over active technical capabilities."""
+    """{profile_id: {"coach": score|None, "self": score|None}}, each {"raw", "rounded", "breakdown"}: mean over active technical capabilities.
+
+    "breakdown" lists every active technical capability in display order as {"label", "score"} (score None if unrated).
+    """
     if not profile_ids:
         return {}
-    technical = {cap["key"] for cap in _get_capabilities(db) if cap["category"] == "technical"}
+    technical_caps = [cap for cap in _get_capabilities(db) if cap["category"] == "technical"]
+    technical = {cap["key"] for cap in technical_caps}
 
-    def summarise(values):
+    def summarise(by_cap):
+        values = list(by_cap.values())
         if not values:
             return None
         raw = sum(values) / len(values)
-        return {"raw": raw, "rounded": int(round(raw / 5) * 5)}
+        return {
+            "raw": raw,
+            "rounded": int(round(raw / 5) * 5),
+            "breakdown": [{"label": cap["label_nl"], "score": by_cap.get(cap["key"])} for cap in technical_caps],
+        }
 
     coach_scores = {}
     for pid, caps in _capability_averages(db, profile_ids).items():
-        coach_scores[pid] = [bucket["raw"] for cap, bucket in caps.items() if cap in technical]
+        coach_scores[pid] = {cap: bucket["raw"] for cap, bucket in caps.items() if cap in technical}
 
     placeholders = ",".join("?" * len(profile_ids))
     self_latest = {}
@@ -1019,8 +1028,8 @@ def _overall_capability_scores(db, profile_ids):
 
     return {
         pid: {
-            "coach": summarise(coach_scores.get(pid, [])),
-            "self":  summarise(list(self_latest.get(pid, {}).values())),
+            "coach": summarise(coach_scores.get(pid, {})),
+            "self":  summarise(self_latest.get(pid, {})),
         }
         for pid in profile_ids
     }

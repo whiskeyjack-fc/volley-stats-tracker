@@ -62,6 +62,12 @@ def test_overall_scores_technical_only_and_separate_sources(db):
             (1, 'serve', 30, NULL, '2026-02-01', 'self');
     """)
     scores = _overall_capability_scores(db, [1, 2])
-    assert scores[1]["coach"] == {"raw": 55.0, "rounded": 55}
-    assert scores[1]["self"] == {"raw": 30.0, "rounded": 30}
+    assert scores[1]["coach"] == {
+        "raw": 55.0, "rounded": 55,
+        "breakdown": [{"label": "Aanval", "score": 50}, {"label": "Serve", "score": 60}],
+    }
+    assert scores[1]["self"] == {
+        "raw": 30.0, "rounded": 30,
+        "breakdown": [{"label": "Aanval", "score": None}, {"label": "Serve", "score": 30}],
+    }
     assert scores[2] == {"coach": None, "self": None}
