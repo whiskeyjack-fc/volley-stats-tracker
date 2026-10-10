@@ -32,6 +32,14 @@
   --receive-accent:  #6ee7b7;
   --block-accent:    #c4b5fd;
   --freeball-accent: #67e8f9;
+  --pass-accent:          #f0abfc;
+  --defense-accent:       #fde68a;
+  --freeball-serve-accent: #a5b4fc;
+  /* generic fallback palette for capability keys with no dedicated accent var */
+  --cap-fallback-1: #c7d2fe;
+  --cap-fallback-2: #fbcfe8;
+  --cap-fallback-3: #fef08a;
+  --cap-fallback-4: #ddd6fe;
   /* status badge colors */
   --status-active-bg:         #1e4d2b;
   --status-active-fg:         #6fcf97;
@@ -790,6 +798,7 @@ select:focus { border-color: var(--accent); }
 .charts-row-2 > .dual-chart-card { flex: 1 1 280px; max-width: none; }
 .charts-row-3 > .chart-card,
 .charts-row-3 > .dual-chart-card { flex: 1 1 260px; max-width: none; }
+.charts-row-5 > .chart-card { flex: 1 1 200px; max-width: none; }
 
 .chart-card {
   background: var(--surface);
@@ -821,6 +830,7 @@ select:focus { border-color: var(--accent); }
   flex-shrink: 0;
 }
 .chart-body canvas { position: absolute; inset: 0; }
+.chart-body.chart-body-sm { height: 190px; }
 
 /* Dual-panel chart card (stacked counts + quality) */
 .dual-chart-card {
@@ -2060,6 +2070,35 @@ body.modal-open { overflow: hidden; }
   cursor: grab; user-select: none;
 }
 .captain-drag-item.dragging { opacity: 0.4; }
+
+/* ── Score breakdown popover (team_positions.html) ─────────────────────── */
+.score-popover {
+  position: fixed; z-index: 60; width: 270px; max-width: calc(100vw - 16px);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 6px 24px rgba(0,0,0,.4); padding: .6rem .7rem; font-size: 0.78rem;
+}
+.score-popover[hidden] { display: none; }
+.score-popover-row {
+  display: flex; align-items: center; gap: .5rem; padding: .22rem 0;
+  border-left: 2px solid transparent;
+}
+.score-popover-row-top { border-left-color: var(--accent); padding-left: .35rem; }
+.score-popover-row-top .score-popover-label { font-weight: 700; color: var(--fg); }
+.score-popover-label { flex: 0 0 auto; width: 6.2rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score-popover-bar-track {
+  flex: 1; height: .4rem; background: var(--surface2); border-radius: 999px; overflow: hidden;
+}
+.score-popover-bar-fill { display: block; height: 100%; border-radius: 999px; }
+.score-popover-bar-fill.heat-very-low,
+.score-popover-bar-fill.heat-low       { background: var(--red); }
+.score-popover-bar-fill.heat-mid       { background: var(--muted); }
+.score-popover-bar-fill.heat-high,
+.score-popover-bar-fill.heat-very-high { background: var(--green); }
+.score-popover-pct { flex: 0 0 auto; width: 2.4rem; text-align: right; color: var(--muted); font-size: 0.72rem; }
+.score-popover-footer {
+  margin-top: .4rem; padding-top: .4rem; border-top: 1px solid var(--border);
+  font-weight: 700; color: var(--fg);
+}
 
 /* ── Capability heatmap (team_positions.html) ──────────────────────────── */
 :root {

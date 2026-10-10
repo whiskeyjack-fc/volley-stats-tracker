@@ -21,7 +21,8 @@
       <span class="rank-num">{{ loop.index }}</span>
       <span style="flex:1"><a href="{{ url_for('roster_detail', profile_id=p.profile_id) }}">{{ p.number and '#' + p.number + ' ' or '' }}{{ p.name | title }}</a></span>
       {% if p.score is not none %}
-      <span class="rank-score" title="{{ p.tooltip }}">{{ p.score }}</span>
+      <span class="rank-score" tabindex="0" title="{{ p.tooltip_text }}"
+            data-breakdown='{{ p.breakdown | tojson }}' data-raw-score="{{ '%.1f'|format(p.raw_score) }}">{{ p.score }}</span>
       {% else %}
       <span style="color:var(--muted);font-size:0.75rem">&ndash;</span>
       {% endif %}
@@ -120,6 +121,76 @@
   </div>
 </div>
 {% endif %}
+
+<div id="score-popover" class="score-popover" hidden></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var popover = document.getElementById('score-popover');
+
+  function heatTier(score) {
+    if (score == null) return 'heat-mid';
+    if (score < 45) return 'heat-low';
+    if (score < 55) return 'heat-mid';
+    return 'heat-high';
+  }
+
+  function buildRow(entry) {
+    var row = document.createElement('div');
+    row.className = 'score-popover-row' + (entry.is_top ? ' score-popover-row-top' : '');
+
+    var label = document.createElement('span');
+    label.className = 'score-popover-label';
+    label.textContent = entry.label;
+
+    var track = document.createElement('span');
+    track.className = 'score-popover-bar-track';
+    var fill = document.createElement('span');
+    fill.className = 'score-popover-bar-fill ' + heatTier(entry.score);
+    fill.style.width = Math.max(0, Math.min(100, entry.score)) + '%';
+    track.appendChild(fill);
+
+    var pct = document.createElement('span');
+    pct.className = 'score-popover-pct';
+    pct.textContent = entry.contribution_pct + '%';
+
+    row.appendChild(label);
+    row.appendChild(track);
+    row.appendChild(pct);
+    return row;
+  }
+
+  function showPopover(target) {
+    var breakdown = JSON.parse(target.dataset.breakdown || '[]');
+    popover.innerHTML = '';
+    breakdown.forEach(function (entry) { popover.appendChild(buildRow(entry)); });
+
+    var footer = document.createElement('div');
+    footer.className = 'score-popover-footer';
+    footer.textContent = 'Gewogen gemiddelde: ' + target.dataset.rawScore;
+    popover.appendChild(footer);
+
+    popover.hidden = false;
+    var rect = target.getBoundingClientRect();
+    var popRect = popover.getBoundingClientRect();
+    var left = Math.min(rect.left, window.innerWidth - popRect.width - 8);
+    var top = rect.bottom + 6;
+    if (top + popRect.height > window.innerHeight) top = rect.top - popRect.height - 6;
+    popover.style.left = Math.max(8, left) + 'px';
+    popover.style.top = Math.max(8, top) + 'px';
+  }
+
+  function hidePopover() { popover.hidden = true; }
+
+  document.querySelectorAll('.rank-score[data-breakdown]').forEach(function (el) {
+    el.removeAttribute('title'); // avoid a duplicate native tooltip alongside the custom popover
+    el.addEventListener('mouseenter', function () { showPopover(el); });
+    el.addEventListener('mouseleave', hidePopover);
+    el.addEventListener('focus', function () { showPopover(el); });
+    el.addEventListener('blur', hidePopover);
+  });
+});
+</script>
 
 
 <script>

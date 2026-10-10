@@ -215,13 +215,20 @@
   {% if capability_averages or self_capability_scores %}
   <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:1rem">
     <div class="chart-card" style="flex:1;min-width:260px;max-width:480px">
-      <div class="chart-title" style="display:flex;justify-content:space-between;align-items:center;text-transform:none">
+      <div class="chart-title" style="display:flex;justify-content:space-between;align-items:center;text-transform:none;flex-wrap:wrap;gap:.3rem">
         <span style="text-transform:uppercase;letter-spacing:.05em">Profiel</span>
-        {% if capability_radar_avg_rounded is not none %}
-        <span style="font-size:0.95rem;font-weight:700;color:var(--blue)">
-          {{ capability_radar_avg_rounded }} <span style="font-weight:400;color:var(--muted);font-size:0.78rem">· {{ CAPABILITY_SCORE_NL[capability_radar_avg_rounded] }}</span>
+        <span style="display:flex;gap:.6rem;flex-wrap:wrap">
+          {% if capability_radar_avg_rounded is not none %}
+          <span style="font-size:0.95rem;font-weight:700;color:var(--blue)">
+            {{ capability_radar_avg_rounded }} <span style="font-weight:400;color:var(--muted);font-size:0.78rem">· {{ CAPABILITY_SCORE_NL[capability_radar_avg_rounded] }}</span>
+          </span>
+          {% endif %}
+          {% if capability_radar_self_avg_rounded is not none %}
+          <span style="font-size:0.95rem;font-weight:700;color:var(--yellow)">
+            {{ capability_radar_self_avg_rounded }} <span style="font-weight:400;color:var(--muted);font-size:0.78rem">· {{ CAPABILITY_SCORE_NL[capability_radar_self_avg_rounded] }}</span>
+          </span>
+          {% endif %}
         </span>
-        {% endif %}
       </div>
       <div class="chart-body" style="height:260px"><canvas id="cap-radar-{{ profile.id }}"></canvas></div>
     </div>

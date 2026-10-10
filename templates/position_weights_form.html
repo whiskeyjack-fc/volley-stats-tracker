@@ -69,6 +69,26 @@
   </form>
 </div>
 
+{# ── Gewicht per vaardigheid: % aandeel van bovenstaande gewichten, per positie ── #}
+<div class="card" style="margin-top:1rem">
+  <h3 style="margin-top:0">Gewicht per vaardigheid</h3>
+  <p style="color:var(--muted);font-size:0.8rem;margin-top:0">
+    Visualiseert hetzelfde aandeel (%) als de kolommen hierboven, per positie.
+  </p>
+  <div class="charts-row charts-row-5">
+    {% for pos in POSITIONS %}
+    <div class="chart-card">
+      <div class="chart-title">{{ POSITION_NL.get(pos, pos) }}</div>
+      {% if position_weight_breakdown[pos] %}
+      <div class="chart-body chart-body-sm"><canvas id="posweight-{{ pos }}"></canvas></div>
+      {% else %}
+      <p style="color:var(--muted);font-size:0.85rem">Geen gewichten ingesteld.</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
 <div class="card" style="margin-top:1rem">
   <h2>Vaardigheden beheren</h2>
   <p style="color:var(--muted);font-size:0.85rem;margin-top:0">
@@ -168,5 +188,74 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 });
+</script>
+
+<!-- ── Full-screen chart focus modal ──────────────── -->
+<div id="chart-modal" class="chart-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title" hidden>
+  <div class="chart-modal-card">
+    <div class="chart-modal-header">
+      <span id="chart-modal-title" class="chart-modal-title-text"></span>
+      <button id="chart-modal-close" class="chart-modal-close" title="Sluiten">✕</button>
+    </div>
+    <div id="chart-modal-body" class="chart-modal-body"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Gewicht per vaardigheid: one pie per position, % share of nonzero weights ──
+  var breakdown    = {{ position_weight_breakdown | tojson }};
+  var positions    = {{ POSITIONS | tojson }};
+  var capColorVars = {
+    serve: '--serve-accent', reception: '--receive-accent', attack: '--attack-accent',
+    block: '--block-accent', freeball_receive: '--freeball-accent',
+    pass: '--pass-accent', defense: '--defense-accent', freeball_serve: '--freeball-serve-accent',
+  };
+  var fallbackVars = ['--cap-fallback-1', '--cap-fallback-2', '--cap-fallback-3', '--cap-fallback-4'];
+  var fallbackSeen = {};
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  function colorForCapability(key) {
+    var varName = capColorVars[key];
+    if (!varName) {
+      if (!(key in fallbackSeen)) fallbackSeen[key] = Object.keys(fallbackSeen).length;
+      varName = fallbackVars[fallbackSeen[key] % fallbackVars.length];
+    }
+    return cssVar(varName);
+  }
+  var cssSurface = cssVar('--surface');
+  var cssBg      = cssVar('--bg');
+
+  positions.forEach(function (pos) {
+    var rows = breakdown[pos] || [];
+    if (!rows.length) return;
+    var total = rows.reduce(function (sum, r) { return sum + r.weight; }, 0);
+    mkChart('posweight-' + pos, {
+      type: 'pie',
+      data: {
+        labels: rows.map(function (r) { return r.label; }),
+        datasets: [{
+          data:            rows.map(function (r) { return r.weight; }),
+          backgroundColor: rows.map(function (r) { return colorForCapability(r.key); }),
+          borderColor:     cssSurface,
+          borderWidth:     2,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { color: '#8891b2', font: { size: 9 }, boxWidth: 10, padding: 6 } },
+          datalabels: {
+            display: true, color: cssBg, font: { size: 9, weight: 'bold' },
+            formatter: function (v) { return Math.round(v / total * 100) + '%'; },
+          },
+        },
+      },
+    });
+  });
+
+  initChartModalListeners();
+})();
 </script>
 {% endblock %}

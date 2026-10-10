@@ -8,6 +8,7 @@
 - For dual-panel cards (stacked counts + quality), the modal shows both panels separated by a `Quality` divider, matching the inline layout at larger scale.
 - Use consistent color semantics: green = positive/kill, red = error/fault, gray = neutral.
 - Chart colors must reference values from `CAT_COLORS` or the CSS variable palette (`--green`, `--red`, `--accent`, etc.) — no hardcoded color strings outside those definitions.
+- **Pie charts** (e.g. the "Gewicht per vaardigheid" position-weight breakdown) map each data key to a dedicated `--{key}-accent` CSS variable; keys without one cycle through a small generic `--cap-fallback-1..4` palette (assigned in first-seen order) so the same key always gets the same color. Use the `.charts-row-5` modifier (5 compact cards per row, wraps on narrow screens) and `.chart-body.chart-body-sm` (190px) for this kind of compact multi-chart row instead of the default 360px `.chart-body`.
 - New stat types must be added to both the tracker (`track.html`) and the report charts (`report.html`) consistently.
 - All chart canvases must live inside a relatively-positioned wrapper (`.chart-body`, `.dual-top`, or `.dual-bottom`) so the expand button and other overlays position correctly.
 - `charts-report.js` must be loaded before any template-level `<script>` block that uses chart infrastructure. No template may redefine `chartRegistry`, `mkChart`, `splitGroupPlugin`, `netTotalPlugin`, `cloneCfg`, `openChartModal`, `closeChartModal`, or `initChartModalListeners` inline — these are provided exclusively by `charts-report.js`.

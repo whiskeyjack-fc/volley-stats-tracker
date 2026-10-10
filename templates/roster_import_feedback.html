@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Zelfevaluatie importeren — VolleyStats{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Zelfevaluatie importeren</h1>
+  <a href="{{ url_for('roster_list') }}" class="btn btn-outline btn-sm">← Terug naar ledenlijst</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <p class="auth-error" style="{% if category == 'success' %}color:var(--green);border-color:var(--green){% endif %}">{{ message }}</p>
+  {% endfor %}
+{% endwith %}
+
+{% if not preview %}
+{# ── Step 1: Upload form ─────────────────────────────────────────────────── #}
+<div class="card" style="max-width:520px">
+  <h2 style="margin-top:0">CSV uploaden</h2>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:1rem">
+    Upload de CSV-export van het "Zelfevaluatie speler" Google Forms formulier.
+    Verplichte kolom: <code>Voor- en achternaam</code>. Herkende scorekolommen worden
+    toegevoegd als zelfevaluatie ("speler zelf") op de gematchte speler, gedateerd op
+    vandaag.
+  </p>
+  <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end">
+      <label style="flex:1;min-width:200px">
+        <span style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.03em">CSV-bestand</span>
+        <input type="file" name="csv_file" accept=".csv,text/csv" required
+               style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                      color:var(--fg);padding:.35rem .5rem;font-size:0.9rem;width:100%;box-sizing:border-box" />
+      </label>
+      <button type="submit" class="btn btn-primary" style="align-self:flex-end">Uploaden &amp; voorvertoning</button>
+    </div>
+  </form>
+</div>
+
+{% else %}
+{# ── Step 2: Preview + confirm ───────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:1rem">
+  <h2 style="margin-top:0">Voorvertoning — {{ preview|length }} rij{{ 'en' if preview|length != 1 }}</h2>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:0">
+    Controleer de gematchte speler per rij. Kies handmatig een speler waar geen automatische
+    match is gevonden, of laat "-- overslaan --" staan om die rij niet te importeren.
+  </p>
+</div>
+
+<form method="POST" action="{{ url_for('roster_import_feedback_confirm') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="preview_data" value='{{ preview | tojson }}'>
+
+  <div style="overflow-x:auto;margin-bottom:1rem">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Naam (CSV)</th>
+          <th>Team</th>
+          <th>Positie</th>
+          <th>Gematchte speler</th>
+          {% for cap in cap_keys %}
+          <th>{{ cap_labels.get(cap, cap) }}</th>
+          {% endfor %}
+          <th>Waarschuwingen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in preview %}
+        <tr>
+          <td>{{ row.full_name_raw }}</td>
+          <td style="color:var(--muted)">{{ row.team_raw or '—' }}</td>
+          <td style="color:var(--muted)">{{ row.positie_raw or '—' }}</td>
+          <td>
+            <select name="profile_id_{{ row.line }}"
+                    style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+                           color:var(--fg);padding:.25rem .4rem;font-size:0.85rem">
+              <option value="">-- overslaan --</option>
+              {% for p in all_profiles %}
+              <option value="{{ p.id }}" {% if p.id == row.profile_id %}selected{% endif %}>
+                {{ p.first_name }} {{ p.last_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </td>
+          {% for cap in cap_keys %}
+          <td style="color:var(--muted)">{{ row.scores.get(cap, '—') }}</td>
+          {% endfor %}
+          <td style="font-size:0.78rem;color:var(--red)">
+            {{ row.warnings | join('; ') if row.warnings else '' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+    <button type="submit" class="btn btn-primary">Import bevestigen</button>
+    <a href="{{ url_for('roster_import_feedback') }}" class="btn btn-outline">Annuleren / opnieuw uploaden</a>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

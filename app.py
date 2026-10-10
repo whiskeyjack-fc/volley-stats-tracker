@@ -911,12 +911,19 @@ def _capability_averages(db, player_ids):
     return result
 
 def _self_capability_latest(db, player_id):
-    """Per capability: the single latest player self-assessment entry (any author), newest-first history included."""
+    """Per capability: the single latest player self-assessment entry (any author), newest-first history included.
+
+    author_name falls back to the subject player's own name when created_by is NULL
+    (e.g. a CSV-imported self-assessment with no linked user account) — a self-assessment
+    row with no rater is inherently authored by the player being assessed.
+    """
     rows = db.execute(
-        "SELECT pcs.*, COALESCE(pp.first_name || ' ' || pp.last_name, u.email) AS author_name "
+        "SELECT pcs.*, COALESCE(pp.first_name || ' ' || pp.last_name, u.email, "
+        "subj.first_name || ' ' || subj.last_name) AS author_name "
         "FROM player_capability_scores pcs "
         "LEFT JOIN users u ON u.id = pcs.created_by "
         "LEFT JOIN player_profiles pp ON pp.id = u.profile_id "
+        "LEFT JOIN player_profiles subj ON subj.id = pcs.player_id "
         "WHERE pcs.player_id=? AND pcs.source='self' ORDER BY pcs.created_at DESC",
         (player_id,)
     ).fetchall()
@@ -2661,22 +2668,35 @@ def team_positions(team_id):
             for cap, w in pos_weights.items():
                 score = player_scores.get(cap)
                 if w > 0 and score is not None:
-                    num += w * score
+                    contribution = w * score
+                    num += contribution
                     den += w
-                    breakdown.append((w, cap_labels.get(cap, cap), score))
+                    breakdown.append({
+                        "weight": w, "label": cap_labels.get(cap, cap), "score": score,
+                        "contribution": contribution,
+                    })
                     eligible_scores.setdefault(cap, []).append(score)
             raw = (num / den) if den > 0 else None
-            breakdown.sort(key=lambda b: -b[0])
-            tooltip_lines = [f"{label}: gewicht {w}, score {score}" for w, label, score in breakdown]
+            # fixed order (by weight) so the same capability lines up when comparing two players' popovers
+            breakdown.sort(key=lambda b: -b["weight"])
+            for b in breakdown:
+                b["contribution_pct"] = round(b["contribution"] / num * 100) if num else 0
+                b["heat_class"] = _heat_class(b["score"])
+                b["is_top"] = False
+            if num > 0:
+                for b in sorted(breakdown, key=lambda b: -b["contribution"])[:3]:
+                    b["is_top"] = True
+            tooltip_lines = [f"{b['label']}: gewicht {b['weight']}, score {b['score']}" for b in breakdown]
             if raw is not None:
                 tooltip_lines.append(f"Gewogen gemiddelde: {raw:.1f}")
             ranked.append({
-                "profile_id": r["profile_id"],
-                "name":       r["name"],
-                "number":     r["number"],
-                "score":      int(round(raw / 5) * 5) if raw is not None else None,
-                "raw_score":  raw,
-                "tooltip":    "\n".join(tooltip_lines),
+                "profile_id":   r["profile_id"],
+                "name":         r["name"],
+                "number":       r["number"],
+                "score":        int(round(raw / 5) * 5) if raw is not None else None,
+                "raw_score":    raw,
+                "breakdown":    breakdown,
+                "tooltip_text": "\n".join(tooltip_lines),
             })
         ranked.sort(key=lambda p: (p["raw_score"] is None, -(p["raw_score"] or 0)))
         rankings[position] = ranked
@@ -3278,6 +3298,141 @@ def roster_import_federation():
     return render_template("roster_import_federation.html", preview=preview, error=None)
 
 
+@app.route("/roster/import-feedback", methods=["GET", "POST"])
+@login_required
+def roster_import_feedback():
+    """Import the 'Zelfevaluatie speler' Google Forms CSV export as source='self' capability scores."""
+    if not can_view_all():
+        return "Forbidden", 403
+    if request.method == "GET":
+        return render_template("roster_import_feedback.html", preview=None)
+
+    f = request.files.get("csv_file")
+    if not f or not f.filename:
+        flash("Selecteer een CSV-bestand om te uploaden.", "error")
+        return render_template("roster_import_feedback.html", preview=None)
+
+    try:
+        content = f.read().decode("utf-8-sig")
+    except Exception:
+        flash("Bestand kon niet worden gelezen. Zorg dat het UTF-8 gecodeerd is.", "error")
+        return render_template("roster_import_feedback.html", preview=None)
+
+    reader = csv.DictReader(io.StringIO(content))
+    fieldnames = reader.fieldnames or []
+    if "Voor- en achternaam" not in fieldnames:
+        flash("CSV mist de vereiste kolom 'Voor- en achternaam'.", "error")
+        return render_template("roster_import_feedback.html", preview=None)
+
+    db = get_db()
+    # Map CSV header text -> capability key via the admin-managed label, not a hardcoded list,
+    # so renamed/added capabilities in the position-weights settings keep matching.
+    cap_by_label = {cap["label_nl"].strip().lower(): cap["key"] for cap in _get_capabilities(db)}
+    cap_columns = [col for col in fieldnames if col.strip().lower() in cap_by_label]
+    all_profiles = db.execute(
+        "SELECT id, first_name, last_name FROM player_profiles ORDER BY first_name, last_name"
+    ).fetchall()
+
+    preview = []
+    for line_num, row in enumerate(reader, start=2):
+        full_name = (row.get("Voor- en achternaam") or "").strip()
+        if not full_name:
+            continue
+        parts = full_name.split(None, 1)
+        first, last = (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "")
+        profile_id = _resolve_profile_id(first, last)
+
+        scores = {}
+        warnings = []
+        for col in cap_columns:
+            raw = (row.get(col) or "").strip()
+            if not raw:
+                continue
+            m = re.match(r"^\s*(\d+)", raw)
+            score = int(m.group(1)) if m else None
+            if score not in CAPABILITY_GRADES:
+                warnings.append(f"'{col}': onherkende score '{raw}' overgeslagen")
+                continue
+            scores[cap_by_label[col.strip().lower()]] = score
+
+        preview.append({
+            "line":          line_num,
+            "full_name_raw": full_name,
+            "team_raw":      (row.get("Team") or "").strip(),
+            "positie_raw":   (row.get("Positie") or "").strip(),
+            "profile_id":    profile_id,
+            "scores":        scores,
+            "warnings":      warnings,
+        })
+
+    if not preview:
+        flash("CSV-bestand heeft geen datarijen.", "error")
+        return render_template("roster_import_feedback.html", preview=None)
+
+    cap_keys = [cap_by_label[col.strip().lower()] for col in cap_columns]
+    cap_labels = {cap["key"]: cap["label_nl"] for cap in _get_capabilities(db)}
+    return render_template(
+        "roster_import_feedback.html", preview=preview,
+        all_profiles=all_profiles, cap_labels=cap_labels, cap_keys=cap_keys
+    )
+
+
+@app.route("/roster/import-feedback/confirm", methods=["POST"])
+@login_required
+def roster_import_feedback_confirm():
+    if not can_view_all():
+        return "Forbidden", 403
+    raw = request.form.get("preview_data", "")
+    if not raw:
+        flash("Importsessie verlopen. Upload het bestand opnieuw.", "error")
+        return redirect(url_for("roster_import_feedback"))
+    try:
+        rows = json.loads(raw)
+    except (ValueError, TypeError):
+        flash("Importsessie ongeldig. Upload het bestand opnieuw.", "error")
+        return redirect(url_for("roster_import_feedback"))
+
+    db = get_db()
+    now = datetime.now(UTC).isoformat()
+    inserted_scores  = 0
+    matched_players  = set()
+    skipped          = 0
+    try:
+        for row in rows:
+            profile_raw = request.form.get(f"profile_id_{row['line']}", "").strip()
+            if not profile_raw:
+                skipped += 1
+                continue
+            try:
+                profile_id = int(profile_raw)
+            except ValueError:
+                skipped += 1
+                continue
+            if not db.execute("SELECT id FROM player_profiles WHERE id=?", (profile_id,)).fetchone():
+                skipped += 1
+                continue
+            for capability, score in row.get("scores", {}).items():
+                # created_by is NULL — this is the player's own submission, not an admin's;
+                # _self_capability_latest() falls back to the subject player's own name for display.
+                db.execute(
+                    "INSERT INTO player_capability_scores (player_id, capability, score, created_by, created_at, source) "
+                    "VALUES (?,?,?,NULL,?,'self')",
+                    (profile_id, capability, score, now)
+                )
+                inserted_scores += 1
+            matched_players.add(profile_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    flash(
+        f"Import voltooid: {inserted_scores} score(s) toegevoegd voor {len(matched_players)} speler(s), "
+        f"{skipped} rij(en) overgeslagen.",
+        "success"
+    )
+    return redirect(url_for("roster_list"))
+
+
 @app.route("/roster/<int:profile_id>")
 @login_required
 def roster_detail(profile_id):
@@ -3375,6 +3530,11 @@ def roster_detail(profile_id):
     capability_radar_avg_rounded = (
         int(round(capability_radar_avg / 5) * 5) if capability_radar_avg is not None else None
     )
+    _rated_radar_self_scores = [s for s in capability_radar_self_scores if s is not None]
+    capability_radar_self_avg = sum(_rated_radar_self_scores) / len(_rated_radar_self_scores) if _rated_radar_self_scores else None
+    capability_radar_self_avg_rounded = (
+        int(round(capability_radar_self_avg / 5) * 5) if capability_radar_self_avg is not None else None
+    )
 
     # Overall trend: per calendar day, mean of every coach rater's score across all capabilities that day
     daily_scores = {}
@@ -3457,6 +3617,8 @@ def roster_detail(profile_id):
         capability_radar_scores=capability_radar_scores,
         capability_radar_avg=capability_radar_avg,
         capability_radar_avg_rounded=capability_radar_avg_rounded,
+        capability_radar_self_avg=capability_radar_self_avg,
+        capability_radar_self_avg_rounded=capability_radar_self_avg_rounded,
         overall_trend=overall_trend,
         self_capability_scores=self_capability_scores,
         self_capability_history=self_capability_history,
@@ -3791,12 +3953,22 @@ def position_weights_settings():
     weights = {(row["position"], row["capability"]): row["weight"] for row in db.execute(
         "SELECT position, capability, weight FROM position_capability_weights"
     ).fetchall()}
+    capabilities = _get_capabilities(db)
+    # Gewicht per vaardigheid pie charts: % share of nonzero weights per position
+    position_weight_breakdown = {}
+    for position in POSITIONS:
+        position_weight_breakdown[position] = [
+            {"key": cap["key"], "label": cap["label_nl"], "weight": weights[(position, cap["key"])]}
+            for cap in capabilities
+            if weights.get((position, cap["key"]), 0) > 0
+        ]
     return render_template("position_weights_form.html",
         weights=weights,
         POSITIONS=POSITIONS,
         POSITION_NL=POSITION_NL,
-        capabilities=_get_capabilities(db),
+        capabilities=capabilities,
         all_capabilities=_get_capabilities(db, include_inactive=True),
+        position_weight_breakdown=position_weight_breakdown,
     )
 
 
